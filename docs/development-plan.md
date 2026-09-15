@@ -7,10 +7,10 @@
 | 阶段 | 主题 | 状态 |
 |---|---|---|
 | Phase 0 | 基础工程与统一构建 | 🟢 基础工程完成，认证/前端待建设 |
-| Phase 1 | 平台基础 + 一托 N 执行节点 | 🟡 Registry + SignalR 骨架完成，认证/Lease/Dispatch 待完成 |
+| Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 节点注册/心跳/健康监测/持久化 Lease 已完成，认证/Dispatch 待完成 |
 | Phase 2 | Workflow | ⚪ 未开始 |
 | Phase 3 | RPA Engine / NodeAgent | 🟡 NodeAgent 通信骨架已开始，RPA Engine 未开始 |
-| Phase 4 | Scheduler 生产化 | 🟡 调度骨架完成，真实 Lease 待完成 |
+| Phase 4 | Scheduler 生产化 | 🟡 调度骨架 + 持久化 Worker Lease 已完成，分布式原子 Lease 待完成 |
 | Phase 5 | Agent | ⚪ 未开始 |
 | Phase 6 | 批量业务 | ⚪ 未开始 |
 | Phase 7 | 人工介入与外部集成 | 🟡 架构设计完成，Provider 待实现 |
@@ -65,16 +65,17 @@ AgentRPA Server
 - [x] SignalR Hub / typed contract
 - [x] NodeAgent 自动重连、状态连接骨架
 - [x] NodeAgent 注册 → SignalR Connect 基础链路
+- [x] `NodeLease` / `ResourceLock` 领域模型与 EF Core 持久化映射
+- [x] Scheduler 的 WorkerSlot 持久化 Lease 获取/释放
+- [x] Node Agent 心跳超时自动标记 Offline
 
 ### 当前进行中
 - [ ] 节点 API Key / mTLS / 证书认证
 - [ ] 节点注册审批 / Disabled 控制
 - [ ] NodePool / Node / WorkerSlot 查询管理 API
-- [ ] 节点离线自动落库
-- [ ] NodeLease / ResourceLock 持久化
 - [ ] SignalR 心跳 / ACK / Progress 完整协议
 - [ ] ExecutionDispatch 实际派发
-- [ ] Scheduler 接入真实 Lease
+- [ ] Scheduler 接入真实 Lease 的分布式原子化
 
 ### 验收标准
 1. Server 同时管理多台异构 Node。
@@ -106,6 +107,7 @@ AgentRPA Server
 - [x] ExecutionRequirement / Capability Matching / NodePool
 - [x] Required/Excluded Node / NetworkZone / Hardware ID
 - [x] Worker Capacity / Node Health
+- [x] 持久化 Worker Slot Lease 获取/释放
 - [ ] Node Affinity / Preferred Node / Credential Affinity
 - [ ] DB 原子 Lease / Renewal / Expiration Recovery
 - [ ] UKey ResourceLock 原子抢占
@@ -151,17 +153,15 @@ AgentRPA Server
 
 ## 当前代码完成度
 
-当前已经从架构骨架进入**可持久化 + 节点实时通信骨架阶段**：
+当前已经从架构骨架进入**可持久化 + 节点实时通信 + 基础资源租约阶段**：
 
-- Domain：Node / Pool / Capability / WorkerSlot + AgentKey 已具备。
-- Application：ExecutionRequirement、Scheduler 接口、Node Registry 契约已具备。
+- Domain：Node / Pool / Capability / WorkerSlot + AgentKey + NodeLease / ResourceLock 已具备。
+- Application：ExecutionRequirement、Scheduler 接口、Node Registry 契约、节点健康检查契约已具备。
 - Contracts：注册、心跳、ExecutionCommand、ExecutionProgress、SignalR typed contract 已具备。
-- Infrastructure：EF Core 10 + SQLite、Node Registry 已落地。
-- API：Node 注册/心跳已接入 Registry，SignalR Hub 已建立。
+- Infrastructure：EF Core 10 + SQLite、Node Registry、WorkerSlot Lease 已落地。
+- API：Node 注册/心跳、SignalR Hub、NodeHealthMonitor 已接入。
 - NodeAgent：已具备注册、SignalR 自动重连和命令接收骨架。
-- 尚未生产化：Node 认证、审批、Lease、ResourceLock、真实 ExecutionDispatch、RPA Engine。
-
-由于当前开发环境此前没有 .NET SDK，本轮没有本地编译证据；仓库已加入 GitHub Actions `restore → build`，后续以 CI 为准继续补齐 test/publish。
+- 尚未生产化：Node 认证、审批、分布式原子 Lease、ResourceLock 抢占、真实 ExecutionDispatch、RPA Engine。
 
 ## 开发规则
 
@@ -171,3 +171,4 @@ AgentRPA Server
 4. 保持每阶段可编译、可运行、可回滚。
 5. 前端优先复用公共组件，禁止复制 CRUD 逻辑。
 6. API、领域、Application 及复杂前端逻辑提供中文注释/说明。
+7. **每次代码或文档推送后必须检查 GitHub Actions；Build 失败立即定位、修复并再次轮巡，直到最新提交 Build 成功后再进入下一项任务。**
