@@ -1,0 +1,29 @@
+name: Backend Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/backend/**'
+      - '*.sln'
+      - 'Directory.Build.props'
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - '*.sln'
+      - 'Directory.Build.props'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore AgentRPA.sln
+      - name: Build
+        run: dotnet build AgentRPA.sln --configuration Release --no-restore
