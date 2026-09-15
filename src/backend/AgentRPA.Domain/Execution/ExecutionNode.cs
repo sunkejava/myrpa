@@ -64,7 +64,7 @@ public sealed class NodePool : Entity
     public void Update(string name, string? description, bool enabled) { Name = name; Description = description; Enabled = enabled; }
 }
 
-/// <summary>节点上的一个并发执行槽位。</summary>
+/// <summary>节点上的一个并发执行槽位。ConcurrencyStamp 用于跨服务实例的乐观并发抢占。</summary>
 public sealed class WorkerSlot : Entity
 {
     private WorkerSlot() { }
@@ -74,7 +74,8 @@ public sealed class WorkerSlot : Entity
     public bool Enabled { get; private set; } = true;
     public Guid? ExecutionId { get; private set; }
     public DateTimeOffset? LeaseExpiresAt { get; private set; }
+    public int ConcurrencyStamp { get; private set; }
     public bool IsAvailable(DateTimeOffset now) => Enabled && (ExecutionId is null || LeaseExpiresAt <= now);
-    public void Acquire(Guid executionId, DateTimeOffset expiresAt) { ExecutionId = executionId; LeaseExpiresAt = expiresAt; }
-    public void Release() { ExecutionId = null; LeaseExpiresAt = null; }
+    public void Acquire(Guid executionId, DateTimeOffset expiresAt) { ExecutionId = executionId; LeaseExpiresAt = expiresAt; ConcurrencyStamp++; }
+    public void Release() { ExecutionId = null; LeaseExpiresAt = null; ConcurrencyStamp++; }
 }
