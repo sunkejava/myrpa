@@ -1,3 +1,4 @@
+using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Scheduling;
@@ -13,6 +14,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
+builder.Services.AddHostedService<NodeHealthMonitor>();
 
 var connectionString = builder.Configuration.GetConnectionString("AgentRPA") ?? "Data Source=agentrpa.db";
 builder.Services.AddDbContext<AgentRpaDbContext>(options => options.UseSqlite(connectionString));
