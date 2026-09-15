@@ -22,9 +22,9 @@ public sealed class HttpCaptchaProvider(HttpClient client, string providerId, Ur
             var result = await response.Content.ReadFromJsonAsync<CaptchaResponse>(cancellationToken: cancellationToken);
             return result is null ? new(false, ErrorCode: "EMPTY_RESPONSE") : new(result.Success, result.Value, result.ErrorCode);
         }
-        catch (Exception ex)
+        catch
         {
-            return new(false, ErrorCode: "CAPTCHA_PROVIDER_ERROR", Value: null);
+            return new(false, ErrorCode: "CAPTCHA_PROVIDER_ERROR");
         }
     }
 
