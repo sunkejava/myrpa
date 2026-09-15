@@ -1,6 +1,7 @@
 using AgentRPA.Domain.Audit;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.HumanIntervention;
+using AgentRPA.Domain.Permission;
 using AgentRPA.Domain.Resources;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Domain.Workflow;
@@ -28,6 +29,7 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<Execution> Executions => Set<Execution>();
     public DbSet<HumanIntervention> HumanInterventions => Set<HumanIntervention>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<AccessPolicy> AccessPolicies => Set<AccessPolicy>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AgentRpaDbContext).Assembly);
