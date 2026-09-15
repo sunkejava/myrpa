@@ -27,6 +27,7 @@ public sealed class AgentPlanningService(
         var resolution = ResolveDeterministically(text, cities, systems, functions);
         if (!resolution.Success)
         {
+            // LLM 仅负责语义消歧，最终仍必须通过服务端资源目录的 Code + 归属关系校验。
             var llmResolution = await ResolveWithLlmAsync(text, cities, systems, functions, cancellationToken);
             if (llmResolution is null)
                 return new(false, null, resolution.Ambiguities, "需要补充业务资源信息后才能生成执行计划。");
