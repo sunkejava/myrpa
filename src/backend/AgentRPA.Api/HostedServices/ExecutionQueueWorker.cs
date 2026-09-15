@@ -6,6 +6,7 @@ using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using DomainTaskStatus = AgentRPA.Domain.Tasks.TaskStatus;
 
 namespace AgentRPA.Api.HostedServices;
 
@@ -33,8 +34,9 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
         foreach (var item in items)
         {
             var task = await db.Tasks.SingleOrDefaultAsync(x => x.Id == item.TaskId, cancellationToken);
-            if (task is null || task.Status is TaskStatus.Draft or TaskStatus.Cancelled or TaskStatus.Succeeded) continue;
-            var active = await db.Executions.AnyAsync(x => x.TaskItemId == item.Id && x.Status is ExecutionStatus.Pending or ExecutionStatus.Dispatched or ExecutionStatus.Running or ExecutionStatus.Paused or ExecutionStatus.WaitingForHuman, cancellationToken);
+            if (task is null || task.Status == DomainTaskStatus.Draft || task.Status == DomainTaskStatus.Cancelled || task.Status == DomainTaskStatus.Succeeded) continue;
+            var active = await db.Executions.AnyAsync(x => x.TaskItemId == item.Id &&
+                (x.Status == ExecutionStatus.Pending || x.Status == ExecutionStatus.Dispatched || x.Status == ExecutionStatus.Running || x.Status == ExecutionStatus.Paused || x.Status == ExecutionStatus.WaitingForHuman), cancellationToken);
             if (active) continue;
             var version = await db.WorkflowVersions.SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion, cancellationToken);
             if (version is null || !version.Published) continue;
@@ -47,7 +49,7 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             if (assignment is null)
             {
                 execution.SetStatus(ExecutionStatus.Pending, "暂无满足条件的执行节点。");
-                task.SetStatus(TaskStatus.WaitingForResource);
+                task.SetStatus(DomainTaskStatus.WaitingForResource);
                 await db.SaveChangesAsync(cancellationToken);
                 continue;
             }
