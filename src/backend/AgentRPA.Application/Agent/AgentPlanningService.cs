@@ -5,7 +5,7 @@ namespace AgentRPA.Application.Agent;
 
 public sealed record AgentPlanResult(bool Success, TaskPlanDto? Plan, IReadOnlyList<string> Ambiguities, string Summary);
 
-/// <summary>Agent 规划器：解析资源、动作、风险，并绑定唯一已发布 Workflow。</summary>
+/// <summary>Agent 规划器：解析资源、动作、风险，并绑定已发布且明确的 Workflow。</summary>
 public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWorkflowResolver workflowResolver)
 {
     public async Task<AgentPlanResult> PlanAsync(string instruction, CancellationToken cancellationToken)
@@ -32,9 +32,22 @@ public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWo
         var functionId = functionMatches[0].Id;
         var workflows = await workflowResolver.ResolveAsync(functionId, cancellationToken);
         if (workflows.Count == 0) return new(false, null, ["该业务功能暂无已发布的可执行 Workflow。"], "无法绑定已发布 Workflow。");
-        if (workflows.Select(x => x.WorkflowId).Distinct().Count() > 1) return new(false, null, ["该业务功能存在多个已发布 Workflow，请配置默认 Workflow 后再执行。"], "Workflow 选择存在歧义。");
 
-        var workflow = workflows[0];
+        var defaults = workflows.Where(x => x.IsDefault).ToArray();
+        AgentWorkflowResource workflow;
+        if (defaults.Length == 1)
+        {
+            workflow = defaults[0];
+        }
+        else if (workflows.Select(x => x.WorkflowId).Distinct().Count() == 1)
+        {
+            workflow = workflows[0];
+        }
+        else
+        {
+            return new(false, null, ["该业务功能存在多个已发布 Workflow，请配置且仅保留一个默认 Workflow 后再执行。"], "Workflow 选择存在歧义。");
+        }
+
         var action = ResolveAction(text);
         var risk = ResolveRisk(text);
         var parameters = ParseParameters(text);
