@@ -11,6 +11,7 @@ public sealed class ExecutionNodeConfiguration : IEntityTypeConfiguration<Execut
     {
         builder.ToTable("execution_nodes");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AgentKey).HasMaxLength(128).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(128).IsRequired();
         builder.Property(x => x.NodeKind).HasConversion<string>().HasMaxLength(32);
         builder.Property(x => x.OsPlatform).HasConversion<string>().HasMaxLength(32);
@@ -18,6 +19,7 @@ public sealed class ExecutionNodeConfiguration : IEntityTypeConfiguration<Execut
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
         builder.Property(x => x.NetworkZone).HasMaxLength(128);
         builder.Property(x => x.AgentVersion).HasMaxLength(64);
+        builder.HasIndex(x => x.AgentKey).IsUnique();
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.NodePoolId);
         builder.HasIndex(x => x.LastHeartbeatAt);
