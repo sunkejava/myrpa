@@ -1,5 +1,6 @@
 using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
+using AgentRPA.Application.Batch;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Workflow;
@@ -30,6 +31,7 @@ builder.Services.AddScoped<IExecutionNodeRegistry>(sp => sp.GetRequiredService<I
 builder.Services.AddScoped<IExecutionLeaseService, EfExecutionLeaseService>();
 builder.Services.AddScoped<IExecutionScheduler, CapabilityExecutionScheduler>();
 builder.Services.AddSingleton<WorkflowDefinitionValidator>();
+builder.Services.AddSingleton<ISpreadsheetImportService, SpreadsheetImportService>();
 
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
