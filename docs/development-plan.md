@@ -11,7 +11,7 @@
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
 | Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner 已支持浏览器常用步骤；Desktop、HumanTask 恢复与完整执行控制待完成 |
 | Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、数据库乐观并发抢占已完成；ResourceLock/故障重调度/权限资源过滤待完成 |
-| Phase 5 | Agent | 🟡 已完成资源解析、动作/风险识别、Workflow 选择、参数基础结构化、权限预检查、确认门禁；LLM Provider 与完整任务参数解析待完成 |
+| Phase 5 | Agent | 🟡 已完成资源解析、动作/风险识别、Workflow 选择、参数基础结构化、权限预检查、确认门禁、OpenAI Compatible/llama.cpp 结构化解析兜底；完整参数 Schema/执行摘要待完成 |
 | Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试已完成；跨 Node 并发、断点续跑、结果 Artifact 待完成 |
 | Phase 7 | 人工介入与外部集成 | 🟢 HumanIntervention 生命周期、Captcha HTTP Adapter、Webhook/Email、Windows 证书型 UKey Provider 已具备；QR 恢复链路与厂商 UKey SDK 待完成 |
 | Phase 8 | 运营中心 | 🟢 Node/Pool/Worker 管理 API、人工介入 API、审计模型/API、控制中心前端骨架已完成；完整实时运营 UI/指标待完成 |
@@ -27,8 +27,8 @@
 - [x] Permission Pre-check API
 - [x] 高风险/中风险 Confirmation 门禁
 - [x] Agent Execute：Plan → Permission → Confirmation → Task → Queue
+- [x] LLM Provider / 本地模型 Provider：确定性资源解析失败时调用 OpenAI Compatible Provider，并对模型输出的资源 Code 做目录二次校验
 - [ ] 完整结构化参数 Schema / 执行摘要
-- [ ] LLM Provider / 本地模型 Provider
 
 ## 其他阶段剩余任务
 
