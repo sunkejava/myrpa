@@ -25,6 +25,7 @@ public sealed class OpenAiCompatibleLlmProvider(IHttpClientFactory clients, IOpt
         if (string.IsNullOrWhiteSpace(settings.Model)) return new(false, string.Empty, Error: "LLM Model 未配置。");
 
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, settings.Endpoint);
+        requestMessage.Headers.Accept.ParseAdd("application/json");
         if (!string.IsNullOrWhiteSpace(settings.ApiKey)) requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.ApiKey);
         requestMessage.Content = JsonContent.Create(new
         {
