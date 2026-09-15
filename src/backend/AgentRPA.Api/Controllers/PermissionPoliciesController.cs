@@ -1,11 +1,10 @@
-using AgentRPA.Api.Security;
 using AgentRPA.Application.Permission;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentRPA.Api.Controllers;
 
-/// <summary>细粒度权限策略管理。管理接口要求管理员角色；业务执行接口仍通过 PermissionService 精确校验。</summary>
+/// <summary>细粒度权限策略管理。管理接口要求 Admin 角色；业务执行接口仍通过 PermissionService 精确校验。</summary>
 [ApiController, Route("api/permission-policies"), Authorize(Roles = "Admin")]
 public sealed class PermissionPoliciesController(PermissionManagementService service) : ControllerBase
 {
