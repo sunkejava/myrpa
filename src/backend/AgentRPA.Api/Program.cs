@@ -1,3 +1,4 @@
+using AgentRPA.Api.Hubs;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Infrastructure.Nodes;
@@ -9,6 +10,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
 
 var connectionString = builder.Configuration.GetConnectionString("AgentRPA") ?? "Data Source=agentrpa.db";
 builder.Services.AddDbContext<AgentRpaDbContext>(options => options.UseSqlite(connectionString));
@@ -31,5 +34,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.MapControllers();
+app.MapHub<NodeAgentHub>("/hubs/node-agent", options => options.AllowStatefulReconnects = true);
 
 app.Run();
