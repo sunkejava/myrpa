@@ -1,3 +1,4 @@
+using System.Text;
 using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
 using AgentRPA.Api.Middleware;
@@ -12,9 +13,11 @@ using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Permission;
 using AgentRPA.Infrastructure.Persistence;
 using AgentRPA.Infrastructure.Scheduling;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
@@ -25,6 +28,31 @@ builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = 
     context.ProblemDetails.Instance = context.HttpContext.Request.Path;
     context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
 });
+
+var jwt = builder.Configuration.GetSection("AgentRPA:Jwt");
+var signingKey = jwt["SigningKey"];
+if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32)
+    throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须配置至少 32 个字符的签名密钥。");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwt["Issuer"],
+            ValidateAudience = true,
+            ValidAudience = jwt["Audience"],
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = System.Security.Claims.ClaimTypes.Name,
+            RoleClaimType = System.Security.Claims.ClaimTypes.Role
+        };
+    });
+builder.Services.AddAuthorization();
+
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
 builder.Services.AddHostedService<NodeHealthMonitor>();
@@ -61,6 +89,8 @@ using (var scope = app.Services.CreateScope())
 }
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseMiddleware<AuditMiddleware>();
 app.MapControllers();
 app.MapHub<NodeAgentHub>("/hubs/node-agent", options => options.AllowStatefulReconnects = true);
