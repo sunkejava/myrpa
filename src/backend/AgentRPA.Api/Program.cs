@@ -35,6 +35,7 @@ builder.Services.AddScoped<IExecutionScheduler, CapabilityExecutionScheduler>();
 builder.Services.AddSingleton<WorkflowDefinitionValidator>();
 builder.Services.AddSingleton<ISpreadsheetImportService, SpreadsheetImportService>();
 builder.Services.AddScoped<IAgentResourceCatalog, EfAgentResourceCatalog>();
+builder.Services.AddScoped<IAgentWorkflowResolver, EfAgentWorkflowResolver>();
 builder.Services.AddScoped<AgentPlanningService>();
 
 var app = builder.Build();
