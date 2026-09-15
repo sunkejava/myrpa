@@ -3,6 +3,7 @@ using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Persistence;
+using AgentRPA.Infrastructure.Scheduling;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +18,7 @@ var connectionString = builder.Configuration.GetConnectionString("AgentRPA") ?? 
 builder.Services.AddDbContext<AgentRpaDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddScoped<INodeRegistryService, EfNodeRegistryService>();
 builder.Services.AddScoped<IExecutionNodeRegistry>(sp => sp.GetRequiredService<INodeRegistryService>());
+builder.Services.AddScoped<IExecutionLeaseService, EfExecutionLeaseService>();
 
 var app = builder.Build();
 
