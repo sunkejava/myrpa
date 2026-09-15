@@ -25,6 +25,9 @@ public sealed record NodeHeartbeatRequest(
     int AvailableSlots,
     DateTimeOffset SentAt);
 
+/// <summary>服务端返回的心跳确认。</summary>
+public sealed record NodeHeartbeatAck(Guid NodeId, DateTimeOffset ServerTime, string Status);
+
 /// <summary>服务端派发给 Node Agent 的执行命令。</summary>
 public sealed record ExecutionCommand(
     Guid ExecutionId,
