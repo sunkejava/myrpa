@@ -10,7 +10,6 @@ namespace AgentRPA.Api.Controllers;
 [Route("api/nodes")]
 public sealed class NodesController(INodeRegistryService nodeRegistry) : ControllerBase
 {
-    /// <summary>节点注册。生产环境后续接入节点密钥/证书认证和管理员审批。</summary>
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterNodeRequest request, CancellationToken cancellationToken)
     {
@@ -24,10 +23,9 @@ public sealed class NodesController(INodeRegistryService nodeRegistry) : Control
             request.Capabilities.Select(x => new NodeCapabilityInput(x.Code, x.Version, x.MetadataJson)).ToArray(),
             request.WorkerSlots);
         var node = await nodeRegistry.RegisterAsync(registration, cancellationToken);
-        return Ok(new { nodeId = node.Id, agentKey = node.AgentKey, status = node.Status.ToString() });
+        return Ok(new NodeRegistrationResponse(node.Id, node.AgentKey, node.Status.ToString()));
     }
 
-    /// <summary>节点心跳。服务端以最近心跳判断调度资格。</summary>
     [HttpPost("heartbeat")]
     public async Task<IActionResult> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
     {
