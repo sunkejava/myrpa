@@ -14,6 +14,8 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<ExecutionNode> ExecutionNodes => Set<ExecutionNode>();
     public DbSet<NodeCapability> NodeCapabilities => Set<NodeCapability>();
     public DbSet<WorkerSlot> WorkerSlots => Set<WorkerSlot>();
+    public DbSet<NodeLease> NodeLeases => Set<NodeLease>();
+    public DbSet<ResourceLock> ResourceLocks => Set<ResourceLock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
