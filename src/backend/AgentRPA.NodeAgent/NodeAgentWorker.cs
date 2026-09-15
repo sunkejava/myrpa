@@ -11,6 +11,8 @@ public sealed class NodeAgentOptions
 {
     public string ServerUrl { get; set; } = "https://localhost:5001";
     public string AgentKey { get; set; } = Environment.MachineName;
+    /// <summary>首次注册使用的服务端 Bootstrap Key，不与 AgentKey 混用。</summary>
+    public string RegistrationKey { get; set; } = string.Empty;
     public string Name { get; set; } = Environment.MachineName;
     public string NodeKind { get; set; } = "Physical";
     public string OsPlatform { get; set; } = OperatingSystem.IsWindows() ? "Windows" : "Linux";
@@ -36,6 +38,19 @@ public sealed class NodeAgentWorker(
         var config = options.Value;
         var registration = await RegisterAsync(config, stoppingToken);
         if (registration is null) return;
+
+        // 新节点必须经过管理员审批；Agent 保持在线等待审批，不进入执行状态。
+        if (string.Equals(registration.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("Node {NodeId} is pending administrator approval; waiting before connecting for execution.", registration.NodeId);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                registration = await RegisterAsync(config, stoppingToken);
+                if (registration is null) return;
+                if (!string.Equals(registration.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase)) break;
+            }
+        }
 
         var hubUrl = $"{config.ServerUrl.TrimEnd('/')}/hubs/node-agent";
         await using var connection = new HubConnectionBuilder()
@@ -111,10 +126,18 @@ public sealed class NodeAgentWorker(
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(config.RegistrationKey))
+                throw new InvalidOperationException("NodeAgent:RegistrationKey 未配置，拒绝进行节点注册。");
+
             var client = httpClientFactory.CreateClient("AgentRPA.Server");
             var request = new RegisterNodeRequest(config.AgentKey, config.Name, config.NodeKind, config.OsPlatform, config.Architecture,
                 config.AgentVersion, config.NetworkZone, config.NodePoolId, config.Capabilities, config.WorkerSlots);
-            using var response = await client.PostAsJsonAsync("api/nodes/register", request, cancellationToken);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/nodes/register")
+            {
+                Content = JsonContent.Create(request)
+            };
+            httpRequest.Headers.Add("X-Node-Registration-Key", config.RegistrationKey);
+            using var response = await client.SendAsync(httpRequest, cancellationToken);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<NodeRegistrationResponse>(cancellationToken: cancellationToken);
             logger.LogInformation("Node registered: {NodeId}, status={Status}", result?.NodeId, result?.Status);
