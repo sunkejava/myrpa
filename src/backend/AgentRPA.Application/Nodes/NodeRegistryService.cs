@@ -10,6 +10,7 @@ public interface INodeRegistryService : IExecutionNodeRegistry
     Task<bool> HeartbeatAsync(Guid nodeId, string agentVersion, DateTimeOffset heartbeatAt, CancellationToken cancellationToken);
     Task RefreshCapabilitiesAsync(Guid nodeId, IReadOnlyCollection<NodeCapabilityInput> capabilities, CancellationToken cancellationToken);
     Task RefreshWorkerSlotsAsync(Guid nodeId, IReadOnlyCollection<string> slotNames, CancellationToken cancellationToken);
+    Task<int> MarkOfflineNodesAsync(TimeSpan heartbeatTimeout, CancellationToken cancellationToken);
 }
 
 /// <summary>Node Agent 注册信息。</summary>
