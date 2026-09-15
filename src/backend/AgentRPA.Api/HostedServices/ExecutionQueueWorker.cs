@@ -44,7 +44,10 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             var execution = new Execution(item.Id, version.Id);
             db.Executions.Add(execution);
             await db.SaveChangesAsync(cancellationToken);
-            var requirement = new ExecutionRequirement(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>());
+
+            // Workflow 可以进一步收紧执行节点条件；最终要求由调度器统一执行硬过滤。
+            var requirement = WorkflowExecutionRequirementParser.Parse(version.DefinitionJson)
+                ?? new ExecutionRequirement(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>());
             var assignment = await scheduler.ScheduleAsync(requirement, execution.Id, cancellationToken);
             if (assignment is null)
             {
