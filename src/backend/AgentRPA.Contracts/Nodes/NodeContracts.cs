@@ -2,13 +2,16 @@ namespace AgentRPA.Contracts.Nodes;
 
 /// <summary>执行节点首次注册请求。</summary>
 public sealed record RegisterNodeRequest(
+    string AgentKey,
     string Name,
     string NodeKind,
     string OsPlatform,
     string Architecture,
     string AgentVersion,
     string? NetworkZone,
-    IReadOnlyList<NodeCapabilityDto> Capabilities);
+    Guid? NodePoolId,
+    IReadOnlyList<NodeCapabilityDto> Capabilities,
+    IReadOnlyList<string> WorkerSlots);
 
 public sealed record NodeCapabilityDto(string Code, string? Version = null, string? MetadataJson = null);
 
