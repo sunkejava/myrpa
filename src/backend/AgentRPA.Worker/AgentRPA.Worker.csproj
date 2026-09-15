@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\AgentRPA.Application\AgentRPA.Application.csproj" />
     <ProjectReference Include="..\AgentRPA.Infrastructure\AgentRPA.Infrastructure.csproj" />
   </ItemGroup>
