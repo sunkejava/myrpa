@@ -60,7 +60,7 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
             return false;
 
         var expiresAt = now.Add(LeaseDuration);
-        lease.Renew(expiresAt);
+        lease.Renew(expiresAt, now);
         slot.Acquire(executionId, expiresAt);
         await db.SaveChangesAsync(cancellationToken);
         return true;
