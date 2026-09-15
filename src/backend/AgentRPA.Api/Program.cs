@@ -89,6 +89,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AgentRpaDbContext>();
     await db.Database.EnsureCreatedAsync();
+    await IdentityBootstrapper.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>(), app.Configuration);
 }
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseHttpsRedirection();
