@@ -7,10 +7,11 @@ public sealed class RpaTask : Entity
 {
     private readonly List<TaskItem> _items = [];
     private RpaTask() { }
-    public RpaTask(Guid workflowId, int workflowVersion, string name) { WorkflowId = workflowId; WorkflowVersion = workflowVersion; Name = name; }
+    public RpaTask(Guid workflowId, int workflowVersion, string name, int maxRetries = 3) { WorkflowId = workflowId; WorkflowVersion = workflowVersion; Name = name; MaxRetries = Math.Clamp(maxRetries, 0, 20); }
     public Guid WorkflowId { get; private set; }
     public int WorkflowVersion { get; private set; }
     public string Name { get; private set; } = string.Empty;
+    public int MaxRetries { get; private set; } = 3;
     public TaskStatus Status { get; private set; } = TaskStatus.Draft;
     public IReadOnlyCollection<TaskItem> Items => _items;
     public TaskItem AddItem(string inputJson) { var item = new TaskItem(Id, _items.Count + 1, inputJson); _items.Add(item); return item; }
@@ -30,7 +31,8 @@ public sealed class TaskItem : Entity
     public void Start() => Status = TaskItemStatus.Running;
     public void Succeed(string? resultJson = null) { Status = TaskItemStatus.Succeeded; ResultJson = resultJson; }
     public void Fail(string? resultJson = null) { Status = TaskItemStatus.Failed; ResultJson = resultJson; }
-    public void Retry() { RetryCount++; Status = TaskItemStatus.Pending; }
+    public bool CanRetry(int maxRetries) => Status == TaskItemStatus.Failed && RetryCount < maxRetries;
+    public void Retry() { RetryCount++; Status = TaskItemStatus.Pending; ResultJson = null; }
 }
 public sealed class Execution : Entity
 {
