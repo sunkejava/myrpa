@@ -12,7 +12,7 @@ public sealed class NodePoolConfiguration : IEntityTypeConfiguration<NodePool>
         builder.ToTable("node_pools");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(128).IsRequired();
-        builder.Property(x => x.Code).HasMaxLength(64).IsRequired();
-        builder.HasIndex(x => x.Code).IsUnique();
+        builder.Property(x => x.Description).HasMaxLength(512);
+        builder.HasIndex(x => x.Name).IsUnique();
     }
 }
