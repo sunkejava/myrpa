@@ -60,5 +60,8 @@ public interface IExecutionLeaseService
         Guid executionId,
         CancellationToken cancellationToken);
 
+    /// <summary>续租。只有当前 Execution 持有者才能延长租约。</summary>
+    Task<bool> RenewAsync(Guid leaseId, Guid executionId, CancellationToken cancellationToken);
+
     Task ReleaseAsync(Guid leaseId, CancellationToken cancellationToken);
 }
