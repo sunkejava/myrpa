@@ -8,39 +8,27 @@ AgentRPA 不是简单的“录制网页操作”工具，而是 **Agent + 权限
 
 典型场景：用户描述“登录 A 单位社保网站，读取目录下 Excel 中人员信息，完成对应业务”。系统识别城市、业务系统、业务功能和参数，完成权限校验后匹配确定性 Workflow，并根据执行要求自动选择合适的执行节点。
 
-## 1. 当前总体架构
+## 1. 总体架构
 
 ```text
-自然语言请求
-      ↓
-Agent / Intent
-      ↓
-TaskPlan
-      ↓
-Permission Engine
-      ↓
-Confirmation
-      ↓
-Task / TaskItem
-      ↓
-Execution
-      ↓
-Scheduler
-      ↓
-NodePool / ExecutionNode / WorkerSlot
-      ↓
-NodeAgent
-      ↓
-RPA Engine
-      ↓
-Browser / Desktop / UKey / File / Captcha
-      ↓
-结果 / 审计 / 通知
+自然语言请求 → Agent / Intent → TaskPlan → Permission → Confirmation
+                                      ↓
+                              Task / TaskItem / Execution
+                                      ↓
+                                  Scheduler
+                                      ↓
+                         NodePool / ExecutionNode / WorkerSlot
+                                      ↓
+                                  NodeAgent
+                                      ↓
+                                  RPA Engine
+                                      ↓
+                       Browser / Desktop / UKey / File / Captcha
+                                      ↓
+                              结果 / 审计 / 通知
 ```
 
 ### 1.1 一托 N 异构执行节点
-
-当前架构已经从“服务端直接执行 RPA”升级为 **Server 控制面 + NodeAgent 执行面**：
 
 ```text
                          AgentRPA Server
@@ -59,16 +47,15 @@ Browser / Desktop / UKey / File / Captcha
              Worker × N              Worker × N              Worker × N
 ```
 
-**Node 与 WorkerSlot 分离：**
-
 - `ExecutionNode`：物理机、虚拟机、云桌面或容器等实际执行环境。
 - `WorkerSlot`：节点上的并发执行槽位。
 - `NodePool`：按城市、网络、环境、业务等组织节点。
 - `NodeCapability`：描述浏览器、Desktop UI、Office、UKey、智能卡等能力。
 - `ExecutionRequirement`：描述业务系统/Workflow/Task 对执行环境的约束。
 - `Lease / ResourceLock`：保证 WorkerSlot、UKey 等独占资源不会被多个任务同时占用。
+- `AgentKey`：NodeAgent 的稳定节点身份，不以机器名称作为唯一身份。
 
-`NodeKind` 与 `OsPlatform` 分开建模，例如 `VirtualMachine + Windows` 表示 Windows 虚拟机，`Physical + Windows` 表示 Windows 物理机，未来可继续扩展其他平台。
+`NodeKind` 与 `OsPlatform` 分开建模，例如 `VirtualMachine + Windows` 表示 Windows 虚拟机，`Physical + Windows` 表示 Windows 物理机。
 
 ### 1.2 调度规则
 
@@ -82,22 +69,8 @@ Scheduler 先硬过滤，再软评分。
 
 ## 2. 权限模型
 
-权限最小颗粒度：
-
 ```text
 User → Role → AccessPolicy → City → BusinessSystem → BusinessFunction → Action → NodePool / ExecutionNode
-```
-
-例如：
-
-```text
-张三
- └── 北京
-      └── 北京社保
-           └── 社保缴费查询
-                ├── View
-                ├── Execute
-                └── Export
 ```
 
 权限必须在 Agent 规划后、RPA/NodeAgent 派发前校验，技术上可用的节点也不能绕过业务授权。
@@ -115,25 +88,9 @@ User → Role → AccessPolicy → City → BusinessSystem → BusinessFunction 
 ## 4. 执行模型
 
 ```text
-BusinessSystem
-      ↓
-ExecutionRequirement
-      ↓
-WorkflowVersion
-      ↓
-Task
-      ↓
-TaskItem
-      ↓
-Execution
-      ↓
-ExecutionDispatch
-      ↓
-ExecutionNode
-      ↓
-WorkerSlot
-      ↓
-RPA Engine
+BusinessSystem → ExecutionRequirement → WorkflowVersion
+       → Task → TaskItem → Execution → ExecutionDispatch
+       → ExecutionNode → WorkerSlot → RPA Engine
 ```
 
 批量任务使用 `Task + TaskItem`，每个数据项独立状态和重试。100 条数据中只有 4 条失败时，只重试失败项。
@@ -161,9 +118,8 @@ RPA Engine
 - .NET 10 / C#
 - DDD / Clean Architecture
 - ASP.NET Core Web API
-- Domain / Application / Infrastructure / API / Worker / NodeAgent / Contracts
+- EF Core 10 + SQLite（当前默认开发数据库，生产可扩展其他 Provider）
 - SignalR：Server ↔ NodeAgent（建设中）
-- EF Core：持久化（建设中）
 - JWT / Node 身份认证（建设中）
 - Swagger / OpenAPI
 
@@ -200,35 +156,41 @@ src/backend/
 - `docs/data-model.md`：核心数据模型。
 - `docs/api-design.md`：API 设计。
 - `docs/ui-requirements.md`：前端 UI 规范。
-- `docs/development-plan.md`：分阶段开发计划和完成进度。
+- `docs/development-plan.md`：分阶段开发计划和实时完成进度。
 
 ## 9. 当前开发进度
 
-**当前阶段：Phase 1 — 基础架构与异构执行节点调度骨架。**
+**当前阶段：Phase 1 — 平台基础与异构执行节点。当前已完成 Node Registry 的 EF Core 持久化基础，下一步进入节点认证、租约和 SignalR。**
 
 ### 已完成
 
-- [x] 总体架构设计
+- [x] 总体架构与一托 N 异构执行节点设计
 - [x] 城市 → 系统 → 功能 → Action 权限模型设计
 - [x] Workflow / WorkflowVersion / Step 设计
 - [x] UKey / 验证码 / 二维码 / 人脸 / 通知 Provider 设计
-- [x] 一托 N 异构执行节点架构
-- [x] `ExecutionNode / NodePool / NodeCapability / WorkerSlot` 领域骨架
-- [x] `ExecutionRequirement` 与上层约束合并规则
+- [x] `ExecutionNode / NodePool / NodeCapability / WorkerSlot` 领域模型
+- [x] `ExecutionRequirement` 与约束合并规则
 - [x] Scheduler 硬过滤 + 软评分骨架
-- [x] `ExecutionCommand / ExecutionProgress` 节点通信契约
+- [x] `ExecutionCommand / ExecutionProgress` 契约
 - [x] NodeAgent 独立项目骨架
-- [x] 节点注册/心跳 API 初始契约
+- [x] `AgentRPA.sln` / `Directory.Build.props`
+- [x] EF Core 10 + SQLite 基础设施
+- [x] City / BusinessSystem / BusinessFunction 持久化映射
+- [x] Node Registry 持久化实现
+- [x] AgentKey 稳定节点身份
+- [x] 节点注册/心跳 API 接入 Registry
+- [x] WorkerSlot 与 NodeCapability 注册/刷新
+- [x] GitHub Actions restore/build 基础 CI
 
 ### 正在开发
 
-- [ ] Solution / 统一构建配置
-- [ ] EF Core 持久化
-- [ ] Node Registry 持久化实现
-- [ ] Node 身份认证与注册审批
-- [ ] WorkerSlot / Lease / ResourceLock 持久化
+- [ ] 节点身份认证与注册审批
+- [ ] NodePool / Node / WorkerSlot 查询管理 API
+- [ ] 节点离线自动落库
+- [ ] NodeLease / ResourceLock 持久化
 - [ ] SignalR Server ↔ NodeAgent 通信
 - [ ] ExecutionDispatch 实际派发
+- [ ] Scheduler 接入真实 Lease
 
 ### 后续
 
@@ -237,8 +199,7 @@ src/backend/
 - [ ] Workflow 执行引擎
 - [ ] Playwright 浏览器执行器
 - [ ] Windows Desktop UI 执行器
-- [ ] UKey Provider
-- [ ] Captcha Provider
+- [ ] UKey / Captcha Provider
 - [ ] Human Intervention / QR / Face 流程
 - [ ] Notification Provider
 - [ ] 前端节点/调度/执行监控
@@ -248,4 +209,4 @@ src/backend/
 
 > **让 AI 理解业务，让权限控制边界，让 Scheduler 选择资源，让 Workflow 保证确定性，让 NodeAgent 执行，让审计记录全过程。**
 
-当前代码中部分能力仍为架构骨架，后续以 `docs/development-plan.md` 的阶段进度为准。
+当前代码已经进入可持久化基础阶段，但仍不是生产完成版；详细进度以 `docs/development-plan.md` 为准。
