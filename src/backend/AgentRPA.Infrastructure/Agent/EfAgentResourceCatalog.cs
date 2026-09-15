@@ -14,5 +14,5 @@ public sealed class EfAgentResourceCatalog(AgentRpaDbContext db) : IAgentResourc
         await db.BusinessSystems.AsNoTracking().Select(x => new AgentSystemResource(x.Id, x.CityId, x.Name, x.Code)).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AgentFunctionResource>> GetFunctionsAsync(CancellationToken cancellationToken) =>
-        await db.BusinessFunctions.AsNoTracking().Select(x => new AgentFunctionResource(x.Id, x.BusinessSystemId, x.Name, x.Code)).ToListAsync(cancellationToken);
+        await db.BusinessFunctions.AsNoTracking().Select(x => new AgentFunctionResource(x.Id, x.SystemId, x.Name, x.Code)).ToListAsync(cancellationToken);
 }
