@@ -28,3 +28,9 @@ public sealed class AccessPolicy : Entity
 
 /// <summary>权限检查结果，明确记录拒绝原因，便于 API 和审计层复用。</summary>
 public sealed record PermissionCheckResult(bool Allowed, string Reason);
+
+/// <summary>权限策略只允许精确的四级资源 + Action 匹配，不提供通配权限，避免越权扩大。</summary>
+public static class PermissionScopeRules
+{
+    public static bool IsValidAction(string action) => !string.IsNullOrWhiteSpace(action) && action.Trim().Length <= 64;
+}
