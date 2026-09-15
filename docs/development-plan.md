@@ -1,75 +1,46 @@
 # AgentRPA 开发实施计划与实时进度
 
-> 架构发生变化时先同步本文档，再推进代码；本文件作为阶段进度基准。
+> 架构发生变化时先同步本文档；本文件作为阶段进度基准。
 
 ## 总体进度
 
 | 阶段 | 主题 | 状态 |
 |---|---|---|
-| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、ProblemDetails、前后端独立构建流水线、JWT 认证基础已完成；Identity 用户/角色持久化、迁移、测试待建设 |
+| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、JWT、数据库用户/角色/登录、PBKDF2 密码存储已落地；Migration、测试等待建设 |
 | Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 注册认证、审批状态、节点健康、数据库乐观并发 Lease、节点池/WorkerSlot 管理已落地；mTLS/硬件锁/故障重调度待完成 |
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
 | Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner 已支持浏览器常用步骤；Desktop、HumanTask 恢复与完整执行控制待完成 |
-| Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、数据库乐观并发抢占已完成；ResourceLock/故障重调度/权限资源过滤待完成 |
+| Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、数据库乐观并发抢占、业务权限复核已具备；ResourceLock/故障重调度待完成 |
 | Phase 5 | Agent | 🟡 已完成资源解析、动作/风险识别、Workflow 选择、参数基础结构化、权限预检查、确认门禁、OpenAI Compatible/llama.cpp 结构化解析兜底；完整参数 Schema/执行摘要待完成 |
 | Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试已完成；跨 Node 并发、断点续跑、结果 Artifact 待完成 |
 | Phase 7 | 人工介入与外部集成 | 🟢 HumanIntervention 生命周期、Captcha HTTP Adapter、Webhook/Email、Windows 证书型 UKey Provider 已具备；QR 恢复链路与厂商 UKey SDK 待完成 |
 | Phase 8 | 运营中心 | 🟢 Node/Pool/Worker 管理 API、人工介入 API、审计模型/API、控制中心前端骨架已完成；完整实时运营 UI/指标待完成 |
 | Phase 9 | 扩展能力 | ⚪ 未开始 |
 
-## Phase 5：Agent
-- [x] Chat / Intent Parser / Resource Resolver / TaskPlan 基础规划器
-- [x] 根据城市 → 系统 → 功能解析资源目录
-- [x] 动作与风险等级基础识别
-- [x] 仅允许绑定已发布 WorkflowVersion，并处理多 Workflow 歧义
-- [x] Workflow executionRequirement 解析并接入自动调度队列
-- [x] 参数基础结构化（原始指令、Excel/CSV 文件名）
-- [x] Permission Pre-check API
-- [x] 高风险/中风险 Confirmation 门禁
-- [x] Agent Execute：Plan → Permission → Confirmation → Task → Queue
-- [x] LLM Provider / 本地模型 Provider：确定性资源解析失败时调用 OpenAI Compatible Provider，并对模型输出的资源 Code 做目录二次校验
-- [ ] 完整结构化参数 Schema / 执行摘要
+## Phase 0：身份认证
+- [x] JWT Bearer：Issuer/Audience/SigningKey/Lifetime 校验
+- [x] 数据库 UserAccount / Role / UserRole 持久化
+- [x] PBKDF2-SHA256 密码哈希与恒时验证
+- [x] 登录 `/api/auth/login` 与当前用户 `/api/auth/me`
+- [x] JWT Role Claim 与 Admin API 对接
+- [x] 首次启动按显式配置创建 Admin，不配置密码则不生成默认账户
+- [ ] EF Core Migration
+- [ ] 自动化测试与 CI test/publish
+
+## Phase 4：权限与调度
+- [x] 用户直授权限：城市 → 系统 → 功能 → Action 精确匹配
+- [x] 角色继承权限：User → Role → RoleAccessPolicy
+- [x] Agent/Task 在执行前统一权限校验
+- [x] Scheduler 阶段保留执行主体并可再次复核业务权限
+- [ ] UKey ResourceLock 原子抢占
+- [ ] Dispatch 幂等键 / 故障安全重调度
+- [ ] 大规模节点调度性能优化
 
 ## 其他阶段剩余任务
 
-### Phase 0
-- [ ] NuGet 集中版本管理
-- [x] JWT 认证基础：Bearer Token、Issuer/Audience/SigningKey 校验、当前用户主体解析、Agent/Task API 身份隔离
-- [ ] Identity 用户/角色/登录服务与持久化
-- [ ] EF Core Migration
-- [ ] 完整 API Client / i18n / Theme Settings
-- [ ] 自动化测试与 CI test/publish
-
-### Phase 1
-- [ ] mTLS / 节点证书轮换
-- [ ] 完整注册审批工作流（拒绝/撤销/重新申请）
-- [ ] UKey / Hardware ResourceLock 原子抢占
-- [ ] Dispatch 幂等键 / 故障安全重调度
-
-### Phase 2
-- [ ] Designer 接入真实 Workflow API
-- [ ] 流程测试与单步调试
-- [ ] 完整发布/停用策略
-- [ ] BusinessSystem / WorkflowVersion / Task ExecutionRequirement 完整约束
-
-### Phase 3
-- [ ] Windows Desktop UI Worker
-- [ ] Execution Log / Artifact 持久化
-- [ ] 真正的 Cancel / Pause / Resume / HumanTask 恢复
-- [ ] Step Timeout / Retry Policy
-- [ ] UKey / Captcha / File Provider 接入 Runtime
-
-### Phase 4
-- [ ] Node Affinity / Preferred Node / Credential Affinity
-- [ ] UKey ResourceLock 原子抢占
-- [ ] 调度幂等 / 故障安全重调度
-- [ ] Permission-filtered candidate set
-- [ ] 大规模节点调度性能优化
-
-### Phase 6
-- [ ] 并发控制 / 跨 Node 并发
-- [ ] 失败项重试 / 断点续跑策略增强
-- [ ] 结果导出 / Artifact
+### Phase 5
+- [ ] 完整结构化参数 Schema / 执行摘要
+- [ ] 持久化 LLM Token 统计
 
 ### Phase 7
 - [ ] 厂商 UKey SDK / PIN / 签名 Provider
@@ -94,7 +65,6 @@
 - [ ] Provider / Plugin 注册机制
 
 ## 开发规则
-
 1. 完成子阶段立即同步 `[x]/[ ]`。
 2. 架构变化同步 README / architecture / data-model / api-design / 本文档。
 3. “已完成”必须有代码、文档或测试证据。
