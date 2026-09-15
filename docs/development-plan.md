@@ -6,7 +6,7 @@
 
 | 阶段 | 主题 | 状态 |
 |---|---|---|
-| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、ProblemDetails、前后端独立构建流水线已完成；认证/迁移/测试待建设 |
+| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、ProblemDetails、前后端独立构建流水线、JWT 认证基础已完成；Identity 用户/角色持久化、迁移、测试待建设 |
 | Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 注册认证、审批状态、节点健康、数据库乐观并发 Lease、节点池/WorkerSlot 管理已落地；mTLS/硬件锁/故障重调度待完成 |
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
 | Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner 已支持浏览器常用步骤；Desktop、HumanTask 恢复与完整执行控制待完成 |
@@ -34,7 +34,8 @@
 
 ### Phase 0
 - [ ] NuGet 集中版本管理
-- [ ] JWT / Identity
+- [x] JWT 认证基础：Bearer Token、Issuer/Audience/SigningKey 校验、当前用户主体解析、Agent/Task API 身份隔离
+- [ ] Identity 用户/角色/登录服务与持久化
 - [ ] EF Core Migration
 - [ ] 完整 API Client / i18n / Theme Settings
 - [ ] 自动化测试与 CI test/publish
