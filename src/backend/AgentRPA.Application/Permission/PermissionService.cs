@@ -13,6 +13,7 @@ public sealed class PermissionService(IAccessPolicyRepository repository)
         string action,
         CancellationToken cancellationToken)
     {
+        // 权限检查发生在 Task 创建和外部系统执行之前，任何未授权情况均直接阻断。
         if (subjectId == Guid.Empty) return new(false, "未提供有效用户身份，拒绝执行。");
         if (cityId == Guid.Empty || systemId == Guid.Empty || functionId == Guid.Empty)
             return new(false, "业务资源不完整，拒绝执行。");
