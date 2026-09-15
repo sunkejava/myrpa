@@ -12,7 +12,9 @@ public interface INodeRegistryService : IExecutionNodeRegistry
     Task RefreshWorkerSlotsAsync(Guid nodeId, IReadOnlyCollection<string> slotNames, CancellationToken cancellationToken);
 }
 
+/// <summary>Node Agent 注册信息。</summary>
 public sealed record NodeRegistration(
+    string AgentKey,
     string Name,
     NodeKind NodeKind,
     OsPlatform OsPlatform,
