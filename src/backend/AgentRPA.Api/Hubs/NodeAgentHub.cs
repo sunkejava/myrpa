@@ -20,11 +20,17 @@ public sealed class NodeAgentConnectionRegistry
 
 public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeRegistryService nodeRegistry, IExecutionLeaseService leases, AgentRpaDbContext db) : Hub<INodeAgentClient>
 {
-    public Task Connect(NodeAgentConnectRequest request)
+    /// <summary>建立 SignalR 会话前再次校验 NodeId + AgentKey，防止伪造节点连接。</summary>
+    public async Task Connect(NodeAgentConnectRequest request, CancellationToken cancellationToken)
     {
+        var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == request.NodeId, cancellationToken);
+        if (node is null) throw new HubException("Node 不存在。");
+        if (!string.Equals(node.AgentKey, request.AgentKey, StringComparison.Ordinal)) throw new HubException("Node 身份认证失败。");
+        if (node.Status is not AgentRPA.Domain.Execution.NodeStatus.Online)
+            throw new HubException($"Node 当前状态为 {node.Status}，未获准建立执行会话。");
+
         connections.Bind(request.NodeId, Context.ConnectionId);
         Context.Items["NodeId"] = request.NodeId;
-        return Task.CompletedTask;
     }
 
     public async Task<NodeHeartbeatAck> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
