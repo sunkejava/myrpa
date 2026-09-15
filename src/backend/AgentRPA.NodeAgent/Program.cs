@@ -4,11 +4,11 @@ using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+var serverUrl = builder.Configuration["NodeAgent:ServerUrl"] ?? "https://localhost:5001";
 builder.Services.Configure<NodeAgentOptions>(builder.Configuration.GetSection("NodeAgent"));
-builder.Services.AddHttpClient("AgentRPA.Server", (client, services) =>
+builder.Services.AddHttpClient("AgentRPA.Server", client =>
 {
-    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NodeAgentOptions>>().Value;
-    client.BaseAddress = new Uri(options.ServerUrl.TrimEnd('/') + "/");
+    client.BaseAddress = new Uri(serverUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddHostedService<NodeAgentWorker>();
