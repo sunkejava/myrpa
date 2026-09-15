@@ -5,11 +5,13 @@ using AgentRPA.Api.Hubs;
 using AgentRPA.Api.Middleware;
 using AgentRPA.Application.Agent;
 using AgentRPA.Application.Batch;
+using AgentRPA.Application.Identity;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Workflow;
 using AgentRPA.Infrastructure.Agent;
+using AgentRPA.Infrastructure.Identity;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Permission;
 using AgentRPA.Infrastructure.Persistence;
@@ -34,32 +36,21 @@ var jwt = builder.Configuration.GetSection("AgentRPA:Jwt");
 var signingKey = jwt["SigningKey"];
 if (string.IsNullOrWhiteSpace(signingKey))
 {
-    if (!builder.Environment.IsDevelopment())
-        throw new InvalidOperationException("生产环境必须配置 AgentRPA:Jwt:SigningKey，且至少 32 个字符。");
+    if (!builder.Environment.IsDevelopment()) throw new InvalidOperationException("生产环境必须配置 AgentRPA:Jwt:SigningKey，且至少 32 个字符。");
     signingKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 }
-else if (signingKey.Length < 32)
-{
-    throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须至少 32 个字符。");
-}
+else if (signingKey.Length < 32) throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须至少 32 个字符。");
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = jwt["Issuer"],
-            ValidateAudience = true,
-            ValidAudience = jwt["Audience"],
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30),
-            NameClaimType = System.Security.Claims.ClaimTypes.Name,
-            RoleClaimType = System.Security.Claims.ClaimTypes.Role
-        };
-    });
+        ValidateIssuer = true, ValidIssuer = jwt["Issuer"], ValidateAudience = true, ValidAudience = jwt["Audience"],
+        ValidateIssuerSigningKey = true, IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+        ValidateLifetime = true, ClockSkew = TimeSpan.FromSeconds(30),
+        NameClaimType = System.Security.Claims.ClaimTypes.Name, RoleClaimType = System.Security.Claims.ClaimTypes.Role
+    };
+});
 builder.Services.AddAuthorization();
 
 builder.Services.AddSignalR();
@@ -79,6 +70,9 @@ builder.Services.AddScoped<IAgentWorkflowResolver, EfAgentWorkflowResolver>();
 builder.Services.AddScoped<AgentPlanningService>();
 builder.Services.AddScoped<IAccessPolicyRepository, EfAccessPolicyRepository>();
 builder.Services.AddScoped<PermissionService>();
+builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
+builder.Services.AddScoped<IIdentityService, EfIdentityService>();
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.Configure<LlmProviderOptions>(builder.Configuration.GetSection("AgentRPA:Llm"));
 builder.Services.AddHttpClient("llm", (sp, client) => client.Timeout = sp.GetRequiredService<IOptions<LlmProviderOptions>>().Value.Timeout);
 builder.Services.AddScoped<ILlmProvider, OpenAiCompatibleLlmProvider>();
