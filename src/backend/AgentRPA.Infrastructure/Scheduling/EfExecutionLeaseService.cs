@@ -44,6 +44,28 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
         }
     }
 
+    public async Task<bool> RenewAsync(Guid leaseId, Guid executionId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var lease = await db.Set<NodeLease>()
+            .SingleOrDefaultAsync(x => x.Id == leaseId && !x.Released, cancellationToken);
+
+        if (lease is null || lease.ExecutionId != executionId || lease.ExpiresAt <= now)
+            return false;
+
+        var slot = await db.WorkerSlots
+            .SingleOrDefaultAsync(x => x.Id == lease.WorkerSlotId, cancellationToken);
+
+        if (slot is null || slot.ExecutionId != executionId || !slot.Enabled)
+            return false;
+
+        var expiresAt = now.Add(LeaseDuration);
+        lease.Renew(expiresAt);
+        slot.Acquire(executionId, expiresAt);
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task ReleaseAsync(Guid leaseId, CancellationToken cancellationToken)
     {
         var lease = await db.Set<NodeLease>().SingleOrDefaultAsync(x => x.Id == leaseId, cancellationToken);
