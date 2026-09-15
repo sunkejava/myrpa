@@ -1,3 +1,4 @@
+using AgentRPA.Application.Scheduling;
 using AgentRPA.Contracts.Tasks;
 
 namespace AgentRPA.Application.Agent;
@@ -15,13 +16,16 @@ public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWo
         var systems = await catalog.GetSystemsAsync(cancellationToken);
         var functions = await catalog.GetFunctionsAsync(cancellationToken);
         var ambiguities = new List<string>();
+
         var cityMatches = cities.Where(x => Contains(text, x.Name) || Contains(text, x.Code)).ToArray();
         if (cityMatches.Length != 1) ambiguities.Add(cityMatches.Length == 0 ? "无法从指令识别城市。" : "指令匹配到多个城市，请明确城市。");
         var cityId = cityMatches.Length == 1 ? cityMatches[0].Id : Guid.Empty;
+
         var systemMatches = systems.Where(x => (cityId == Guid.Empty || x.CityId == cityId) && (Contains(text, x.Name) || Contains(text, x.Code))).ToArray();
         if (systemMatches.Length != 1) ambiguities.Add(systemMatches.Length == 0 ? "无法识别业务系统。" : "指令匹配到多个业务系统，请明确系统。");
         var systemId = systemMatches.Length == 1 ? systemMatches[0].Id : Guid.Empty;
-        var functionMatches = functions.Where(x => (systemId == Guid.Empty || x.BusinessSystemId == systemId) && (Contains(text, x.Name) || Contains(text, x.Code))).ToArray();
+
+        var functionMatches = functions.Where(x => (systemId == Guid.Empty || x.SystemId == systemId) && (Contains(text, x.Name) || Contains(text, x.Code))).ToArray();
         if (functionMatches.Length != 1) ambiguities.Add(functionMatches.Length == 0 ? "无法识别业务功能。" : "指令匹配到多个业务功能，请明确功能。");
         if (ambiguities.Count > 0) return new(false, null, ambiguities, "需要补充业务资源信息后才能生成执行计划。");
 
@@ -33,9 +37,17 @@ public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWo
         var workflow = workflows[0];
         var action = ResolveAction(text);
         var risk = ResolveRisk(text);
-        var plan = new TaskPlanDto(cityId, systemId, functionId, action,
-            new Dictionary<string, object?> { ["instruction"] = text }, [], workflow.WorkflowId.ToString(), workflow.Version, risk, risk != "Low");
+        var parameters = ParseParameters(text);
+        var plan = new TaskPlanDto(cityId, systemId, functionId, action, parameters, [], workflow.WorkflowId.ToString(), workflow.Version, risk, risk != "Low");
         return new(true, plan, [], $"已解析为：{cities.Single(x => x.Id == cityId).Name} / {systemMatches[0].Name} / {functionMatches[0].Name} / Workflow {workflow.Name} v{workflow.Version} / {action}。");
+    }
+
+    private static Dictionary<string, object?> ParseParameters(string text)
+    {
+        var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["instruction"] = text };
+        var match = System.Text.RegularExpressions.Regex.Match(text, "(?:文件|Excel|表格)[:：]?[\\s]*([^，。；;\\s]+\\.(?:xlsx|xls|csv))", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (match.Success) parameters["fileName"] = match.Groups[1].Value;
+        return parameters;
     }
 
     private static bool Contains(string text, string value) => !string.IsNullOrWhiteSpace(value) && text.Contains(value, StringComparison.OrdinalIgnoreCase);
