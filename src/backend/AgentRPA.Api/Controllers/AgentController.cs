@@ -70,5 +70,5 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
 }
 
 public sealed record AgentPlanRequest(string Instruction);
-public sealed record AgentPermissionCheckRequest(Guid SubjectId, Guid CityId, Guid SystemId, Guid FunctionId, string Action);
-public sealed record AgentExecuteRequest(Guid SubjectId, string Instruction, bool Confirmed = false);
+public sealed record AgentPermissionCheckRequest(Guid CityId, Guid SystemId, Guid FunctionId, string Action);
+public sealed record AgentExecuteRequest(string Instruction, bool Confirmed = false);
