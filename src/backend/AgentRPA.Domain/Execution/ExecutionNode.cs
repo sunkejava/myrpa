@@ -76,6 +76,7 @@ public sealed class WorkerSlot : Entity
     public DateTimeOffset? LeaseExpiresAt { get; private set; }
     public int ConcurrencyStamp { get; private set; }
     public bool IsAvailable(DateTimeOffset now) => Enabled && (ExecutionId is null || LeaseExpiresAt <= now);
+    public void SetEnabled(bool enabled) => Enabled = enabled;
     public void Acquire(Guid executionId, DateTimeOffset expiresAt) { ExecutionId = executionId; LeaseExpiresAt = expiresAt; ConcurrencyStamp++; }
     public void Release() { ExecutionId = null; LeaseExpiresAt = null; ConcurrencyStamp++; }
 }
