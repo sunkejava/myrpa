@@ -1,9 +1,12 @@
 using AgentRPA.Domain.Execution;
+using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Resources;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Domain.Workflow;
 using Microsoft.EntityFrameworkCore;
+
 namespace AgentRPA.Infrastructure.Persistence;
+
 /// <summary>AgentRPA 数据库上下文，负责平台运行数据的持久化。</summary>
 public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> options) : DbContext(options)
 {
@@ -22,5 +25,8 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<RpaTask> Tasks => Set<RpaTask>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<Execution> Executions => Set<Execution>();
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(AgentRpaDbContext).Assembly);
+    public DbSet<HumanIntervention> HumanInterventions => Set<HumanIntervention>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AgentRpaDbContext).Assembly);
 }
