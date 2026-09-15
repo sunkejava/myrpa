@@ -3,6 +3,7 @@ using AgentRPA.NodeAgent.Execution;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using System.Net.Http.Json;
 
 namespace AgentRPA.NodeAgent;
 
@@ -44,9 +45,9 @@ public sealed class NodeAgentWorker(
             .Build();
 
         connection.On<ExecutionCommand>("ExecuteAsync", command => StartExecutionAsync(connection, command, stoppingToken));
-        connection.On<Guid>("CancelAsync", id => CancelExecutionAsync(id));
-        connection.On<Guid>("PauseAsync", id => Task.CompletedTask);
-        connection.On<Guid>("ResumeAsync", id => Task.CompletedTask);
+        connection.On<Guid>("CancelAsync", CancelExecutionAsync);
+        connection.On<Guid>("PauseAsync", _ => Task.CompletedTask);
+        connection.On<Guid>("ResumeAsync", _ => Task.CompletedTask);
 
         while (!stoppingToken.IsCancellationRequested)
         {
