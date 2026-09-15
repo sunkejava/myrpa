@@ -18,8 +18,9 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
         if (executionId.HasValue)
             query = query.Where(x => x.ExecutionId == executionId.Value);
 
+        // SQLite 项目避免按 DateTimeOffset 排序，防止 provider 不支持该表达式。
         return await query
-            .OrderByDescending(x => x.CreatedAt)
+            .OrderByDescending(x => x.Id)
             .Select(x => new HumanInterventionDto(
                 x.Id,
                 x.ExecutionId,
