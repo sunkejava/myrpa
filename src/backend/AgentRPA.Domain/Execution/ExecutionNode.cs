@@ -5,7 +5,7 @@ namespace AgentRPA.Domain.Execution;
 /// <summary>执行节点类型，表示 RPA 实际运行所在的基础环境。</summary>
 public enum NodeKind { Physical = 1, VirtualMachine = 2, CloudDesktop = 3, Container = 4 }
 public enum OsPlatform { Windows = 1, Linux = 2, MacOS = 3, Other = 99 }
-public enum NodeStatus { Offline = 0, Online = 1, Draining = 2, Disabled = 3, Unhealthy = 4 }
+public enum NodeStatus { Offline = 0, Online = 1, Draining = 2, Disabled = 3, Unhealthy = 4, PendingApproval = 5 }
 
 /// <summary>服务端管理的一个实际 RPA 执行环境。</summary>
 public sealed class ExecutionNode : Entity
@@ -19,14 +19,20 @@ public sealed class ExecutionNode : Entity
     public NodeKind NodeKind { get; private set; }
     public OsPlatform OsPlatform { get; private set; }
     public string Architecture { get; private set; } = string.Empty;
-    public NodeStatus Status { get; private set; } = NodeStatus.Offline;
+    public NodeStatus Status { get; private set; } = NodeStatus.PendingApproval;
     public Guid? NodePoolId { get; private set; }
     public string? NetworkZone { get; private set; }
     public string? AgentVersion { get; private set; }
     public DateTimeOffset? LastHeartbeatAt { get; private set; }
     public IReadOnlyCollection<NodeCapability> Capabilities => _capabilities;
     public void RegisterHeartbeat(string agentVersion, DateTimeOffset heartbeatAt)
-    { AgentVersion = agentVersion; LastHeartbeatAt = heartbeatAt; Status = Status == NodeStatus.Draining ? NodeStatus.Draining : NodeStatus.Online; }
+    {
+        AgentVersion = agentVersion;
+        LastHeartbeatAt = heartbeatAt;
+        if (Status == NodeStatus.PendingApproval || Status == NodeStatus.Draining || Status == NodeStatus.Disabled) return;
+        Status = NodeStatus.Online;
+    }
+    public void Approve() => Status = NodeStatus.Online;
     public void SetStatus(NodeStatus status) => Status = status;
     public void SetPool(Guid? nodePoolId) => NodePoolId = nodePoolId;
     public void SetNetworkZone(string? networkZone) => NetworkZone = networkZone;
@@ -55,6 +61,7 @@ public sealed class NodePool : Entity
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
     public bool Enabled { get; private set; } = true;
+    public void Update(string name, string? description, bool enabled) { Name = name; Description = description; Enabled = enabled; }
 }
 
 /// <summary>节点上的一个并发执行槽位。</summary>
