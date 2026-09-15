@@ -5,6 +5,7 @@ using AgentRPA.Application.Scheduling;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Persistence;
 using AgentRPA.Infrastructure.Scheduling;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Instance = context.HttpContext.Request.Path;
+        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+    };
+});
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
 builder.Services.AddHostedService<NodeHealthMonitor>();
@@ -23,6 +32,22 @@ builder.Services.AddScoped<IExecutionNodeRegistry>(sp => sp.GetRequiredService<I
 builder.Services.AddScoped<IExecutionLeaseService, EfExecutionLeaseService>();
 
 var app = builder.Build();
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        if (exception is not null)
+            app.Logger.LogError(exception, "Unhandled API exception");
+        await Results.Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "AgentRPA 服务端处理失败",
+            detail: app.Environment.IsDevelopment() ? exception?.Message : null,
+            extensions: new Dictionary<string, object?> { ["traceId"] = context.TraceIdentifier })
+            .ExecuteAsync(context);
+    });
+});
 
 using (var scope = app.Services.CreateScope())
 {
