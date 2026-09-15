@@ -1,4 +1,6 @@
+using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
+using AgentRPA.Domain.Execution;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentRPA.Api.Controllers;
@@ -6,20 +8,30 @@ namespace AgentRPA.Api.Controllers;
 /// <summary>执行节点控制面 API。真正的 Workflow 执行仍由 Node Agent 完成。</summary>
 [ApiController]
 [Route("api/nodes")]
-public sealed class NodesController : ControllerBase
+public sealed class NodesController(INodeRegistryService nodeRegistry) : ControllerBase
 {
-    /// <summary>节点首次注册。生产环境需要增加节点身份认证和注册审批。</summary>
+    /// <summary>节点注册。生产环境后续接入节点密钥/证书认证和管理员审批。</summary>
     [HttpPost("register")]
-    public IActionResult Register(RegisterNodeRequest request)
+    public async Task<IActionResult> Register(RegisterNodeRequest request, CancellationToken cancellationToken)
     {
-        // 当前仅搭建控制面契约；后续由 Application 层持久化并签发 Node 身份。
-        return Ok(new { nodeId = Guid.NewGuid(), status = "PendingRegistration" });
+        if (!Enum.TryParse<NodeKind>(request.NodeKind, true, out var nodeKind) ||
+            !Enum.TryParse<OsPlatform>(request.OsPlatform, true, out var osPlatform))
+            return BadRequest(new { message = "NodeKind 或 OsPlatform 无效。" });
+
+        var registration = new NodeRegistration(
+            request.AgentKey, request.Name, nodeKind, osPlatform, request.Architecture,
+            request.NetworkZone, request.NodePoolId, request.AgentVersion,
+            request.Capabilities.Select(x => new NodeCapabilityInput(x.Code, x.Version, x.MetadataJson)).ToArray(),
+            request.WorkerSlots);
+        var node = await nodeRegistry.RegisterAsync(registration, cancellationToken);
+        return Ok(new { nodeId = node.Id, agentKey = node.AgentKey, status = node.Status.ToString() });
     }
 
-    /// <summary>节点心跳。后续由 Application 层更新 Node 状态、能力和 WorkerSlot。</summary>
+    /// <summary>节点心跳。服务端以最近心跳判断调度资格。</summary>
     [HttpPost("heartbeat")]
-    public IActionResult Heartbeat(NodeHeartbeatRequest request)
+    public async Task<IActionResult> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
     {
-        return Ok(new { accepted = true, serverTime = DateTimeOffset.UtcNow });
+        var accepted = await nodeRegistry.HeartbeatAsync(request.NodeId, request.AgentVersion, request.SentAt, cancellationToken);
+        return accepted ? Ok(new { accepted = true, serverTime = DateTimeOffset.UtcNow }) : NotFound();
     }
 }
