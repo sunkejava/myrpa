@@ -14,6 +14,7 @@ using AgentRPA.Infrastructure.Persistence;
 using AgentRPA.Infrastructure.Scheduling;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
@@ -41,6 +42,9 @@ builder.Services.AddScoped<IAgentWorkflowResolver, EfAgentWorkflowResolver>();
 builder.Services.AddScoped<AgentPlanningService>();
 builder.Services.AddScoped<IAccessPolicyRepository, EfAccessPolicyRepository>();
 builder.Services.AddScoped<PermissionService>();
+builder.Services.Configure<LlmProviderOptions>(builder.Configuration.GetSection("AgentRPA:Llm"));
+builder.Services.AddHttpClient("llm", (sp, client) => client.Timeout = sp.GetRequiredService<IOptions<LlmProviderOptions>>().Value.Timeout);
+builder.Services.AddScoped<ILlmProvider, OpenAiCompatibleLlmProvider>();
 
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
