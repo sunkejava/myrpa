@@ -8,6 +8,8 @@ public sealed record AgentPlanResult(bool Success, TaskPlanDto? Plan, IReadOnlyL
 /// <summary>Agent 规划器：解析资源、动作、风险，并绑定已发布且明确的 Workflow。</summary>
 public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWorkflowResolver workflowResolver)
 {
+    private const string DefaultAction = "Execute";
+
     public async Task<AgentPlanResult> PlanAsync(string instruction, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(instruction)) return new(false, null, ["请输入自动化指令。"], "指令为空");
@@ -56,6 +58,6 @@ public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWo
     }
 
     private static bool Contains(string text, string value) => !string.IsNullOrWhiteSpace(value) && text.Contains(value, StringComparison.OrdinalIgnoreCase);
-    private static string ResolveAction(string text) => text.Contains("导出", StringComparison.OrdinalIgnoreCase) ? "Export" : text.Contains("下载", StringComparison.OrdinalIgnoreCase) ? "Download" : text.Contains("上传", StringComparison.OrdinalIgnoreCase) ? "Upload" : text.Contains("删除", StringComparison.OrdinalIgnoreCase) ? "Delete" : text.Contains("新增", StringComparison.OrdinalIgnoreCase) || text.Contains("添加", StringComparison.OrdinalIgnoreCase) ? "Create" : text.Contains("修改", StringComparison.OrdinalIgnoreCase) || text.Contains("更新", StringComparison.OrdinalIgnoreCase) ? "Update" : "Execute";
+    private static string ResolveAction(string text) => text.Contains("导出", StringComparison.OrdinalIgnoreCase) ? "Export" : text.Contains("下载", StringComparison.OrdinalIgnoreCase) ? "Download" : text.Contains("上传", StringComparison.OrdinalIgnoreCase) ? "Upload" : text.Contains("删除", StringComparison.OrdinalIgnoreCase) ? "Delete" : text.Contains("新增", StringComparison.OrdinalIgnoreCase) || text.Contains("添加", StringComparison.OrdinalIgnoreCase) ? "Create" : text.Contains("修改", StringComparison.OrdinalIgnoreCase) || text.Contains("更新", StringComparison.OrdinalIgnoreCase) ? "Update" : DefaultAction;
     private static string ResolveRisk(string text) => text.Contains("删除", StringComparison.OrdinalIgnoreCase) || text.Contains("注销", StringComparison.OrdinalIgnoreCase) ? "High" : text.Contains("修改", StringComparison.OrdinalIgnoreCase) || text.Contains("新增", StringComparison.OrdinalIgnoreCase) || text.Contains("提交", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low";
 }
