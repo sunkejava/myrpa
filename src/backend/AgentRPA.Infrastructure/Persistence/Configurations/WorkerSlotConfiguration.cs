@@ -12,6 +12,7 @@ public sealed class WorkerSlotConfiguration : IEntityTypeConfiguration<WorkerSlo
         builder.ToTable("worker_slots");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.SlotName).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.ConcurrencyStamp).IsConcurrencyToken();
         builder.HasIndex(x => new { x.NodeId, x.SlotName }).IsUnique();
         builder.HasIndex(x => x.ExecutionId);
         builder.HasIndex(x => x.LeaseExpiresAt);
