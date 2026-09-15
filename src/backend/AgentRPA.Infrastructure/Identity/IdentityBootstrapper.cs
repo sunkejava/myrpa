@@ -1,6 +1,8 @@
+using AgentRPA.Application.Identity;
 using AgentRPA.Domain.Identity;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace AgentRPA.Infrastructure.Identity;
 
