@@ -55,7 +55,7 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
         var version = await db.WorkflowVersions.AsNoTracking().SingleOrDefaultAsync(x => x.WorkflowId == workflowId && x.Version == plan.WorkflowVersion.Value && x.Published, ct);
         if (version is null) return UnprocessableEntity(new { message = "WorkflowVersion 未发布或已失效。" });
 
-        var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}");
+        var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: request.SubjectId);
         task.AddItem(System.Text.Json.JsonSerializer.Serialize(plan.Parameters));
         task.Queue();
         db.Tasks.Add(task);
