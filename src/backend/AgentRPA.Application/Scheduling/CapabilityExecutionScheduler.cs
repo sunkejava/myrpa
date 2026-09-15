@@ -65,7 +65,7 @@ public sealed class CapabilityExecutionScheduler(
         if (requirement.RequiredCapabilities.Any(code => !Has(node, code)))
             return false;
 
-        if (requirement.ForbiddenCapabilities.Any(Has))
+        if (requirement.ForbiddenCapabilities.Any(code => Has(node, code)))
             return false;
 
         if (requirement.RequiredHardwareIds is { Count: > 0 } && !requirement.RequiredHardwareIds.IsSubsetOf(node.HardwareIds))
