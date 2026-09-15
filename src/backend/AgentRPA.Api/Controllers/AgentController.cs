@@ -1,14 +1,16 @@
+using AgentRPA.Api.Security;
 using AgentRPA.Application.Agent;
 using AgentRPA.Application.Permission;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentRPA.Api.Controllers;
 
 /// <summary>自然语言 Agent 控制器：规划、权限预检查以及经确认后的 Task 创建。</summary>
-[ApiController, Route("api/agent")]
+[ApiController, Route("api/agent"), Authorize]
 public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, AgentRpaDbContext db) : ControllerBase
 {
     [HttpPost("plan")]
@@ -18,11 +20,12 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
         return result.Success ? Ok(result) : UnprocessableEntity(result);
     }
 
-    /// <summary>执行前权限预检查。真正的 Task/Execution 派发前仍必须再次校验。</summary>
+    /// <summary>执行前权限预检查。SubjectId 必须来自已验证 JWT，客户端不能伪造业务主体。</summary>
     [HttpPost("check-permission")]
     public async Task<IActionResult> CheckPermission(AgentPermissionCheckRequest request, CancellationToken ct)
     {
-        var result = await permissionService.CheckAsync(request.SubjectId, request.CityId, request.SystemId, request.FunctionId, request.Action, ct);
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体（sub/nameidentifier）。" });
+        var result = await permissionService.CheckAsync(subjectId, request.CityId, request.SystemId, request.FunctionId, request.Action, ct);
         return result.Allowed ? Ok(result) : StatusCode(StatusCodes.Status403Forbidden, result);
     }
 
@@ -30,11 +33,13 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
     [HttpPost("execute")]
     public async Task<IActionResult> Execute(AgentExecuteRequest request, CancellationToken ct)
     {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体（sub/nameidentifier）。" });
+
         var planResult = await planner.PlanAsync(request.Instruction, ct);
         if (!planResult.Success || planResult.Plan is null) return UnprocessableEntity(planResult);
         var plan = planResult.Plan;
 
-        var permission = await permissionService.CheckAsync(request.SubjectId, plan.CityId, plan.SystemId, plan.FunctionId, plan.Action, ct);
+        var permission = await permissionService.CheckAsync(subjectId, plan.CityId, plan.SystemId, plan.FunctionId, plan.Action, ct);
         if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
 
         if (plan.RequiresConfirmation && !request.Confirmed)
@@ -55,7 +60,7 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
         var version = await db.WorkflowVersions.AsNoTracking().SingleOrDefaultAsync(x => x.WorkflowId == workflowId && x.Version == plan.WorkflowVersion.Value && x.Published, ct);
         if (version is null) return UnprocessableEntity(new { message = "WorkflowVersion 未发布或已失效。" });
 
-        var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: request.SubjectId);
+        var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: subjectId);
         task.AddItem(System.Text.Json.JsonSerializer.Serialize(plan.Parameters));
         task.Queue();
         db.Tasks.Add(task);
