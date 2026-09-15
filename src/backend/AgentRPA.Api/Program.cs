@@ -4,10 +4,12 @@ using AgentRPA.Api.Middleware;
 using AgentRPA.Application.Agent;
 using AgentRPA.Application.Batch;
 using AgentRPA.Application.Nodes;
+using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Workflow;
 using AgentRPA.Infrastructure.Agent;
 using AgentRPA.Infrastructure.Nodes;
+using AgentRPA.Infrastructure.Permission;
 using AgentRPA.Infrastructure.Persistence;
 using AgentRPA.Infrastructure.Scheduling;
 using Microsoft.AspNetCore.Diagnostics;
@@ -37,6 +39,8 @@ builder.Services.AddSingleton<ISpreadsheetImportService, SpreadsheetImportServic
 builder.Services.AddScoped<IAgentResourceCatalog, EfAgentResourceCatalog>();
 builder.Services.AddScoped<IAgentWorkflowResolver, EfAgentWorkflowResolver>();
 builder.Services.AddScoped<AgentPlanningService>();
+builder.Services.AddScoped<IAccessPolicyRepository, EfAccessPolicyRepository>();
+builder.Services.AddScoped<PermissionService>();
 
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
