@@ -5,10 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentRPA.Infrastructure.Scheduling;
 
-/// <summary>基于 EF Core 的执行租约服务。当前以进程级互斥配合数据库持久化保证单实例竞争安全。</summary>
+/// <summary>基于数据库乐观并发的执行租约服务。服务实例之间不依赖进程级锁。</summary>
 public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLeaseService
 {
-    private static readonly SemaphoreSlim AcquireGate = new(1, 1);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
 
     public async Task<ExecutionAssignment?> TryAcquireAsync(
@@ -16,7 +15,7 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
         Guid executionId,
         CancellationToken cancellationToken)
     {
-        await AcquireGate.WaitAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             var now = DateTimeOffset.UtcNow;
@@ -28,19 +27,25 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
                 .OrderBy(x => x.SlotName)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (slot is null) return null;
+            if (slot is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
 
             var expiresAt = now.Add(LeaseDuration);
             slot.Acquire(executionId, expiresAt);
             var lease = new NodeLease(executionId, node.NodeId, slot.Id, expiresAt);
             db.Set<NodeLease>().Add(lease);
             await db.SaveChangesAsync(cancellationToken);
-
+            await transaction.CommitAsync(cancellationToken);
             return new ExecutionAssignment(node.NodeId, slot.Id, lease.Id, 0);
         }
-        finally
+        catch (DbUpdateConcurrencyException)
         {
-            AcquireGate.Release();
+            await transaction.RollbackAsync(cancellationToken);
+            // 另一个 Server 实例已经成功抢占了同一个 WorkerSlot，本次调度返回无资源。
+            return null;
         }
     }
 
@@ -62,8 +67,15 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
         var expiresAt = now.Add(LeaseDuration);
         lease.Renew(expiresAt, now);
         slot.Acquire(executionId, expiresAt);
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
     }
 
     public async Task ReleaseAsync(Guid leaseId, CancellationToken cancellationToken)
@@ -76,7 +88,15 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
             slot.Release();
 
         lease.Release();
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Slot 已由新的执行实例接管时，不覆盖新租约。
+            db.ChangeTracker.Clear();
+        }
     }
 
     private async Task RecoverExpiredAsync(Guid nodeId, DateTimeOffset now, CancellationToken cancellationToken)
