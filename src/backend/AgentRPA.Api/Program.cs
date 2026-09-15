@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
@@ -31,8 +32,16 @@ builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = 
 
 var jwt = builder.Configuration.GetSection("AgentRPA:Jwt");
 var signingKey = jwt["SigningKey"];
-if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32)
-    throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须配置至少 32 个字符的签名密钥。");
+if (string.IsNullOrWhiteSpace(signingKey))
+{
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("生产环境必须配置 AgentRPA:Jwt:SigningKey，且至少 32 个字符。");
+    signingKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+}
+else if (signingKey.Length < 32)
+{
+    throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须至少 32 个字符。");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
