@@ -42,12 +42,33 @@ public static class ExecutionRequirementMerger
         };
     }
 
-    private static IReadOnlySet<string> IntersectOrInherit(IReadOnlySet<string> parent, IReadOnlySet<string> child)
-        => child.Count == 0 ? parent : parent.Count == 0 ? child : parent.Intersect(child, StringComparer.OrdinalIgnoreCase).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private static IReadOnlySet<string> IntersectOrInherit(
+        IReadOnlySet<string> parent,
+        IReadOnlySet<string> child)
+        => child.Count == 0
+            ? parent
+            : parent.Count == 0
+                ? child
+                : parent.Intersect(child, StringComparer.OrdinalIgnoreCase)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private static IReadOnlySet<T> IntersectOrInherit<T>(IReadOnlySet<T>? parent, IReadOnlySet<T>? child)
-        => child is null || child.Count == 0 ? parent ?? new HashSet<T>() : parent is null || parent.Count == 0 ? child : parent.Intersect(child).ToHashSet();
+    private static IReadOnlySet<T> IntersectOrInherit<T>(
+        IReadOnlySet<T>? parent,
+        IReadOnlySet<T>? child)
+    {
+        if (child is null || child.Count == 0)
+            return parent ?? new HashSet<T>();
 
-    private static IReadOnlySet<T> Union<T>(IReadOnlySet<T>? first, IReadOnlySet<T>? second)
-        => (first ?? []).Concat(second ?? []).ToHashSet();
+        if (parent is null || parent.Count == 0)
+            return child;
+
+        return parent.Intersect(child).ToHashSet();
+    }
+
+    private static IReadOnlySet<T> Union<T>(
+        IReadOnlySet<T>? first,
+        IReadOnlySet<T>? second)
+        => (first ?? new HashSet<T>())
+            .Concat(second ?? new HashSet<T>())
+            .ToHashSet();
 }
