@@ -1,10 +1,12 @@
 using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
 using AgentRPA.Api.Middleware;
+using AgentRPA.Application.Agent;
 using AgentRPA.Application.Batch;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Workflow;
+using AgentRPA.Infrastructure.Agent;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Persistence;
 using AgentRPA.Infrastructure.Scheduling;
@@ -24,7 +26,6 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
 builder.Services.AddHostedService<NodeHealthMonitor>();
 builder.Services.AddHostedService<ExecutionQueueWorker>();
-
 var connectionString = builder.Configuration.GetConnectionString("AgentRPA") ?? "Data Source=agentrpa.db";
 builder.Services.AddDbContext<AgentRpaDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddScoped<INodeRegistryService, EfNodeRegistryService>();
@@ -33,6 +34,8 @@ builder.Services.AddScoped<IExecutionLeaseService, EfExecutionLeaseService>();
 builder.Services.AddScoped<IExecutionScheduler, CapabilityExecutionScheduler>();
 builder.Services.AddSingleton<WorkflowDefinitionValidator>();
 builder.Services.AddSingleton<ISpreadsheetImportService, SpreadsheetImportService>();
+builder.Services.AddScoped<IAgentResourceCatalog, EfAgentResourceCatalog>();
+builder.Services.AddScoped<AgentPlanningService>();
 
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
