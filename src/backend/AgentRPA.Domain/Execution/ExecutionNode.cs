@@ -79,12 +79,14 @@ public sealed class NodeCapability : Entity
 {
     private NodeCapability() { }
 
-    public NodeCapability(string code, string? version = null)
+    public NodeCapability(Guid nodeId, string code, string? version = null)
     {
+        NodeId = nodeId;
         Code = code;
         Version = version;
     }
 
+    public Guid NodeId { get; private set; }
     public string Code { get; private set; } = string.Empty;
     public string? Version { get; private set; }
     public bool Enabled { get; private set; } = true;
