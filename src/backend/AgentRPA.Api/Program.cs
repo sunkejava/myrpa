@@ -1,5 +1,6 @@
 using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
+using AgentRPA.Api.Middleware;
 using AgentRPA.Application.Batch;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Scheduling;
@@ -48,6 +49,7 @@ using (var scope = app.Services.CreateScope())
 }
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseHttpsRedirection();
+app.UseMiddleware<AuditMiddleware>();
 app.MapControllers();
 app.MapHub<NodeAgentHub>("/hubs/node-agent", options => options.AllowStatefulReconnects = true);
 app.Run();
