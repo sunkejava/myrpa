@@ -1,0 +1,32 @@
+using System.Collections.Concurrent;
+using AgentRPA.Contracts.Nodes;
+using Microsoft.AspNetCore.SignalR;
+
+namespace AgentRPA.Api.Hubs;
+
+/// <summary>维护 NodeAgent 与 SignalR ConnectionId 的映射。</summary>
+public sealed class NodeAgentConnectionRegistry
+{
+    private readonly ConcurrentDictionary<Guid, string> _connections = new();
+    public void Bind(Guid nodeId, string connectionId) => _connections[nodeId] = connectionId;
+    public void Remove(Guid nodeId, string connectionId) => _connections.TryRemove(new KeyValuePair<Guid, string>(nodeId, connectionId));
+    public bool TryGet(Guid nodeId, out string? connectionId) => _connections.TryGetValue(nodeId, out connectionId);
+}
+
+/// <summary>Server 与 NodeAgent 的实时双向通信 Hub。</summary>
+public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections) : Hub<INodeAgentClient>
+{
+    public Task Connect(NodeAgentConnectRequest request)
+    {
+        connections.Bind(request.NodeId, Context.ConnectionId);
+        Context.Items["NodeId"] = request.NodeId;
+        return Task.CompletedTask;
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (Context.Items.TryGetValue("NodeId", out var value) && value is Guid nodeId)
+            connections.Remove(nodeId, Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
+    }
+}
