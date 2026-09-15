@@ -48,6 +48,22 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<int> MarkOfflineNodesAsync(TimeSpan heartbeatTimeout, CancellationToken cancellationToken)
+    {
+        var timeout = DateTimeOffset.UtcNow.Subtract(heartbeatTimeout);
+        var staleNodes = await db.ExecutionNodes
+            .Where(x => x.Status == NodeStatus.Online && (x.LastHeartbeatAt == null || x.LastHeartbeatAt < timeout))
+            .ToListAsync(cancellationToken);
+
+        foreach (var node in staleNodes)
+            node.SetStatus(NodeStatus.Offline);
+
+        if (staleNodes.Count > 0)
+            await db.SaveChangesAsync(cancellationToken);
+
+        return staleNodes.Count;
+    }
+
     public async Task<IReadOnlyList<AgentRPA.Application.Scheduling.ExecutionNodeSnapshot>> GetOnlineNodesAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
