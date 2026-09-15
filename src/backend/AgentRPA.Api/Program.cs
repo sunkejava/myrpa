@@ -1,10 +1,27 @@
+using AgentRPA.Application.Nodes;
+using AgentRPA.Application.Scheduling;
+using AgentRPA.Infrastructure.Nodes;
+using AgentRPA.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var connectionString = builder.Configuration.GetConnectionString("AgentRPA") ?? "Data Source=agentrpa.db";
+builder.Services.AddDbContext<AgentRpaDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddScoped<INodeRegistryService, EfNodeRegistryService>();
+builder.Services.AddScoped<IExecutionNodeRegistry>(sp => sp.GetRequiredService<INodeRegistryService>());
+
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AgentRpaDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
