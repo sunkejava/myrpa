@@ -25,6 +25,7 @@ public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWo
         if (systemMatches.Length != 1) ambiguities.Add(systemMatches.Length == 0 ? "无法识别业务系统。" : "指令匹配到多个业务系统，请明确系统。");
         var systemId = systemMatches.Length == 1 ? systemMatches[0].Id : Guid.Empty;
 
+        // BusinessFunction 领域模型使用 SystemId，这里保持资源目录字段与领域模型一致。
         var functionMatches = functions.Where(x => (systemId == Guid.Empty || x.SystemId == systemId) && (Contains(text, x.Name) || Contains(text, x.Code))).ToArray();
         if (functionMatches.Length != 1) ambiguities.Add(functionMatches.Length == 0 ? "无法识别业务功能。" : "指令匹配到多个业务功能，请明确功能。");
         if (ambiguities.Count > 0) return new(false, null, ambiguities, "需要补充业务资源信息后才能生成执行计划。");
@@ -35,18 +36,9 @@ public sealed class AgentPlanningService(IAgentResourceCatalog catalog, IAgentWo
 
         var defaults = workflows.Where(x => x.IsDefault).ToArray();
         AgentWorkflowResource workflow;
-        if (defaults.Length == 1)
-        {
-            workflow = defaults[0];
-        }
-        else if (workflows.Select(x => x.WorkflowId).Distinct().Count() == 1)
-        {
-            workflow = workflows[0];
-        }
-        else
-        {
-            return new(false, null, ["该业务功能存在多个已发布 Workflow，请配置且仅保留一个默认 Workflow 后再执行。"], "Workflow 选择存在歧义。");
-        }
+        if (defaults.Length == 1) workflow = defaults[0];
+        else if (workflows.Select(x => x.WorkflowId).Distinct().Count() == 1) workflow = workflows[0];
+        else return new(false, null, ["该业务功能存在多个已发布 Workflow，请配置且仅保留一个默认 Workflow 后再执行。"], "Workflow 选择存在歧义。");
 
         var action = ResolveAction(text);
         var risk = ResolveRisk(text);
