@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
 using Microsoft.AspNetCore.SignalR;
 
@@ -14,13 +15,31 @@ public sealed class NodeAgentConnectionRegistry
 }
 
 /// <summary>Server 与 NodeAgent 的实时双向通信 Hub。</summary>
-public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections) : Hub<INodeAgentClient>
+public sealed class NodeAgentHub(
+    NodeAgentConnectionRegistry connections,
+    INodeRegistryService nodeRegistry) : Hub<INodeAgentClient>
 {
     public Task Connect(NodeAgentConnectRequest request)
     {
         connections.Bind(request.NodeId, Context.ConnectionId);
         Context.Items["NodeId"] = request.NodeId;
         return Task.CompletedTask;
+    }
+
+    /// <summary>NodeAgent 通过 SignalR 上报心跳，服务端返回统一 ACK。</summary>
+    public async Task<NodeHeartbeatAck> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
+    {
+        var accepted = await nodeRegistry.HeartbeatAsync(
+            request.NodeId,
+            request.AgentVersion,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (!accepted)
+            throw new HubException("Node 不存在或已被禁用。");
+
+        connections.Bind(request.NodeId, Context.ConnectionId);
+        Context.Items["NodeId"] = request.NodeId;
+        return new NodeHeartbeatAck(request.NodeId, DateTimeOffset.UtcNow, request.Status);
     }
 
     public override Task OnDisconnectedAsync(Exception? exception)
