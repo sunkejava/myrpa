@@ -19,13 +19,12 @@ public sealed class WebhookNotificationProvider(HttpClient client, string channe
                 eventCode = message.EventCode
             };
             using var response = await client.PostAsJsonAsync(endpoint, payload, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                return new(false, ErrorCode: $"HTTP_{(int)response.StatusCode}");
+            if (!response.IsSuccessStatusCode) return new(false, ErrorCode: $"HTTP_{(int)response.StatusCode}");
             return new(true);
         }
-        catch (Exception ex)
+        catch
         {
-            return new(false, ErrorCode: "WEBHOOK_ERROR", ErrorMessage: ex.Message);
+            return new(false, ErrorCode: "WEBHOOK_ERROR");
         }
     }
 }
@@ -44,9 +43,9 @@ public sealed class SmtpNotificationProvider(string host, int port, string user,
             await smtp.SendMailAsync(mail, cancellationToken);
             return new(true);
         }
-        catch (Exception ex)
+        catch
         {
-            return new(false, ErrorCode: "SMTP_ERROR", ErrorMessage: ex.Message);
+            return new(false, ErrorCode: "SMTP_ERROR");
         }
     }
 }
