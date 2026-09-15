@@ -6,8 +6,25 @@ namespace AgentRPA.Api.Controllers;
 [ApiController, Route("api/tasks")]
 public sealed class TasksController(AgentRpaDbContext db) : ControllerBase
 {
-    [HttpGet] public async Task<IActionResult> List(CancellationToken ct) => Ok(await db.Tasks.AsNoTracking().OrderByDescending(x => x.CreatedAt).Select(x => new { x.Id, x.Name, x.WorkflowId, x.WorkflowVersion, Status = x.Status.ToString() }).ToListAsync(ct));
-    [HttpPost] public async Task<IActionResult> Create(CreateTaskRequest request, CancellationToken ct) { var task = new RpaTask(request.WorkflowId, request.WorkflowVersion, request.Name); foreach (var item in request.Items ?? []) task.AddItem(item); db.Tasks.Add(task); await db.SaveChangesAsync(ct); return Created($"api/tasks/{task.Id}", new { task.Id }); }
+    [HttpGet] public async Task<IActionResult> List(CancellationToken ct) => Ok(await db.Tasks.AsNoTracking().OrderByDescending(x => x.CreatedAt).Select(x => new { x.Id, x.Name, x.WorkflowId, x.WorkflowVersion, x.MaxRetries, Status = x.Status.ToString() }).ToListAsync(ct));
+    [HttpGet("{id:guid}")] public async Task<IActionResult> Get(Guid id, CancellationToken ct)
+    {
+        var task = await db.Tasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct); if (task is null) return NotFound();
+        var items = await db.TaskItems.AsNoTracking().Where(x => x.TaskId == id).OrderBy(x => x.Sequence).Select(x => new { x.Id, x.Sequence, x.Status, x.RetryCount, x.ResultJson }).ToListAsync(ct);
+        return Ok(new { task.Id, task.Name, task.WorkflowId, task.WorkflowVersion, task.MaxRetries, Status = task.Status.ToString(), Items = items });
+    }
+    [HttpPost] public async Task<IActionResult> Create(CreateTaskRequest request, CancellationToken ct)
+    {
+        var task = new RpaTask(request.WorkflowId, request.WorkflowVersion, request.Name, request.MaxRetries);
+        foreach (var item in request.Items ?? []) task.AddItem(item);
+        db.Tasks.Add(task); await db.SaveChangesAsync(ct); return Created($"api/tasks/{task.Id}", new { task.Id });
+    }
     [HttpPost("{id:guid}/queue")] public async Task<IActionResult> Queue(Guid id, CancellationToken ct) { var task = await db.Tasks.FindAsync([id], ct); if (task is null) return NotFound(); task.Queue(); await db.SaveChangesAsync(ct); return Ok(); }
+    [HttpPost("{id:guid}/retry-failed")] public async Task<IActionResult> RetryFailed(Guid id, CancellationToken ct)
+    {
+        var task = await db.Tasks.Include(x => x.Items).SingleOrDefaultAsync(x => x.Id == id, ct); if (task is null) return NotFound();
+        var count = 0; foreach (var item in task.Items) if (item.CanRetry(task.MaxRetries)) { item.Retry(); count++; }
+        if (count > 0) task.Queue(); await db.SaveChangesAsync(ct); return Ok(new { retried = count });
+    }
 }
-public sealed record CreateTaskRequest(Guid WorkflowId, int WorkflowVersion, string Name, IReadOnlyCollection<string>? Items);
+public sealed record CreateTaskRequest(Guid WorkflowId, int WorkflowVersion, string Name, IReadOnlyCollection<string>? Items, int MaxRetries = 3);
