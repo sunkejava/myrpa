@@ -10,14 +10,14 @@ const selected = ref(0)
 const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'HumanTask', 'Assert', 'End']
 const definition = computed(() => JSON.stringify({ version: 1, steps: steps.value }, null, 2))
 function add(type: string) { steps.value.push({ id: `step-${steps.value.length + 1}`, type, config: {} }); selected.value = steps.value.length - 1 }
-function remove(index: number) { steps.value.splice(index, 1); selected.value = Math.max(0, selected.value - (selected.value >= steps.value.length ? 1 : 0)) }
+function remove(index: number) { steps.value.splice(index, 1); selected.value = Math.min(selected.value, Math.max(0, steps.value.length - 1)) }
 </script>
 
 <template>
   <section class="workflow-designer">
     <aside class="designer-palette"><div class="panel-title"><b>Steps</b><small>Deterministic</small></div><button v-for="type in stepTypes" :key="type" @click="add(type)">＋ {{ type }}</button></aside>
     <div class="designer-canvas"><div class="canvas-head"><div><span class="eyebrow">WORKFLOW DESIGNER</span><h3>社保人员核验流程</h3></div><button class="publish-btn">发布版本</button></div><div class="step-list"><article v-for="(step, index) in steps" :key="step.id" :class="['workflow-step', { selected: selected === index }]" @click="selected = index"><span class="step-no">{{ index + 1 }}</span><div><b>{{ step.type }}</b><small>{{ step.id }}</small></div><button @click.stop="remove(index)">×</button></article></div></div>
-    <aside class="designer-inspector"><div class="panel-title"><b>配置</b><small>Step Inspector</small></div><template v-if="steps[selected]"><label>Step ID<input v-model="steps[selected].id" /></label><label>Type<select v-model="steps[selected].type"><option v-for="type in stepTypes" :key="type">{{ type }}</option></select></label><label>Config JSON<textarea v-model="definition" readonly /></label></template></aside>
+    <aside class="designer-inspector"><div class="panel-title"><b>配置</b><small>Step Inspector</small></div><template v-if="steps[selected]"><label>Step ID<input v-model="steps[selected].id" /></label><label>Type<select v-model="steps[selected].type"><option v-for="type in stepTypes" :key="type">{{ type }}</option></select></label><label>Definition JSON<textarea :value="definition" readonly /></label></template></aside>
   </section>
 </template>
 
