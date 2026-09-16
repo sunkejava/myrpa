@@ -66,9 +66,19 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             var execution = await db.Executions.SingleOrDefaultAsync(x => x.DispatchKey == dispatchKey, cancellationToken);
             if (execution is null)
             {
-                execution = new Execution(item.Id, version.Id, dispatchKey);
-                db.Executions.Add(execution);
-                await db.SaveChangesAsync(cancellationToken);
+                var candidate = new Execution(item.Id, version.Id, dispatchKey);
+                db.Executions.Add(candidate);
+                try
+                {
+                    await db.SaveChangesAsync(cancellationToken);
+                    execution = candidate;
+                }
+                catch (DbUpdateException) when (await db.Executions.AnyAsync(x => x.DispatchKey == dispatchKey, cancellationToken))
+                {
+                    // 多实例 Worker 同时抢同一 TaskItem 时，唯一索引负责裁决；失败实例重新读取胜出的 Execution。
+                    db.Entry(candidate).State = EntityState.Detached;
+                    execution = await db.Executions.SingleAsync(x => x.DispatchKey == dispatchKey, cancellationToken);
+                }
             }
 
             // Workflow 可以进一步收紧执行节点条件；最终要求由调度器统一执行硬过滤。
