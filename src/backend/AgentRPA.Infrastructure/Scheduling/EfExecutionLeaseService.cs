@@ -18,45 +18,25 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
             var now = DateTimeOffset.UtcNow;
             await RecoverExpiredAsync(node.NodeId, now, cancellationToken);
             await RecoverExpiredResourceLocksAsync(now, cancellationToken);
-
-            var slot = await db.WorkerSlots
-                .Where(x => x.NodeId == node.NodeId && x.Enabled && (x.ExecutionId == null || x.LeaseExpiresAt <= now))
-                .OrderBy(x => x.SlotName)
-                .FirstOrDefaultAsync(cancellationToken);
+            var slot = await db.WorkerSlots.Where(x => x.NodeId == node.NodeId && x.Enabled && (x.ExecutionId == null || x.LeaseExpiresAt <= now)).OrderBy(x => x.SlotName).FirstOrDefaultAsync(cancellationToken);
             if (slot is null) { await transaction.RollbackAsync(cancellationToken); return null; }
-
-            var hardwareIds = (requiredHardwareIds ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var hardwareIds = (requiredHardwareIds ?? new HashSet<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             if (hardwareIds.Length > 0)
             {
-                var busyHardware = await db.ResourceLocks.AsNoTracking()
-                    .Where(x => !x.Released && x.ExpiresAt > now && x.ResourceType == "UKey" && hardwareIds.Contains(x.ResourceId))
-                    .Select(x => x.ResourceId)
-                    .ToListAsync(cancellationToken);
+                var busyHardware = await db.ResourceLocks.AsNoTracking().Where(x => !x.Released && x.ExpiresAt > now && x.ResourceType == "UKey" && hardwareIds.Contains(x.ResourceId)).Select(x => x.ResourceId).ToListAsync(cancellationToken);
                 if (busyHardware.Count > 0) { await transaction.RollbackAsync(cancellationToken); return null; }
             }
-
             var expiresAt = now.Add(LeaseDuration);
             slot.Acquire(executionId, expiresAt);
             db.Set<NodeLease>().Add(new NodeLease(executionId, node.NodeId, slot.Id, expiresAt));
-            foreach (var hardwareId in hardwareIds)
-                db.ResourceLocks.Add(new ResourceLock("UKey", hardwareId, executionId, expiresAt));
-
+            foreach (var hardwareId in hardwareIds) db.ResourceLocks.Add(new ResourceLock("UKey", hardwareId, executionId, expiresAt));
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             var lease = await db.NodeLeases.AsNoTracking().Where(x => x.ExecutionId == executionId && x.WorkerSlotId == slot.Id).OrderByDescending(x => x.Id).FirstAsync(cancellationToken);
             return new ExecutionAssignment(node.NodeId, slot.Id, lease.Id, 0);
         }
-        catch (DbUpdateConcurrencyException)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return null;
-        }
-        catch (DbUpdateException)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            // 唯一索引可将并发硬件抢占收敛为“本次无资源”。
-            return null;
-        }
+        catch (DbUpdateConcurrencyException) { await transaction.RollbackAsync(cancellationToken); return null; }
+        catch (DbUpdateException) { await transaction.RollbackAsync(cancellationToken); return null; }
     }
 
     public async Task<bool> RenewAsync(Guid leaseId, Guid executionId, CancellationToken cancellationToken)
@@ -68,10 +48,8 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
         if (slot is null || slot.ExecutionId != executionId || !slot.Enabled) return false;
         var expiresAt = now.Add(LeaseDuration);
         lease.Renew(expiresAt, now); slot.Acquire(executionId, expiresAt);
-        var locks = await db.ResourceLocks.Where(x => x.ExecutionId == executionId && !x.Released).ToListAsync(cancellationToken);
-        foreach (var resourceLock in locks) resourceLock.Renew(expiresAt, now);
-        try { await db.SaveChangesAsync(cancellationToken); return true; }
-        catch (DbUpdateConcurrencyException) { return false; }
+        foreach (var resourceLock in await db.ResourceLocks.Where(x => x.ExecutionId == executionId && !x.Released).ToListAsync(cancellationToken)) resourceLock.Renew(expiresAt, now);
+        try { await db.SaveChangesAsync(cancellationToken); return true; } catch (DbUpdateConcurrencyException) { return false; }
     }
 
     public async Task ReleaseAsync(Guid leaseId, CancellationToken cancellationToken)
@@ -82,8 +60,7 @@ public sealed class EfExecutionLeaseService(AgentRpaDbContext db) : IExecutionLe
         if (slot is not null && slot.ExecutionId == lease.ExecutionId) slot.Release();
         lease.Release();
         foreach (var resourceLock in await db.ResourceLocks.Where(x => x.ExecutionId == lease.ExecutionId && !x.Released).ToListAsync(cancellationToken)) resourceLock.Release();
-        try { await db.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateConcurrencyException) { db.ChangeTracker.Clear(); }
+        try { await db.SaveChangesAsync(cancellationToken); } catch (DbUpdateConcurrencyException) { db.ChangeTracker.Clear(); }
     }
 
     private async Task RecoverExpiredAsync(Guid nodeId, DateTimeOffset now, CancellationToken cancellationToken)
