@@ -6,6 +6,7 @@ public static class ExecutionRequirementMerger
     /// <summary>
     /// WorkflowVersion 只能收紧 BusinessSystem 的要求，不能放宽系统安全边界。
     /// 集合字段采用交集语义；未设置的 Workflow 字段继承系统默认值。
+    /// 节点偏好和凭据亲和属于软约束，不会把可执行节点硬过滤掉。
     /// </summary>
     public static ExecutionRequirement Merge(
         ExecutionRequirement systemRequirement,
@@ -25,6 +26,10 @@ public static class ExecutionRequirementMerger
         var requiredNodes = IntersectOrInherit(systemRequirement.RequiredNodeIds, workflowRequirement.RequiredNodeIds);
         var excludedNodes = Union(systemRequirement.ExcludedNodeIds, workflowRequirement.ExcludedNodeIds);
         var hardware = Union(systemRequirement.RequiredHardwareIds, workflowRequirement.RequiredHardwareIds);
+        var preferredNodes = workflowRequirement.PreferredNodeIds is { Count: > 0 }
+            ? workflowRequirement.PreferredNodeIds
+            : systemRequirement.PreferredNodeIds;
+        var credentialAffinity = workflowRequirement.CredentialAffinityKey ?? systemRequirement.CredentialAffinityKey;
 
         return workflowRequirement with
         {
@@ -38,37 +43,26 @@ public static class ExecutionRequirementMerger
             RequiredNodeIds = requiredNodes,
             ExcludedNodeIds = excludedNodes,
             RequiredHardwareIds = hardware,
-            RequiresDesktopUi = systemRequirement.RequiresDesktopUi || workflowRequirement.RequiresDesktopUi
+            RequiresDesktopUi = systemRequirement.RequiresDesktopUi || workflowRequirement.RequiresDesktopUi,
+            PreferredNodeIds = preferredNodes,
+            CredentialAffinityKey = credentialAffinity
         };
     }
 
-    private static IReadOnlySet<string> IntersectOrInherit(
-        IReadOnlySet<string> parent,
-        IReadOnlySet<string> child)
+    private static IReadOnlySet<string> IntersectOrInherit(IReadOnlySet<string> parent, IReadOnlySet<string> child)
         => child.Count == 0
             ? parent
             : parent.Count == 0
                 ? child
-                : parent.Intersect(child, StringComparer.OrdinalIgnoreCase)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                : parent.Intersect(child, StringComparer.OrdinalIgnoreCase).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private static IReadOnlySet<T> IntersectOrInherit<T>(
-        IReadOnlySet<T>? parent,
-        IReadOnlySet<T>? child)
+    private static IReadOnlySet<T> IntersectOrInherit<T>(IReadOnlySet<T>? parent, IReadOnlySet<T>? child)
     {
-        if (child is null || child.Count == 0)
-            return parent ?? new HashSet<T>();
-
-        if (parent is null || parent.Count == 0)
-            return child;
-
+        if (child is null || child.Count == 0) return parent ?? new HashSet<T>();
+        if (parent is null || parent.Count == 0) return child;
         return parent.Intersect(child).ToHashSet();
     }
 
-    private static IReadOnlySet<T> Union<T>(
-        IReadOnlySet<T>? first,
-        IReadOnlySet<T>? second)
-        => (first ?? new HashSet<T>())
-            .Concat(second ?? new HashSet<T>())
-            .ToHashSet();
+    private static IReadOnlySet<T> Union<T>(IReadOnlySet<T>? first, IReadOnlySet<T>? second)
+        => (first ?? new HashSet<T>()).Concat(second ?? new HashSet<T>()).ToHashSet();
 }
