@@ -10,7 +10,7 @@
 | Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 注册认证、审批状态、节点健康、数据库乐观并发 Lease、节点池/WorkerSlot 管理已落地；mTLS 待完成 |
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
 | Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner、HumanTask 等待/恢复原浏览器会话已支持；Desktop、完整执行控制仍待完成 |
-| Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、业务权限复核、UKey/硬件 ResourceLock 原子抢占、派发幂等、多实例竞争恢复与无资源重调度已具备；大规模性能优化待完成 |
+| Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、业务权限复核、UKey/硬件 ResourceLock 原子抢占、派发幂等、多实例竞争恢复、无资源重调度、PreferredNode/CredentialAffinity 软评分已具备；大规模性能优化待完成 |
 | Phase 5 | Agent | 🟡 已完成资源解析、动作/风险识别、Workflow 选择、参数基础结构化、权限预检查、确认门禁、OpenAI Compatible/llama.cpp 结构化解析兜底；完整参数 Schema/执行摘要待完成 |
 | Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试已完成；执行结果 Artifact 的持久化模型与查询 API 已落地，实际运行时产物采集/存储仍待完成 |
 | Phase 7 | 人工介入与外部集成 | 🟢 HumanIntervention 生命周期、Captcha HTTP Adapter、Webhook/Email、Windows 证书型 UKey Provider、QR 短期一次性令牌及人工完成后恢复 Execution/Browser Session 已具备；厂商 UKey SDK 待完成 |
@@ -40,6 +40,8 @@
 - [x] UKey / 硬件 ResourceLock 原子抢占、续租、释放与过期恢复
 - [x] Dispatch 幂等键：TaskItem + RetryCount 唯一对应一次派发轮次；NodeAgent 掉线释放资源并自动回到 Pending
 - [x] 多实例 DispatchKey 唯一键竞争的显式异常恢复
+- [x] PreferredNodeIds：硬过滤后优先选择业务指定节点
+- [x] CredentialAffinityKey：硬过滤后优先选择声明匹配凭据亲和能力的节点，不替代 Credential 授权
 - [ ] 大规模节点调度性能优化
 
 ## Phase 6：执行证据
