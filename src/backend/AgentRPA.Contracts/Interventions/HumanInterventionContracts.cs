@@ -4,8 +4,7 @@ public sealed record CreateHumanInterventionRequest(
     Guid ExecutionId,
     string Type,
     string Title,
-    DateTimeOffset ExpiresAt,
-    string? SecureEntry = null);
+    DateTimeOffset ExpiresAt);
 
 public sealed record HumanInterventionDto(
     Guid Id,
@@ -13,4 +12,7 @@ public sealed record HumanInterventionDto(
     string Type,
     string Status,
     string Title,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    string? QrToken = null);
+
+public sealed record ConsumeQrTokenRequest(string Token);
