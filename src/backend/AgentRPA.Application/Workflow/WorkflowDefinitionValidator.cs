@@ -3,7 +3,7 @@ using AgentRPA.Domain.Workflow;
 namespace AgentRPA.Application.Workflow;
 
 /// <summary>Workflow 发布前的确定性结构校验。</summary>
-public sealed class WorkflowDefinitionValidator
+public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator parameterSchemaValidator)
 {
     public IReadOnlyList<string> Validate(string definitionJson)
     {
@@ -12,8 +12,8 @@ public sealed class WorkflowDefinitionValidator
             using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(definitionJson) ? "{}" : definitionJson);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return ["Workflow 根节点必须是 JSON Object。"];
-            if (!root.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array) return ["Workflow 必须包含 steps 数组。"];
-            var errors = new List<string>();
+            var errors = new List<string>(parameterSchemaValidator.ValidateDefinition(root));
+            if (!root.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array) return [.. errors, "Workflow 必须包含 steps 数组。"];
             var index = 0;
             foreach (var step in steps.EnumerateArray())
             {
