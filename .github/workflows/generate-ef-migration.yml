@@ -54,14 +54,13 @@ jobs:
         run: |
           set -euo pipefail
           migration_dir='src/backend/AgentRPA.Infrastructure/Persistence/Migrations'
-          migration_files=$(find "$migration_dir" -maxdepth 1 -type f -name '*.cs' -newermt "$(git show -s --format=%cI HEAD)" -print)
-          if [ -z "$migration_files" ]; then
-            echo 'No new migration files were generated; model is unchanged.'
+          if ! find "$migration_dir" -maxdepth 1 -type f -name '*.cs' -print -quit 2>/dev/null | grep -q .; then
+            echo 'No migration files were generated.'
             exit 0
           fi
           git add -f "$migration_dir"/*.cs
           if git diff --cached --quiet -- "$migration_dir"; then
-            echo 'No migration changes.'
+            echo 'No migration changes; model is unchanged.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
