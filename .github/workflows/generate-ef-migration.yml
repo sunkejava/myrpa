@@ -37,15 +37,12 @@ jobs:
       - name: Build startup project
         run: dotnet build src/backend/AgentRPA.Api/AgentRPA.Api.csproj --configuration Release --no-restore
 
-      - name: Generate initial migration
+      - name: Generate migration for model changes
         shell: bash
         run: |
           set -euo pipefail
-          if find src/backend/AgentRPA.Infrastructure/Persistence/Migrations -maxdepth 1 -type f -name '*.cs' -print -quit 2>/dev/null | grep -q .; then
-            echo 'Migration already exists; nothing to generate.'
-            exit 0
-          fi
-          dotnet ef migrations add InitialCreate \
+          migration_name="Auto_$(date -u +%Y%m%d%H%M%S)"
+          dotnet ef migrations add "$migration_name" \
             --project src/backend/AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj \
             --startup-project src/backend/AgentRPA.Api/AgentRPA.Api.csproj \
             --output-dir Persistence/Migrations \
@@ -57,16 +54,17 @@ jobs:
         run: |
           set -euo pipefail
           migration_dir='src/backend/AgentRPA.Infrastructure/Persistence/Migrations'
-          if ! find "$migration_dir" -maxdepth 1 -type f -name '*.cs' -print -quit 2>/dev/null | grep -q .; then
-            echo 'No migration files were generated.'
-            exit 1
+          migration_files=$(find "$migration_dir" -maxdepth 1 -type f -name '*.cs' -newermt "$(git show -s --format=%cI HEAD)" -print)
+          if [ -z "$migration_files" ]; then
+            echo 'No new migration files were generated; model is unchanged.'
+            exit 0
           fi
           git add -f "$migration_dir"/*.cs
           if git diff --cached --quiet -- "$migration_dir"; then
-            echo 'Migration files are already tracked and unchanged.'
+            echo 'No migration changes.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'chore: 生成 EF Core 初始迁移 [skip migration]'
+          git commit -m 'chore: 自动生成 EF Core Migration [skip migration]'
           git push
