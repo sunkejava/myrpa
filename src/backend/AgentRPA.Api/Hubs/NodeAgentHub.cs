@@ -89,7 +89,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
             $"{{\"progressPercent\":{(progress.ProgressPercent.HasValue ? progress.ProgressPercent.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")}}}"));
 
         await db.SaveChangesAsync(cancellationToken);
-        if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, execution.Id, cancellationToken);
+        if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
     }
 
     public override Task OnDisconnectedAsync(Exception? exception)
