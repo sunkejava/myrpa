@@ -17,7 +17,8 @@ public sealed class ResourceLockConfiguration : IEntityTypeConfiguration<Resourc
         builder.Property(x => x.ExpiresAt).IsRequired();
         builder.Property(x => x.LastHeartbeatAt).IsRequired();
         builder.Property(x => x.Released).IsRequired();
-        builder.HasIndex(x => new { x.ResourceType, x.ResourceId, x.Released, x.ExpiresAt });
+        builder.HasIndex(x => new { x.ResourceType, x.ResourceId, x.Released }).IsUnique().HasFilter("Released = 0");
+        builder.HasIndex(x => new { x.ResourceType, x.ResourceId, x.ExpiresAt });
         builder.HasIndex(x => x.ExecutionId);
     }
 }
