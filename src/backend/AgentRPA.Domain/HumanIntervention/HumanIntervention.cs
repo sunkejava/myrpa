@@ -10,26 +10,55 @@ public sealed class HumanIntervention : Entity
 {
     private HumanIntervention() { }
 
-    public HumanIntervention(Guid executionId, InterventionType type, string title, DateTimeOffset expiresAt)
+    public HumanIntervention(Guid executionId, Guid subjectId, InterventionType type, string title, DateTimeOffset expiresAt)
     {
+        if (executionId == Guid.Empty) throw new ArgumentException("ExecutionId 不能为空。", nameof(executionId));
+        if (subjectId == Guid.Empty) throw new ArgumentException("SubjectId 不能为空。", nameof(subjectId));
+        if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("标题不能为空。", nameof(title));
+        if (expiresAt <= DateTimeOffset.UtcNow) throw new ArgumentException("过期时间必须晚于当前时间。", nameof(expiresAt));
+
         ExecutionId = executionId;
+        SubjectId = subjectId;
         Type = type;
-        Title = title;
+        Title = title.Trim();
         ExpiresAt = expiresAt;
     }
 
     public Guid ExecutionId { get; private set; }
+    /// <summary>将人工介入绑定到创建任务的用户，避免跨用户消费介入令牌。</summary>
+    public Guid SubjectId { get; private set; }
     public InterventionType Type { get; private set; }
     public InterventionStatus Status { get; private set; } = InterventionStatus.Pending;
     public string Title { get; private set; } = string.Empty;
-    public string? SecureEntry { get; private set; }
+    /// <summary>仅保存不可逆的令牌摘要，数据库不保存可直接扫码使用的原始密钥。</summary>
+    public string? SecureEntryHash { get; private set; }
+    public DateTimeOffset? TokenConsumedAt { get; private set; }
     public DateTimeOffset ExpiresAt { get; private set; }
 
-    public void Open(string? secureEntry)
+    public void Open(string? secureEntryHash)
     {
         if (Status != InterventionStatus.Pending) return;
-        SecureEntry = secureEntry;
+        SecureEntryHash = secureEntryHash;
         Status = InterventionStatus.Opened;
+    }
+
+    /// <summary>消费二维码一次性令牌。调用方应先完成用户主体和 Execution 归属校验。</summary>
+    public bool TryConsumeQrToken(string tokenHash, DateTimeOffset now)
+    {
+        if (Type != InterventionType.QrLogin || Status != InterventionStatus.Opened)
+            return false;
+        if (now > ExpiresAt)
+        {
+            Status = InterventionStatus.Expired;
+            return false;
+        }
+        if (TokenConsumedAt.HasValue || string.IsNullOrWhiteSpace(SecureEntryHash) ||
+            !string.Equals(SecureEntryHash, tokenHash, StringComparison.Ordinal))
+            return false;
+
+        TokenConsumedAt = now;
+        Status = InterventionStatus.Completed;
+        return true;
     }
 
     public void Complete()
