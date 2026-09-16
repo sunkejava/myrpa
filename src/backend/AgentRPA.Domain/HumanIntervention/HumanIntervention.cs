@@ -15,7 +15,6 @@ public sealed class HumanIntervention : Entity
         if (executionId == Guid.Empty) throw new ArgumentException("ExecutionId 不能为空。", nameof(executionId));
         if (subjectId == Guid.Empty) throw new ArgumentException("SubjectId 不能为空。", nameof(subjectId));
         if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("标题不能为空。", nameof(title));
-        if (expiresAt <= DateTimeOffset.UtcNow) throw new ArgumentException("过期时间必须晚于当前时间。", nameof(expiresAt));
 
         ExecutionId = executionId;
         SubjectId = subjectId;
@@ -64,9 +63,17 @@ public sealed class HumanIntervention : Entity
     public void Complete()
     {
         if (Status != InterventionStatus.Opened) return;
-        Status = DateTimeOffset.UtcNow <= ExpiresAt
-            ? InterventionStatus.Completed
-            : InterventionStatus.Expired;
+        ExpireIfNeeded(DateTimeOffset.UtcNow);
+        if (Status == InterventionStatus.Opened)
+            Status = InterventionStatus.Completed;
+    }
+
+    public bool ExpireIfNeeded(DateTimeOffset now)
+    {
+        if (Status is not (InterventionStatus.Pending or InterventionStatus.Opened) || now <= ExpiresAt)
+            return false;
+        Status = InterventionStatus.Expired;
+        return true;
     }
 
     public void Cancel()
