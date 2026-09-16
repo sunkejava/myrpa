@@ -3,6 +3,7 @@ using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
+using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
@@ -32,6 +33,19 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
 
         connections.Bind(request.NodeId, Context.ConnectionId);
         Context.Items["NodeId"] = request.NodeId;
+
+        // 如果 SignalR 短暂断线期间用户已经完成扫码，原 NodeAgent 进程中的浏览器 Session 仍可能存活。
+        // 连接恢复后补发 Resume，避免人工完成后任务永久停留在 WaitingForHuman。
+        var resumableExecutionIds = await (from execution in db.Executions
+                                           join intervention in db.HumanInterventions on execution.Id equals intervention.ExecutionId
+                                           where execution.NodeId == request.NodeId &&
+                                                 execution.Status == ExecutionStatus.WaitingForHuman &&
+                                                 intervention.Status == InterventionStatus.Completed
+                                           select execution.Id)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var executionId in resumableExecutionIds)
+            await Clients.Caller.ResumeAsync(executionId);
     }
 
     public async Task<NodeHeartbeatAck> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
@@ -58,6 +72,10 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (item is not null)
         {
             if (status == ExecutionStatus.Running) item.Start();
+            else if (status == ExecutionStatus.WaitingForHuman)
+            {
+                task?.SetStatus(DomainTaskStatus.WaitingForHuman);
+            }
             else if (status == ExecutionStatus.Succeeded) item.Succeed(progress.Message);
             else if (status == ExecutionStatus.Failed)
             {
