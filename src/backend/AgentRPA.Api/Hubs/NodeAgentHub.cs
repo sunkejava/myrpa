@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
+using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
@@ -26,7 +27,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == request.NodeId, cancellationToken);
         if (node is null) throw new HubException("Node 不存在。");
         if (!string.Equals(node.AgentKey, request.AgentKey, StringComparison.Ordinal)) throw new HubException("Node 身份认证失败。");
-        if (node.Status is not AgentRPA.Domain.Execution.NodeStatus.Online)
+        if (node.Status is not NodeStatus.Online)
             throw new HubException($"Node 当前状态为 {node.Status}，未获准建立执行会话。");
 
         connections.Bind(request.NodeId, Context.ConnectionId);
@@ -48,8 +49,9 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (execution.NodeId != progress.NodeId || execution.WorkerSlotId != progress.WorkerSlotId) throw new HubException("Execution 与 Node/WorkerSlot 不匹配。");
         if (!Enum.TryParse<ExecutionStatus>(progress.Status, true, out var status)) status = ExecutionStatus.Running;
         var terminal = status == ExecutionStatus.Succeeded || status == ExecutionStatus.Failed || status == ExecutionStatus.Cancelled;
-        var lease = await db.Set<AgentRPA.Domain.Execution.NodeLease>().AsNoTracking().SingleOrDefaultAsync(x => x.ExecutionId == execution.Id && !x.Released, cancellationToken);
+        var lease = await db.Set<NodeLease>().AsNoTracking().SingleOrDefaultAsync(x => x.ExecutionId == execution.Id && !x.Released, cancellationToken);
         if (lease is not null && !terminal && !await leases.RenewAsync(lease.Id, execution.Id, cancellationToken)) throw new HubException("执行租约已失效，请重新调度任务。");
+
         execution.SetStatus(status, status == ExecutionStatus.Failed ? progress.Message : null);
         var item = await db.TaskItems.SingleOrDefaultAsync(x => x.Id == execution.TaskItemId, cancellationToken);
         var task = item is null ? null : await db.Tasks.SingleOrDefaultAsync(x => x.Id == item.TaskId, cancellationToken);
@@ -70,8 +72,24 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
             var remaining = await db.TaskItems.AnyAsync(x => x.TaskId == task.Id && x.Status != TaskItemStatus.Succeeded && x.Status != TaskItemStatus.Skipped, cancellationToken);
             if (!remaining) task.SetStatus(DomainTaskStatus.Succeeded); else task.Queue();
         }
+
+        // 不持久化 NodeAgent 返回的原始 Message，避免密码、Token、Cookie、PIN 等敏感内容进入 ExecutionLog。
+        var nextSequence = (await db.ExecutionLogs
+            .Where(x => x.ExecutionId == execution.Id)
+            .Select(x => (long?)x.Sequence)
+            .MaxAsync(cancellationToken) ?? -1) + 1;
+        var level = status == ExecutionStatus.Failed ? ExecutionLogLevel.Error : ExecutionLogLevel.Information;
+        db.ExecutionLogs.Add(new ExecutionLog(
+            execution.Id,
+            nextSequence,
+            level,
+            ExecutionLogEventType.Execution,
+            $"NodeAgent 报告执行状态：{status}",
+            progress.StepId,
+            $"{{\"progressPercent\":{(progress.ProgressPercent.HasValue ? progress.ProgressPercent.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")}}}"));
+
         await db.SaveChangesAsync(cancellationToken);
-        if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
+        if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, execution.Id, cancellationToken);
     }
 
     public override Task OnDisconnectedAsync(Exception? exception)
