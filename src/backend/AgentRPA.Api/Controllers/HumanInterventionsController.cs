@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
+using AgentRPA.Api.Hubs;
 using AgentRPA.Api.Security;
 using AgentRPA.Contracts.Interventions;
+using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentRPA.Api.Controllers;
@@ -15,7 +18,10 @@ namespace AgentRPA.Api.Controllers;
 [ApiController]
 [Route("api/human-interventions")]
 [Authorize]
-public sealed class HumanInterventionsController(AgentRpaDbContext db) : ControllerBase
+public sealed class HumanInterventionsController(
+    AgentRpaDbContext db,
+    NodeAgentConnectionRegistry connections,
+    IHubContext<NodeAgentHub, INodeAgentClient> hub) : ControllerBase
 {
     private static readonly TimeSpan MaxQrLifetime = TimeSpan.FromMinutes(10);
 
@@ -118,8 +124,8 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
         if (affected != 1)
             return BadRequest(new { message = "二维码授权令牌无效、已使用或已过期。" });
 
-        var result = await db.HumanInterventions.AsNoTracking()
-            .SingleAsync(x => x.Id == id, cancellationToken);
+        var result = await db.HumanInterventions.SingleAsync(x => x.Id == id, cancellationToken);
+        await TryResumeExecutionAsync(result.ExecutionId, subjectId, cancellationToken);
         return Ok(ToDto(result));
     }
 
@@ -133,6 +139,8 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
         if (intervention is null) return NotFound();
         intervention.Complete();
         await db.SaveChangesAsync(cancellationToken);
+        if (intervention.Status == InterventionStatus.Completed)
+            await TryResumeExecutionAsync(intervention.ExecutionId, subjectId, cancellationToken);
         return Ok(ToDto(intervention));
     }
 
@@ -147,6 +155,28 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
         intervention.Cancel();
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(intervention));
+    }
+
+    private async Task TryResumeExecutionAsync(Guid executionId, Guid subjectId, CancellationToken ct)
+    {
+        var execution = await (from current in db.Executions
+                               join item in db.TaskItems on current.TaskItemId equals item.Id
+                               join task in db.Tasks on item.TaskId equals task.Id
+                               where current.Id == executionId && task.SubjectId == subjectId
+                               select new { Execution = current, Item = item, Task = task })
+            .SingleOrDefaultAsync(ct);
+        if (execution is null || execution.Execution.Status != ExecutionStatus.WaitingForHuman || !execution.Execution.NodeId.HasValue)
+            return;
+
+        if (!connections.TryGet(execution.Execution.NodeId.Value, out var connectionId) || string.IsNullOrWhiteSpace(connectionId))
+            return;
+
+        // NodeAgent 仍在线时只恢复原执行上下文，不重新创建 Execution，确保浏览器 Session 保持不变。
+        execution.Execution.SetStatus(ExecutionStatus.Running);
+        execution.Item.Start();
+        execution.Task.SetStatus(DomainTaskStatus.Running);
+        await db.SaveChangesAsync(ct);
+        await hub.Clients.Client(connectionId).ResumeAsync(executionId);
     }
 
     private async Task<Execution?> GetOwnedExecutionAsync(Guid executionId, Guid subjectId, CancellationToken ct)
