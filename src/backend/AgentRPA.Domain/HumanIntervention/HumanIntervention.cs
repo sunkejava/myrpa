@@ -34,10 +34,15 @@ public sealed class HumanIntervention : Entity
 
     public void Complete()
     {
+        if (Status != InterventionStatus.Opened) return;
         Status = DateTimeOffset.UtcNow <= ExpiresAt
             ? InterventionStatus.Completed
             : InterventionStatus.Expired;
     }
 
-    public void Cancel() => Status = InterventionStatus.Cancelled;
+    public void Cancel()
+    {
+        if (Status is not (InterventionStatus.Pending or InterventionStatus.Opened)) return;
+        Status = InterventionStatus.Cancelled;
+    }
 }
