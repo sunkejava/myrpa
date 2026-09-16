@@ -1,6 +1,5 @@
 using System.Text.Json;
 using AgentRPA.Api.Hubs;
-using AgentRPA.Api.Security;
 using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Contracts.Nodes;
@@ -89,8 +88,9 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             await db.SaveChangesAsync(cancellationToken);
             if (!connections.TryGet(assignment.NodeId, out var connectionId) || connectionId is null)
             {
-                // NodeAgent 在派发瞬间掉线：恢复为 Pending，释放已占用资源，由下一轮重新选择节点。
+                // NodeAgent 在派发瞬间掉线：恢复 TaskItem/Task 的等待状态，释放资源后由下一轮重新选择节点。
                 execution.SetStatus(ExecutionStatus.Pending, "NodeAgent 未连接，等待重新调度。");
+                task.SetStatus(DomainTaskStatus.WaitingForResource);
                 await db.SaveChangesAsync(cancellationToken);
                 await leaseService.ReleaseAsync(assignment.LeaseId, cancellationToken);
                 continue;
