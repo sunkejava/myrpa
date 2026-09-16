@@ -30,8 +30,8 @@ jobs:
       - name: Install dotnet-ef
         run: dotnet tool install --global dotnet-ef --version 10.0.0
 
-      - name: Restore
-        run: dotnet restore src/backend/AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj
+      - name: Restore startup project
+        run: dotnet restore src/backend/AgentRPA.Api/AgentRPA.Api.csproj
 
       - name: Build startup project
         run: dotnet build src/backend/AgentRPA.Api/AgentRPA.Api.csproj --configuration Release --no-restore
