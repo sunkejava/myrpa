@@ -6,15 +6,15 @@
 
 | 阶段 | 主题 | 状态 |
 |---|---|---|
-| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、JWT、数据库用户/角色/登录、PBKDF2 密码存储已落地；Migration 已完成设计时基础设施，初始迁移与测试仍待建设 |
+| Phase 0 | 基础工程与统一构建 | 🟢 JWT、数据库用户/角色/登录、PBKDF2、EF Design-time、InitialCreate、自动 Migration、Migration-first 初始化、CI Build/Test 已落地；发布流水线仍待完善 |
 | Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 注册认证、审批状态、节点健康、数据库乐观并发 Lease、节点池/WorkerSlot 管理已落地；mTLS 待完成 |
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
 | Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner 已支持浏览器常用步骤；Desktop、HumanTask 恢复与完整执行控制待完成 |
 | Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、业务权限复核、UKey/硬件 ResourceLock 原子抢占、派发幂等与无资源重调度已具备；大规模性能优化待完成 |
 | Phase 5 | Agent | 🟡 已完成资源解析、动作/风险识别、Workflow 选择、参数基础结构化、权限预检查、确认门禁、OpenAI Compatible/llama.cpp 结构化解析兜底；完整参数 Schema/执行摘要待完成 |
-| Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试已完成；跨 Node 并发、断点续跑、结果 Artifact 待完成 |
+| Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试已完成；执行结果 Artifact 的持久化模型与查询 API 已落地，实际运行时产物采集/存储仍待完成 |
 | Phase 7 | 人工介入与外部集成 | 🟢 HumanIntervention 生命周期、Captcha HTTP Adapter、Webhook/Email、Windows 证书型 UKey Provider 已具备；QR 恢复链路与厂商 UKey SDK 待完成 |
-| Phase 8 | 运营中心 | 🟢 Node/Pool/Worker 管理 API、人工介入 API、审计模型/API、控制中心前端骨架已完成；完整实时运营 UI/指标待完成 |
+| Phase 8 | 运营中心 | 🟢 Node/Pool/Worker 管理 API、人工介入 API、审计模型/API、执行日志/产物查询 API、控制中心前端骨架已完成；完整实时运营 UI/指标待完成 |
 | Phase 9 | 扩展能力 | ⚪ 未开始 |
 
 ## Phase 0：身份认证与数据库工程化
@@ -25,9 +25,11 @@
 - [x] JWT Role Claim 与 Admin API 对接
 - [x] 首次启动按显式配置创建 Admin，不配置密码则不生成默认账户
 - [x] EF Core Design-time DbContext Factory 与 EF Core Design 包支持已加入
-- [ ] 生成并提交首个 EF Core Migration
-- [ ] API 启动切换为 Migration-first 数据库初始化策略
-- [ ] 自动化测试与 CI test/publish
+- [x] InitialCreate EF Core Migration 已生成并提交
+- [x] API 启动切换为 Migration-first 数据库初始化策略
+- [x] 自动化测试与 CI test/build 已落地
+- [x] Migration Workflow 支持后续模型变更自动生成 Migration，并通过并发组避免重复生成
+- [ ] Release/Publish 自动化
 
 ## Phase 4：权限与调度
 - [x] 用户直授权限：城市 → 系统 → 功能 → Action 精确匹配
@@ -39,7 +41,32 @@
 - [ ] 多实例 DispatchKey 唯一键竞争的显式异常恢复
 - [ ] 大规模节点调度性能优化
 
+## Phase 6：执行证据
+- [x] ExecutionLog：执行级/Step 级日志、Sequence 稳定排序、敏感标记
+- [x] ExecutionArtifact：文件名、StorageKey、Hash、大小、类型、过期时间等元数据
+- [x] 当前用户执行日志/产物元数据隔离查询 API
+- [ ] NodeAgent Runtime 自动写入 ExecutionLog
+- [ ] Screenshot / Download / Upload 等运行时 Artifact 自动登记
+- [ ] Artifact Storage Provider（本地文件、对象存储）
+
 ## 其他阶段剩余任务
+
+### Phase 1
+- [ ] mTLS / 证书轮换
+- [ ] 节点拒绝 / 吊销 / 重新申请审批流程
+- [ ] 故障重调度完整性测试
+
+### Phase 2
+- [ ] Designer 完整 API
+- [ ] Workflow 在线测试 / Step Debug
+- [ ] 完整 Publish / Disable 策略
+- [ ] ExecutionRequirement 全约束覆盖
+
+### Phase 3
+- [ ] Windows Desktop UI Worker
+- [ ] Cancel / Pause / Resume 完整运行时控制
+- [ ] Step Timeout / Retry
+- [ ] UKey / Captcha / File Provider Runtime 集成
 
 ### Phase 5
 - [ ] 完整结构化参数 Schema / 执行摘要
