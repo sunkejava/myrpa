@@ -1,5 +1,7 @@
 using System.Text.Json;
 using AgentRPA.Api.Hubs;
+using AgentRPA.Api.Security;
+using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Tasks;
@@ -28,6 +30,7 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AgentRpaDbContext>();
         var scheduler = scope.ServiceProvider.GetRequiredService<IExecutionScheduler>();
+        var permissionService = scope.ServiceProvider.GetRequiredService<PermissionService>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
         var items = await db.TaskItems.Where(x => x.Status == TaskItemStatus.Pending).OrderBy(x => x.Sequence).Take(20).ToListAsync(cancellationToken);
 
@@ -40,6 +43,23 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             if (active) continue;
             var version = await db.WorkflowVersions.SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion, cancellationToken);
             if (version is null || !version.Published) continue;
+
+            // 权限可能在任务入队后被撤销，因此真正派发到执行节点前必须再次校验。
+            var businessScope = await ResolveBusinessScopeAsync(db, task.WorkflowId, cancellationToken);
+            if (businessScope is null)
+            {
+                task.SetStatus(DomainTaskStatus.Failed);
+                item.Fail("Workflow 对应业务资源不存在，任务拒绝执行。");
+                await db.SaveChangesAsync(cancellationToken);
+                continue;
+            }
+            if (!await permissionService.CheckAsync(task.SubjectId ?? Guid.Empty, businessScope.Value.CityId, businessScope.Value.SystemId, businessScope.Value.FunctionId, "Execute", cancellationToken) is { Allowed: true })
+            {
+                task.SetStatus(DomainTaskStatus.Failed);
+                item.Fail("当前用户执行权限已失效，任务拒绝派发。");
+                await db.SaveChangesAsync(cancellationToken);
+                continue;
+            }
 
             var execution = new Execution(item.Id, version.Id);
             db.Executions.Add(execution);
@@ -71,6 +91,16 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             var command = new ExecutionCommand(execution.Id, task.Id, item.Id, task.WorkflowId, task.WorkflowVersion, assignment.NodeId, assignment.WorkerSlotId, version.DefinitionJson, ParseParameters(item.InputJson));
             await hub.Clients.Client(connectionId).ExecuteAsync(command);
         }
+    }
+
+    private static async Task<(Guid CityId, Guid SystemId, Guid FunctionId)?> ResolveBusinessScopeAsync(AgentRpaDbContext db, Guid workflowId, CancellationToken ct)
+    {
+        var functionId = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId).Select(x => (Guid?)x.BusinessFunctionId).SingleOrDefaultAsync(ct);
+        if (!functionId.HasValue) return null;
+        return await db.BusinessFunctions.AsNoTracking().Where(x => x.Id == functionId.Value)
+            .Join(db.BusinessSystems.AsNoTracking(), f => f.SystemId, s => s.Id, (f, s) => new { FunctionId = f.Id, SystemId = s.Id, s.CityId })
+            .Select(x => (Guid CityId, Guid SystemId, Guid FunctionId)?)(x => (x.CityId, x.SystemId, x.FunctionId))
+            .SingleOrDefaultAsync(ct);
     }
 
     private static IReadOnlyDictionary<string, string?> ParseParameters(string json)
