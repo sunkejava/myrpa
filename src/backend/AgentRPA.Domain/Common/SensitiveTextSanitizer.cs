@@ -19,13 +19,13 @@ public static partial class SensitiveTextSanitizer
         return text;
     }
 
-    [GeneratedRegex(@"(?i)(authorization\s*:\s*)([^\s,;]+)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?i)(authorization\s*:\s*)[^\r\n]+", RegexOptions.CultureInvariant)]
     private static partial Regex AuthorizationHeader();
 
     [GeneratedRegex(@"(?i)(\b(?:password|passwd|pwd|token|access_token|refresh_token|secret|client_secret|api[_-]?key|pin)\s*[=:]\s*)([^\s,;&]+)", RegexOptions.CultureInvariant)]
     private static partial Regex KeyValueSecret();
 
-    [GeneratedRegex(@"(?i)(cookie\s*:\s*)([^\r\n]+)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?i)(cookie\s*:\s*)[^\r\n]+", RegexOptions.CultureInvariant)]
     private static partial Regex CookieHeader();
 
     [GeneratedRegex(@"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+", RegexOptions.CultureInvariant)]
