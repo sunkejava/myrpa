@@ -1,0 +1,33 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/backend/**'
+      - 'tests/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - 'tests/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/backend-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore tests/AgentRPA.Tests/AgentRPA.Tests.csproj
+      - name: Test
+        run: dotnet test tests/AgentRPA.Tests/AgentRPA.Tests.csproj --configuration Release --no-restore --logger "trx;LogFileName=test-results.trx"
