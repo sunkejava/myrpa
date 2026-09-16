@@ -42,8 +42,11 @@ public sealed class CapabilityExecutionScheduler(
     {
         var score = 100 + (int)((1d - Math.Clamp(node.LoadFactor, 0, 1)) * 50);
         if (requirement.RequiredNodeIds?.Contains(node.NodeId) == true) score += 1000;
+        if (requirement.PreferredNodeIds?.Contains(node.NodeId) == true) score += 500;
         if (requirement.NodePoolId == node.NodePoolId) score += 20;
         if (requirement.RequiredHardwareIds is { Count: > 0 }) score += 50;
+        if (!string.IsNullOrWhiteSpace(requirement.CredentialAffinityKey) &&
+            Has(node, $"CredentialAffinity:{requirement.CredentialAffinityKey}")) score += 200;
         return score;
     }
 
