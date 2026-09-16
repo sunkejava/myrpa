@@ -32,6 +32,7 @@ public sealed class NodeAgentWorker(
     ILogger<NodeAgentWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> executions = new();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<bool>> humanResumes = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -62,7 +63,7 @@ public sealed class NodeAgentWorker(
         connection.On<ExecutionCommand>("ExecuteAsync", command => StartExecutionAsync(connection, command, stoppingToken));
         connection.On<Guid>("CancelAsync", CancelExecutionAsync);
         connection.On<Guid>("PauseAsync", _ => Task.CompletedTask);
-        connection.On<Guid>("ResumeAsync", _ => Task.CompletedTask);
+        connection.On<Guid>("ResumeAsync", ResumeExecutionAsync);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -92,11 +93,21 @@ public sealed class NodeAgentWorker(
         if (!executions.TryAdd(command.ExecutionId, CancellationTokenSource.CreateLinkedTokenSource(stoppingToken)))
             return;
         var linked = executions[command.ExecutionId];
+        var resumeSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        humanResumes[command.ExecutionId] = resumeSignal;
         try
         {
             await ReportAsync(connection, command, "Running", null, 0, "NodeAgent 开始执行 Workflow", linked.Token);
-            await runtime.ExecuteAsync(command.WorkflowPayload, command.Parameters, e =>
-                ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token), linked.Token);
+            await runtime.ExecuteAsync(
+                command.WorkflowPayload,
+                command.Parameters,
+                async e =>
+                {
+                    await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token);
+                    if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase))
+                        await resumeSignal.Task.WaitAsync(linked.Token);
+                },
+                linked.Token);
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested)
         {
@@ -109,6 +120,7 @@ public sealed class NodeAgentWorker(
         }
         finally
         {
+            humanResumes.TryRemove(command.ExecutionId, out _);
             if (executions.TryRemove(command.ExecutionId, out var source)) source.Dispose();
         }
     }
@@ -116,6 +128,14 @@ public sealed class NodeAgentWorker(
     private Task CancelExecutionAsync(Guid executionId)
     {
         if (executions.TryGetValue(executionId, out var source)) source.Cancel();
+        if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetCanceled();
+        return Task.CompletedTask;
+    }
+
+    private Task ResumeExecutionAsync(Guid executionId)
+    {
+        if (humanResumes.TryGetValue(executionId, out var resume))
+            resume.TrySetResult(true);
         return Task.CompletedTask;
     }
 
