@@ -1,6 +1,7 @@
 using AgentRPA.Api.Security;
 using AgentRPA.Contracts.Interventions;
 using AgentRPA.Domain.HumanIntervention;
+using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
