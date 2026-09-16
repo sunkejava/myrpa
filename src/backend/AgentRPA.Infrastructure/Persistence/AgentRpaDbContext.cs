@@ -28,6 +28,8 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<RpaTask> Tasks => Set<RpaTask>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<Execution> Executions => Set<Execution>();
+    public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
+    public DbSet<ExecutionArtifact> ExecutionArtifacts => Set<ExecutionArtifact>();
     public DbSet<HumanIntervention> HumanInterventions => Set<HumanIntervention>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<AccessPolicy> AccessPolicies => Set<AccessPolicy>();
