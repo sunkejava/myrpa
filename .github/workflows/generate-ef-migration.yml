@@ -8,6 +8,7 @@ on:
       - 'src/backend/AgentRPA.Application/**'
       - 'src/backend/AgentRPA.Infrastructure/**'
       - 'src/backend/AgentRPA.Api/**'
+      - 'src/backend/**/*.csproj'
       - '.github/workflows/generate-ef-migration.yml'
   workflow_dispatch:
 
