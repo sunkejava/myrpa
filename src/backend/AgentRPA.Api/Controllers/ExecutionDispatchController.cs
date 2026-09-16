@@ -1,28 +1,54 @@
 using AgentRPA.Api.Hubs;
+using AgentRPA.Api.Security;
+using AgentRPA.Application.Permission;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentRPA.Api.Controllers;
 
-[ApiController, Route("api/executions")]
+[ApiController, Route("api/executions"), Authorize]
 public sealed class ExecutionDispatchController(
     AgentRpaDbContext db,
+    PermissionService permissionService,
     NodeAgentConnectionRegistry connections,
     IHubContext<NodeAgentHub, INodeAgentClient> hub) : ControllerBase
 {
     [HttpPost("dispatch")]
     public async Task<IActionResult> Dispatch(DispatchRequest r, CancellationToken ct)
     {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId))
+            return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
+
         var item = await db.TaskItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == r.TaskItemId, ct);
         if (item is null)
             return NotFound();
 
         var task = await db.Tasks.AsNoTracking().SingleAsync(x => x.Id == item.TaskId, ct);
+        // 不能通过手工派发接口访问其他用户的任务。
+        if (task.SubjectId != subjectId)
+            return Forbid();
+
+        var scope = await ResolveBusinessScopeAsync(task.WorkflowId, ct);
+        if (scope is null)
+            return BadRequest(new { message = "Workflow 对应业务资源不存在。" });
+
+        // 手工派发同样必须经过城市/系统/功能/动作四级权限检查。
+        var permission = await permissionService.CheckAsync(
+            subjectId,
+            scope.Value.CityId,
+            scope.Value.SystemId,
+            scope.Value.FunctionId,
+            "Execute",
+            ct);
+        if (!permission.Allowed)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = permission.Reason });
+
         var v = await db.WorkflowVersions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion, ct);
 
@@ -67,6 +93,15 @@ public sealed class ExecutionDispatchController(
             new Dictionary<string, string?>()));
 
         return Accepted(new { e.Id, e.Status });
+    }
+
+    private async Task<(Guid CityId, Guid SystemId, Guid FunctionId)?> ResolveBusinessScopeAsync(Guid workflowId, CancellationToken ct)
+    {
+        var row = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId)
+            .Join(db.BusinessFunctions.AsNoTracking(), w => w.BusinessFunctionId, f => f.Id, (w, f) => new { f.Id, f.SystemId })
+            .Join(db.BusinessSystems.AsNoTracking(), x => x.SystemId, s => s.Id, (x, s) => new { FunctionId = x.Id, SystemId = s.Id, s.CityId })
+            .SingleOrDefaultAsync(ct);
+        return row is null ? null : (row.CityId, row.SystemId, row.FunctionId);
     }
 }
 
