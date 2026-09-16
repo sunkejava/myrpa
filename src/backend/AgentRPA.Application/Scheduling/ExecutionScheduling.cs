@@ -43,25 +43,16 @@ public interface IExecutionNodeRegistry
     Task<IReadOnlyList<ExecutionNodeSnapshot>> GetOnlineNodesAsync(CancellationToken cancellationToken);
 }
 
-/// <summary>一托 N 调度器。先执行硬过滤，再进行软评分。</summary>
+/// <summary>一托 N 调度器。先硬过滤，再软评分，并通过租约原子占用执行资源。</summary>
 public interface IExecutionScheduler
 {
-    Task<ExecutionAssignment?> ScheduleAsync(
-        ExecutionRequirement requirement,
-        Guid executionId,
-        CancellationToken cancellationToken);
+    Task<ExecutionAssignment?> ScheduleAsync(ExecutionRequirement requirement, Guid executionId, CancellationToken cancellationToken);
 }
 
-/// <summary>节点/Worker Slot 租约服务，防止同一个资源被多个任务同时占用。</summary>
+/// <summary>节点/Worker Slot 与硬件资源租约服务，防止同一个资源被多个任务同时占用。</summary>
 public interface IExecutionLeaseService
 {
-    Task<ExecutionAssignment?> TryAcquireAsync(
-        ExecutionNodeSnapshot node,
-        Guid executionId,
-        CancellationToken cancellationToken);
-
-    /// <summary>续租。只有当前 Execution 持有者才能延长租约。</summary>
+    Task<ExecutionAssignment?> TryAcquireAsync(ExecutionNodeSnapshot node, Guid executionId, IReadOnlySet<string>? requiredHardwareIds, CancellationToken cancellationToken);
     Task<bool> RenewAsync(Guid leaseId, Guid executionId, CancellationToken cancellationToken);
-
     Task ReleaseAsync(Guid leaseId, CancellationToken cancellationToken);
 }
