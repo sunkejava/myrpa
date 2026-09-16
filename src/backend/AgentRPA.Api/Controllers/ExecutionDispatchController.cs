@@ -34,7 +34,9 @@ public sealed class ExecutionDispatchController(
         var task = await db.Tasks.AsNoTracking().SingleAsync(x => x.Id == item.TaskId, ct);
         if (task.SubjectId != subjectId)
             return Forbid();
-        if (task.Status is TaskStatus.Draft or TaskStatus.Cancelled or TaskStatus.Succeeded)
+        if (task.Status is AgentRPA.Domain.Tasks.TaskStatus.Draft
+            or AgentRPA.Domain.Tasks.TaskStatus.Cancelled
+            or AgentRPA.Domain.Tasks.TaskStatus.Succeeded)
             return Conflict(new { message = "当前任务状态不允许执行。" });
 
         var scope = await ResolveBusinessScopeAsync(task.WorkflowId, ct);
