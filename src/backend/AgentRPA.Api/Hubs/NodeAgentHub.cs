@@ -5,6 +5,7 @@ using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.HumanIntervention;
+using AgentRPA.Domain.Resources;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
