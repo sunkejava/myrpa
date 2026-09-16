@@ -15,7 +15,6 @@ using AgentRPA.Infrastructure.Identity;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Permission;
 using AgentRPA.Infrastructure.Persistence;
-using AgentRPA.Infrastructure.Scheduling;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -88,7 +87,8 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AgentRpaDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    // 生产环境统一通过 EF Core Migration 管理数据库结构，避免 EnsureCreated 绕过迁移历史。
+    await db.Database.MigrateAsync();
     await IdentityBootstrapper.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>(), app.Configuration);
 }
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
