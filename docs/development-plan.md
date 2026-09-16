@@ -6,7 +6,7 @@
 
 | 阶段 | 主题 | 状态 |
 |---|---|---|
-| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、JWT、数据库用户/角色/登录、PBKDF2 密码存储已落地；Migration、测试等待建设 |
+| Phase 0 | 基础工程与统一构建 | 🟢 基础工程、JWT、数据库用户/角色/登录、PBKDF2 密码存储已落地；Migration 已完成设计时基础设施，初始迁移与测试仍待建设 |
 | Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 注册认证、审批状态、节点健康、数据库乐观并发 Lease、节点池/WorkerSlot 管理已落地；mTLS 待完成 |
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
 | Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner 已支持浏览器常用步骤；Desktop、HumanTask 恢复与完整执行控制待完成 |
@@ -17,14 +17,16 @@
 | Phase 8 | 运营中心 | 🟢 Node/Pool/Worker 管理 API、人工介入 API、审计模型/API、控制中心前端骨架已完成；完整实时运营 UI/指标待完成 |
 | Phase 9 | 扩展能力 | ⚪ 未开始 |
 
-## Phase 0：身份认证
+## Phase 0：身份认证与数据库工程化
 - [x] JWT Bearer：Issuer/Audience/SigningKey/Lifetime 校验
 - [x] 数据库 UserAccount / Role / UserRole 持久化
 - [x] PBKDF2-SHA256 密码哈希与恒时验证
 - [x] 登录 `/api/auth/login` 与当前用户 `/api/auth/me`
 - [x] JWT Role Claim 与 Admin API 对接
 - [x] 首次启动按显式配置创建 Admin，不配置密码则不生成默认账户
-- [ ] EF Core Migration
+- [x] EF Core Design-time DbContext Factory 与 EF Core Design 包支持已加入
+- [ ] 生成并提交首个 EF Core Migration
+- [ ] API 启动切换为 Migration-first 数据库初始化策略
 - [ ] 自动化测试与 CI test/publish
 
 ## Phase 4：权限与调度
@@ -34,6 +36,7 @@
 - [x] Scheduler 阶段保留执行主体并再次复核业务权限，防止入队后撤权继续执行
 - [x] UKey / 硬件 ResourceLock 原子抢占、续租、释放与过期恢复
 - [x] Dispatch 幂等键：TaskItem + RetryCount 唯一对应一次派发轮次；NodeAgent 掉线释放资源并自动回到 Pending
+- [ ] 多实例 DispatchKey 唯一键竞争的显式异常恢复
 - [ ] 大规模节点调度性能优化
 
 ## 其他阶段剩余任务
