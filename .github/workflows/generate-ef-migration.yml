@@ -48,6 +48,7 @@ jobs:
             --project src/backend/AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj \
             --startup-project src/backend/AgentRPA.Api/AgentRPA.Api.csproj \
             --output-dir Persistence/Migrations \
+            --configuration Release \
             --no-build
 
       - name: Commit generated migration
