@@ -76,6 +76,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.Configure<LlmProviderOptions>(builder.Configuration.GetSection("AgentRPA:Llm"));
 builder.Services.AddHttpClient("llm", (sp, client) => client.Timeout = sp.GetRequiredService<IOptions<LlmProviderOptions>>().Value.Timeout);
 builder.Services.AddScoped<ILlmProvider, OpenAiCompatibleLlmProvider>();
+builder.Services.AddScoped<ILlmUsageRecorder, EfLlmUsageRecorder>();
 
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
