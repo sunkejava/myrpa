@@ -53,7 +53,8 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
                 await db.SaveChangesAsync(cancellationToken);
                 continue;
             }
-            if (!await permissionService.CheckAsync(task.SubjectId ?? Guid.Empty, businessScope.Value.CityId, businessScope.Value.SystemId, businessScope.Value.FunctionId, "Execute", cancellationToken) is { Allowed: true })
+            var permission = await permissionService.CheckAsync(task.SubjectId ?? Guid.Empty, businessScope.Value.CityId, businessScope.Value.SystemId, businessScope.Value.FunctionId, "Execute", cancellationToken);
+            if (!permission.Allowed)
             {
                 task.SetStatus(DomainTaskStatus.Failed);
                 item.Fail("当前用户执行权限已失效，任务拒绝派发。");
@@ -95,12 +96,11 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
 
     private static async Task<(Guid CityId, Guid SystemId, Guid FunctionId)?> ResolveBusinessScopeAsync(AgentRpaDbContext db, Guid workflowId, CancellationToken ct)
     {
-        var functionId = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId).Select(x => (Guid?)x.BusinessFunctionId).SingleOrDefaultAsync(ct);
-        if (!functionId.HasValue) return null;
-        return await db.BusinessFunctions.AsNoTracking().Where(x => x.Id == functionId.Value)
-            .Join(db.BusinessSystems.AsNoTracking(), f => f.SystemId, s => s.Id, (f, s) => new { FunctionId = f.Id, SystemId = s.Id, s.CityId })
-            .Select(x => (Guid CityId, Guid SystemId, Guid FunctionId)?)(x => (x.CityId, x.SystemId, x.FunctionId))
+        var row = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId)
+            .Join(db.BusinessFunctions.AsNoTracking(), w => w.BusinessFunctionId, f => f.Id, (w, f) => new { f.Id, f.SystemId })
+            .Join(db.BusinessSystems.AsNoTracking(), x => x.SystemId, s => s.Id, (x, s) => new { FunctionId = x.Id, SystemId = s.Id, s.CityId })
             .SingleOrDefaultAsync(ct);
+        return row is null ? null : (row.CityId, row.SystemId, row.FunctionId);
     }
 
     private static IReadOnlyDictionary<string, string?> ParseParameters(string json)
