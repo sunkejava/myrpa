@@ -21,7 +21,6 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
         return result.Success ? Ok(result) : UnprocessableEntity(result);
     }
 
-    /// <summary>执行前权限预检查。SubjectId 必须来自已验证 JWT，客户端不能伪造业务主体。</summary>
     [HttpPost("check-permission")]
     public async Task<IActionResult> CheckPermission(AgentPermissionCheckRequest request, CancellationToken ct)
     {
