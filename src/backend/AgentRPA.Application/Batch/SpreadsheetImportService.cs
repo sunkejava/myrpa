@@ -28,10 +28,11 @@ public sealed class SpreadsheetImportService : ISpreadsheetImportService
     {
         using var reader = new StreamReader(stream, new UTF8Encoding(false, true), detectEncodingFromByteOrderMarks: true, leaveOpen: true);
         var rows = new List<string[]>();
-        while (!reader.EndOfStream)
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
-            var line = await reader.ReadLineAsync(ct) ?? string.Empty;
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
             rows.Add(ParseCsvLine(line).ToArray());
         }
         return ToRows(rows);
