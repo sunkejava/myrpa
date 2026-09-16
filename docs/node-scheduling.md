@@ -246,24 +246,41 @@ NetworkZone
 NodePool
 RequiredNodeIds
 ExcludedNodeIds
-CredentialAffinity
-UKeyAffinity
+RequiredHardwareIds
 ```
 
 不满足的节点直接淘汰，不进入评分。
+
+`PreferredNodeIds` 和 `CredentialAffinityKey` **不是硬过滤条件**：它们用于候选节点已经满足安全/能力边界后的软评分，避免因首选节点暂时不可用而错误地阻塞任务。
 
 ## 9. 软评分
 
 通过硬过滤后，可以按照以下因素评分：
 
 ```text
-PreferredNode
-BusinessSystem Affinity
-Worker Load
-CPU/Memory Load
-Network Latency
-Queue Wait Time
-Task Priority
+PreferredNodeIds       +500
+CredentialAffinityKey  +200
+RequiredNodeIds        +1000（兼容现有强约束语义）
+NodePool               +20
+RequiredHardware       +50
+Worker Load            +0~50
+```
+
+其中：
+
+- `PreferredNodeIds`：业务明确偏好的执行节点，例如某城市固定登录环境。
+- `CredentialAffinityKey`：凭据与执行环境的亲和标识，节点通过 `CredentialAffinity:{key}` 能力声明。
+- 凭据亲和不替代 Credential 授权，也不意味着 Node 可以读取凭据；它只影响已经通过权限和能力检查后的节点排序。
+
+Workflow 可以声明：
+
+```json
+{
+  "executionRequirement": {
+    "preferredNodeIds": ["00000000-0000-0000-0000-000000000001"],
+    "credentialAffinityKey": "beijing-social-security"
+  }
+}
 ```
 
 ## 10. NodePool
@@ -466,10 +483,13 @@ Scheduler
 
 ```text
 NodePool
-Node Affinity
+PreferredNode
+CredentialAffinity
 UKey Resource Lock
 Network Zone
 ```
+
+其中 PreferredNode / CredentialAffinity 作为硬过滤后的软评分，不替代用户权限、凭据授权和硬件资源锁。
 
 ### 第三阶段
 
