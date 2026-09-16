@@ -1,0 +1,62 @@
+name: Generate EF Migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/backend/AgentRPA.Domain/**'
+      - 'src/backend/AgentRPA.Application/**'
+      - 'src/backend/AgentRPA.Infrastructure/**'
+      - 'src/backend/AgentRPA.Api/**'
+      - '.github/workflows/generate-ef-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migration:
+    if: ${{ !contains(github.event.head_commit.message, '[skip migration]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.0
+
+      - name: Restore
+        run: dotnet restore src/backend/AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj
+
+      - name: Generate initial migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find src/backend/AgentRPA.Infrastructure/Persistence/Migrations -maxdepth 1 -type f -name '*.cs' -print -quit 2>/dev/null | grep -q .; then
+            echo 'Migration already exists; nothing to generate.'
+            exit 0
+          fi
+          dotnet ef migrations add InitialCreate \
+            --project src/backend/AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj \
+            --startup-project src/backend/AgentRPA.Api/AgentRPA.Api.csproj \
+            --output-dir Persistence/Migrations \
+            --no-build
+
+      - name: Commit generated migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/backend/AgentRPA.Infrastructure/Persistence/Migrations; then
+            echo 'No migration changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/backend/AgentRPA.Infrastructure/Persistence/Migrations
+          git commit -m 'chore: 生成 EF Core 初始迁移 [skip migration]'
+          git push
