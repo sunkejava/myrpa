@@ -1,15 +1,16 @@
 using AgentRPA.Application.Agent;
 using AgentRPA.Domain.Audit;
 using AgentRPA.Infrastructure.Persistence;
-using Microsoft.Extensions.Options;
 
 namespace AgentRPA.Infrastructure.Agent;
 
-/// <summary>EF Core LLM 用量记录器；失败调用也不记录 Prompt/Response 内容。</summary>
-public sealed class EfLlmUsageRecorder(AgentRpaDbContext db, IOptions<LlmProviderOptions> options) : ILlmUsageRecorder
+/// <summary>EF Core LLM 用量记录器；不保存 Prompt/Response。</summary>
+public sealed class EfLlmUsageRecorder(AgentRpaDbContext db) : ILlmUsageRecorder
 {
     public async Task RecordAsync(
         Guid subjectId,
+        string providerId,
+        string model,
         LlmResponse response,
         Guid? taskId = null,
         Guid? taskItemId = null,
@@ -18,11 +19,10 @@ public sealed class EfLlmUsageRecorder(AgentRpaDbContext db, IOptions<LlmProvide
         if (subjectId == Guid.Empty || !response.Success) return;
         if (response.InputTokens <= 0 && response.OutputTokens <= 0) return;
 
-        var settings = options.Value;
         db.LlmUsageRecords.Add(new LlmUsageRecord(
             subjectId,
-            "openai-compatible",
-            string.IsNullOrWhiteSpace(settings.Model) ? "configured" : settings.Model,
+            providerId,
+            model,
             response.InputTokens,
             response.OutputTokens,
             taskId,
