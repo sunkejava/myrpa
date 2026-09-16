@@ -57,10 +57,11 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
         if (execution is null)
             return NotFound(new { message = "Execution 不存在或不属于当前用户。" });
 
-        if (request.ExpiresAt <= DateTimeOffset.UtcNow)
+        var now = DateTimeOffset.UtcNow;
+        if (request.ExpiresAt <= now)
             return BadRequest(new { message = "人工介入过期时间必须晚于当前时间。" });
 
-        if (type == InterventionType.QrLogin && request.ExpiresAt > DateTimeOffset.UtcNow.Add(MaxQrLifetime))
+        if (type == InterventionType.QrLogin && request.ExpiresAt > now.Add(MaxQrLifetime))
             return BadRequest(new { message = "二维码授权有效期不能超过 10 分钟。" });
 
         var intervention = new HumanIntervention(request.ExecutionId, subjectId, type, request.Title, request.ExpiresAt);
@@ -96,7 +97,7 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
             return BadRequest(new { message = "该人工介入不是二维码授权。" });
         if (intervention.Status == InterventionStatus.Opened && now > intervention.ExpiresAt)
         {
-            intervention.Cancel();
+            intervention.ExpireIfNeeded(now);
             await db.SaveChangesAsync(cancellationToken);
             return BadRequest(new { message = "二维码授权已过期。" });
         }
