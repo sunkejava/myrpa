@@ -3,6 +3,7 @@ using System.Text.Json;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
+using AgentRPA.Domain.Common;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Resources;
@@ -32,11 +33,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (node.Status is not NodeStatus.Online) throw new HubException($"Node 当前状态为 {node.Status}，未获准建立执行会话。");
         connections.Bind(request.NodeId, Context.ConnectionId);
         Context.Items["NodeId"] = request.NodeId;
-
-        var resumableExecutionIds = await (from execution in db.Executions
-                                           join intervention in db.HumanInterventions on execution.Id equals intervention.ExecutionId
-                                           where execution.NodeId == request.NodeId && execution.Status == ExecutionStatus.WaitingForHuman && intervention.Status == InterventionStatus.Completed
-                                           select execution.Id).Distinct().ToListAsync(cancellationToken);
+        var resumableExecutionIds = await (from execution in db.Executions join intervention in db.HumanInterventions on execution.Id equals intervention.ExecutionId where execution.NodeId == request.NodeId && execution.Status == ExecutionStatus.WaitingForHuman && intervention.Status == InterventionStatus.Completed select execution.Id).Distinct().ToListAsync(cancellationToken);
         foreach (var executionId in resumableExecutionIds) await Clients.Caller.ResumeAsync(executionId);
     }
 
@@ -53,19 +50,20 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == progress.ExecutionId, cancellationToken); if (execution is null) throw new HubException("Execution 不存在。");
         if (execution.NodeId != progress.NodeId || execution.WorkerSlotId != progress.WorkerSlotId) throw new HubException("Execution 与 Node/WorkerSlot 不匹配。");
         if (!Enum.TryParse<ExecutionStatus>(progress.Status, true, out var status)) status = ExecutionStatus.Running;
-        var terminal = status == ExecutionStatus.Succeeded || status == ExecutionStatus.Failed || status == ExecutionStatus.Cancelled;
+        var safeMessage = SensitiveTextSanitizer.Sanitize(progress.Message);
+        var terminal = status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.Cancelled;
         var lease = await db.Set<NodeLease>().AsNoTracking().SingleOrDefaultAsync(x => x.ExecutionId == execution.Id && !x.Released, cancellationToken);
         if (lease is not null && !terminal && !await leases.RenewAsync(lease.Id, execution.Id, cancellationToken)) throw new HubException("执行租约已失效，请重新调度任务。");
-        execution.SetStatus(status, status == ExecutionStatus.Failed ? progress.Message : null);
+        execution.SetStatus(status, status == ExecutionStatus.Failed ? safeMessage : null);
         var item = await db.TaskItems.SingleOrDefaultAsync(x => x.Id == execution.TaskItemId, cancellationToken);
         var task = item is null ? null : await db.Tasks.SingleOrDefaultAsync(x => x.Id == item.TaskId, cancellationToken);
         if (item is not null)
         {
             if (status == ExecutionStatus.Running) item.Start();
             else if (status == ExecutionStatus.WaitingForHuman) task?.SetStatus(DomainTaskStatus.WaitingForHuman);
-            else if (status == ExecutionStatus.Succeeded) item.Succeed(progress.Message);
-            else if (status == ExecutionStatus.Failed) { item.Fail(progress.Message); if (task is not null && item.CanRetry(task.MaxRetries)) { item.Retry(); task.Queue(); } else if (task is not null) task.SetStatus(DomainTaskStatus.Failed); }
-            else if (status == ExecutionStatus.Cancelled) item.Fail(progress.Message);
+            else if (status == ExecutionStatus.Succeeded) item.Succeed(safeMessage);
+            else if (status == ExecutionStatus.Failed) { item.Fail(safeMessage); if (task is not null && item.CanRetry(task.MaxRetries)) { item.Retry(); task.Queue(); } else if (task is not null) task.SetStatus(DomainTaskStatus.Failed); }
+            else if (status == ExecutionStatus.Cancelled) item.Fail(safeMessage);
         }
         if (status == ExecutionStatus.Succeeded && task is not null)
         {
@@ -79,7 +77,6 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
     }
 
-    /// <summary>登记 NodeAgent 产生的截图、下载、上传文件元数据。服务端只保存受控 StorageKey，不把本地路径直接暴露给前端。</summary>
     public async Task ReportArtifact(ExecutionArtifactReport report, CancellationToken cancellationToken)
     {
         if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != report.NodeId) throw new HubException("Node 身份校验失败。");
