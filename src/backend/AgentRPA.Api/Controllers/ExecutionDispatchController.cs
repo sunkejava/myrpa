@@ -1,6 +1,7 @@
 using AgentRPA.Api.Hubs;
 using AgentRPA.Api.Security;
 using AgentRPA.Application.Permission;
+using AgentRPA.Application.Scheduling;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.Tasks;
@@ -16,6 +17,8 @@ namespace AgentRPA.Api.Controllers;
 public sealed class ExecutionDispatchController(
     AgentRpaDbContext db,
     PermissionService permissionService,
+    IExecutionScheduler scheduler,
+    IExecutionLeaseService leaseService,
     NodeAgentConnectionRegistry connections,
     IHubContext<NodeAgentHub, INodeAgentClient> hub) : ControllerBase
 {
@@ -25,13 +28,13 @@ public sealed class ExecutionDispatchController(
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId))
             return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
 
-        var item = await db.TaskItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == r.TaskItemId, ct);
+        var item = await db.TaskItems.SingleOrDefaultAsync(x => x.Id == r.TaskItemId, ct);
         if (item is null)
             return NotFound();
         if (item.Status != TaskItemStatus.Pending)
             return Conflict(new { message = "只有 Pending 状态的任务项允许手工派发。" });
 
-        var task = await db.Tasks.AsNoTracking().SingleAsync(x => x.Id == item.TaskId, ct);
+        var task = await db.Tasks.SingleAsync(x => x.Id == item.TaskId, ct);
         if (task.SubjectId != subjectId)
             return Forbid();
         if (task.Status is AgentRPA.Domain.Tasks.TaskStatus.Draft
@@ -59,33 +62,44 @@ public sealed class ExecutionDispatchController(
         if (v is null)
             return Conflict(new { message = "任务引用的工作流版本未发布。" });
 
-        var node = await db.ExecutionNodes.SingleOrDefaultAsync(
-            x => x.Id == r.NodeId && x.Status == NodeStatus.Online, ct);
-        var slot = node is null
-            ? null
-            : await db.WorkerSlots.SingleOrDefaultAsync(x => x.Id == r.WorkerSlotId && x.NodeId == node.Id, ct);
+        // 手工指定节点只是“候选范围收窄”，仍由统一 Scheduler 执行 OS、能力、NodePool、硬件与 WorkerSlot 租约校验。
+        var workflowRequirement = WorkflowExecutionRequirementParser.Parse(v.DefinitionJson)
+            ?? new ExecutionRequirement(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>());
+        var requiredNodes = workflowRequirement.RequiredNodeIds is null
+            ? new HashSet<Guid> { r.NodeId }
+            : new HashSet<Guid>(workflowRequirement.RequiredNodeIds) { r.NodeId };
+        var requirement = workflowRequirement with { RequiredNodeIds = requiredNodes };
 
-        if (node is null || slot is null || !slot.IsAvailable(DateTimeOffset.UtcNow))
-            return BadRequest(new { message = "执行资源不可用。" });
-
-        // 手工派发也必须遵循 TaskItem + RetryCount 的幂等约束，避免重复创建 Execution。
         var dispatchKey = $"{item.Id:N}:{item.RetryCount}";
         var existing = await db.Executions.SingleOrDefaultAsync(x => x.DispatchKey == dispatchKey, ct);
         if (existing is not null)
             return Accepted(new { existing.Id, existing.Status });
 
         var e = new Execution(item.Id, v.Id, dispatchKey);
-        e.Dispatch(node.Id, slot.Id);
-        slot.Acquire(e.Id, DateTimeOffset.UtcNow.AddMinutes(15));
         db.Executions.Add(e);
         await db.SaveChangesAsync(ct);
 
-        if (!connections.TryGet(node.Id, out var cid) || cid is null)
+        var assignment = await scheduler.ScheduleAsync(requirement, e.Id, ct);
+        if (assignment is null)
         {
-            e.SetStatus(ExecutionStatus.Failed, "NodeAgent 未连接。");
-            slot.Release();
+            e.SetStatus(ExecutionStatus.Pending, "指定执行节点当前不满足 Workflow 执行要求或资源不可用。");
+            task.SetStatus(AgentRPA.Domain.Tasks.TaskStatus.WaitingForResource);
             await db.SaveChangesAsync(ct);
-            return Conflict(new { message = "NodeAgent 未连接。" });
+            return BadRequest(new { message = "指定执行节点当前不可用，或不满足 Workflow 的执行资源约束。" });
+        }
+
+        e.Dispatch(assignment.NodeId, assignment.WorkerSlotId);
+        task.Queue();
+        await db.SaveChangesAsync(ct);
+
+        if (!connections.TryGet(assignment.NodeId, out var cid) || cid is null)
+        {
+            // 派发瞬间 NodeAgent 掉线：Execution 回到 Pending，租约释放，由后台队列重新调度。
+            e.SetStatus(ExecutionStatus.Pending, "NodeAgent 未连接，等待重新调度。");
+            task.SetStatus(AgentRPA.Domain.Tasks.TaskStatus.WaitingForResource);
+            await db.SaveChangesAsync(ct);
+            await leaseService.ReleaseAsync(assignment.LeaseId, ct);
+            return Accepted(new { e.Id, e.Status, message = "NodeAgent 暂时离线，已回到等待资源状态。" });
         }
 
         await hub.Clients.Client(cid).ExecuteAsync(new ExecutionCommand(
@@ -94,12 +108,23 @@ public sealed class ExecutionDispatchController(
             item.Id,
             task.WorkflowId,
             task.WorkflowVersion,
-            node.Id,
-            slot.Id,
+            assignment.NodeId,
+            assignment.WorkerSlotId,
             v.DefinitionJson,
-            new Dictionary<string, string?>()));
+            ParseParameters(item.InputJson)));
 
         return Accepted(new { e.Id, e.Status });
+    }
+
+    private static IReadOnlyDictionary<string, string?> ParseParameters(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return new Dictionary<string, string?>();
+            return doc.RootElement.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.ValueKind == System.Text.Json.JsonValueKind.Null ? null : x.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (System.Text.Json.JsonException) { return new Dictionary<string, string?>(); }
     }
 
     private async Task<(Guid CityId, Guid SystemId, Guid FunctionId)?> ResolveBusinessScopeAsync(Guid workflowId, CancellationToken ct)
