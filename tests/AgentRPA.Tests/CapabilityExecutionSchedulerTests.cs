@@ -55,6 +55,30 @@ public sealed class CapabilityExecutionSchedulerTests
         Assert.Equal(second.NodeId, result.NodeId);
     }
 
+    [Fact]
+    public async Task Scheduler_prefers_preferred_node_and_credential_affinity()
+    {
+        var preferred = Node("Windows", "Physical", "Online", ["CredentialAffinity:hr-a"], [], slots: 1, load: 0.8);
+        var normal = Node("Windows", "Physical", "Online", [], [], slots: 1, load: 0.1);
+        var registry = new FakeNodeRegistry(normal, preferred);
+        var lease = new FakeLeaseService(preferred);
+        var scheduler = new CapabilityExecutionScheduler(registry, lease);
+
+        var result = await scheduler.ScheduleAsync(
+            new ExecutionRequirement(
+                new HashSet<string>(),
+                new HashSet<string>(),
+                new HashSet<string>(),
+                new HashSet<string>(),
+                new HashSet<string>(),
+                PreferredNodeIds: new HashSet<Guid>([preferred.NodeId]),
+                CredentialAffinityKey: "hr-a"),
+            Guid.NewGuid(), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(preferred.NodeId, result.NodeId);
+    }
+
     private static ExecutionNodeSnapshot Node(
         string os,
         string kind,
