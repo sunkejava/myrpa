@@ -73,11 +73,13 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
                     await db.SaveChangesAsync(cancellationToken);
                     execution = candidate;
                 }
-                catch (DbUpdateException) when (await db.Executions.AnyAsync(x => x.DispatchKey == dispatchKey, cancellationToken))
+                catch (DbUpdateException)
                 {
                     // 多实例 Worker 同时抢同一 TaskItem 时，唯一索引负责裁决；失败实例重新读取胜出的 Execution。
                     db.Entry(candidate).State = EntityState.Detached;
-                    execution = await db.Executions.SingleAsync(x => x.DispatchKey == dispatchKey, cancellationToken);
+                    var existing = await db.Executions.SingleOrDefaultAsync(x => x.DispatchKey == dispatchKey, cancellationToken);
+                    if (existing is null) throw;
+                    execution = existing;
                 }
             }
 
