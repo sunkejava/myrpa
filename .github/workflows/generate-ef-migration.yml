@@ -56,12 +56,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- src/backend/AgentRPA.Infrastructure/Persistence/Migrations; then
-            echo 'No migration changes.'
+          migration_dir='src/backend/AgentRPA.Infrastructure/Persistence/Migrations'
+          if ! find "$migration_dir" -maxdepth 1 -type f -name '*.cs' -print -quit 2>/dev/null | grep -q .; then
+            echo 'No migration files were generated.'
+            exit 1
+          fi
+          git add -f "$migration_dir"/*.cs
+          if git diff --cached --quiet -- "$migration_dir"; then
+            echo 'Migration files are already tracked and unchanged.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/backend/AgentRPA.Infrastructure/Persistence/Migrations
           git commit -m 'chore: 生成 EF Core 初始迁移 [skip migration]'
           git push
