@@ -6,7 +6,7 @@ public sealed class SensitiveTextSanitizerTests
 {
     [Theory]
     [InlineData("password=abc123", "password=[REDACTED]")]
-    [InlineData("token: secret-value", "token:[REDACTED]")]
+    [InlineData("token: secret-value", "token: [REDACTED]")]
     [InlineData("Authorization: Bearer abc.def", "Authorization: [REDACTED]")]
     [InlineData("Cookie: sid=abc; auth=def", "Cookie: [REDACTED]")]
     public void Sensitive_values_are_redacted(string input, string expected) => Assert.Equal(expected, SensitiveTextSanitizer.Sanitize(input));
