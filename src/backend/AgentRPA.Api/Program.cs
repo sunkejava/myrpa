@@ -15,6 +15,7 @@ using AgentRPA.Infrastructure.Identity;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Permission;
 using AgentRPA.Infrastructure.Persistence;
+using AgentRPA.Infrastructure.Scheduling;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
