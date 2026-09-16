@@ -13,7 +13,9 @@ public sealed record ExecutionRequirement(
     IReadOnlySet<Guid>? ExcludedNodeIds = null,
     IReadOnlySet<string>? RequiredHardwareIds = null,
     bool RequiresDesktopUi = false,
-    string ExecutionAffinity = "Item");
+    string ExecutionAffinity = "Item",
+    IReadOnlySet<Guid>? PreferredNodeIds = null,
+    string? CredentialAffinityKey = null);
 
 /// <summary>调度候选节点的实时快照。</summary>
 public sealed record ExecutionNodeSnapshot(
