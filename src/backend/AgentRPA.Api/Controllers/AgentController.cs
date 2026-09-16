@@ -11,12 +11,13 @@ namespace AgentRPA.Api.Controllers;
 
 /// <summary>自然语言 Agent 控制器：规划、权限预检查以及经确认后的 Task 创建。</summary>
 [ApiController, Route("api/agent"), Authorize]
-public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, AgentRpaDbContext db, ILlmUsageRecorder llmUsageRecorder) : ControllerBase
+public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, AgentRpaDbContext db) : ControllerBase
 {
     [HttpPost("plan")]
     public async Task<IActionResult> Plan(AgentPlanRequest request, CancellationToken ct)
     {
-        var result = await planner.PlanAsync(request.Instruction, ct);
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体（sub/nameidentifier）。" });
+        var result = await planner.PlanAsync(request.Instruction, subjectId, ct);
         return result.Success ? Ok(result) : UnprocessableEntity(result);
     }
 
@@ -34,33 +35,20 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
     public async Task<IActionResult> Execute(AgentExecuteRequest request, CancellationToken ct)
     {
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体（sub/nameidentifier）。" });
-
-        var planResult = await planner.PlanAsync(request.Instruction, ct);
+        var planResult = await planner.PlanAsync(request.Instruction, subjectId, ct);
         if (!planResult.Success || planResult.Plan is null) return UnprocessableEntity(planResult);
         var plan = planResult.Plan;
-
         var permission = await permissionService.CheckAsync(subjectId, plan.CityId, plan.SystemId, plan.FunctionId, plan.Action, ct);
         if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
-
         if (plan.RequiresConfirmation && !request.Confirmed)
-            return StatusCode(StatusCodes.Status428PreconditionRequired, new
-            {
-                confirmationRequired = true,
-                message = "该操作需要用户明确确认后才能创建执行任务。",
-                plan
-            });
-
+            return StatusCode(StatusCodes.Status428PreconditionRequired, new { confirmationRequired = true, message = "该操作需要用户明确确认后才能创建执行任务。", plan });
         if (!Guid.TryParse(plan.WorkflowId, out var workflowId) || !plan.WorkflowVersion.HasValue)
             return UnprocessableEntity(new { message = "Agent Plan 未绑定有效 Workflow。" });
-
         var workflow = await db.Workflows.AsNoTracking().SingleOrDefaultAsync(x => x.Id == workflowId, ct);
         if (workflow is null || workflow.BusinessFunctionId != plan.FunctionId || workflow.Status != AgentRPA.Domain.Workflow.WorkflowStatus.Published)
             return UnprocessableEntity(new { message = "Workflow 已失效或与业务功能不匹配。" });
-
         var version = await db.WorkflowVersions.AsNoTracking().SingleOrDefaultAsync(x => x.WorkflowId == workflowId && x.Version == plan.WorkflowVersion.Value && x.Published, ct);
         if (version is null) return UnprocessableEntity(new { message = "WorkflowVersion 未发布或已失效。" });
-
-        // LLM 用量在规划阶段可能已经产生；规划器当前不暴露主体，因此这里暂不绑定任务 ID。
         var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: subjectId);
         task.AddItem(System.Text.Json.JsonSerializer.Serialize(plan.Parameters));
         task.Queue();
