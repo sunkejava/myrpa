@@ -39,7 +39,7 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             var task = await db.Tasks.SingleOrDefaultAsync(x => x.Id == item.TaskId, cancellationToken);
             if (task is null || task.Status == DomainTaskStatus.Draft || task.Status == DomainTaskStatus.Cancelled || task.Status == DomainTaskStatus.Succeeded) continue;
             var active = await db.Executions.AnyAsync(x => x.TaskItemId == item.Id &&
-                (x.Status == ExecutionStatus.Pending || x.Status == ExecutionStatus.Dispatched || x.Status == ExecutionStatus.Running || x.Status == ExecutionStatus.Paused || x.Status == ExecutionStatus.WaitingForHuman), cancellationToken);
+                (x.Status == ExecutionStatus.Dispatched || x.Status == ExecutionStatus.Running || x.Status == ExecutionStatus.Paused || x.Status == ExecutionStatus.WaitingForHuman), cancellationToken);
             if (active) continue;
             var version = await db.WorkflowVersions.SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion, cancellationToken);
             if (version is null || !version.Published) continue;
@@ -62,9 +62,15 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
                 continue;
             }
 
-            var execution = new Execution(item.Id, version.Id);
-            db.Executions.Add(execution);
-            await db.SaveChangesAsync(cancellationToken);
+            // 同一 TaskItem + RetryCount 只对应一个派发键。无资源时保留 Pending Execution，下一轮继续尝试。
+            var dispatchKey = $"{item.Id:N}:{item.RetryCount}";
+            var execution = await db.Executions.SingleOrDefaultAsync(x => x.DispatchKey == dispatchKey, cancellationToken);
+            if (execution is null)
+            {
+                execution = new Execution(item.Id, version.Id, dispatchKey);
+                db.Executions.Add(execution);
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
             // Workflow 可以进一步收紧执行节点条件；最终要求由调度器统一执行硬过滤。
             var requirement = WorkflowExecutionRequirementParser.Parse(version.DefinitionJson)
@@ -83,8 +89,8 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             await db.SaveChangesAsync(cancellationToken);
             if (!connections.TryGet(assignment.NodeId, out var connectionId) || connectionId is null)
             {
-                execution.SetStatus(ExecutionStatus.Failed, "NodeAgent 未连接。");
-                item.Fail("NodeAgent 未连接。");
+                // NodeAgent 在派发瞬间掉线：恢复为 Pending，释放已占用资源，由下一轮重新选择节点。
+                execution.SetStatus(ExecutionStatus.Pending, "NodeAgent 未连接，等待重新调度。");
                 await db.SaveChangesAsync(cancellationToken);
                 await leaseService.ReleaseAsync(assignment.LeaseId, cancellationToken);
                 continue;
