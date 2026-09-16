@@ -64,7 +64,10 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                     await ExecuteStepsAsync(page, nested, parameters, report, cancellationToken, depth + 1); break;
                 case "end": return;
                 case "script": throw new InvalidOperationException("Script Step 默认被禁止，必须通过受控 Script Provider 执行。 ");
-                case "humantask": await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。")); throw new InvalidOperationException("HumanTask 已进入人工介入状态，请由服务端恢复 Execution 后重新调度。 ");
+                case "humantask":
+                    // report 回调会在服务端状态变为 Completed 后收到 ResumeAsync，NodeAgent 随后继续执行。
+                    await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。"));
+                    break;
                 default: throw new NotSupportedException($"NodeAgent 暂不支持 Workflow Step: {type}");
             }
             await report(new("Running", id, Math.Min(99, ((index + 1) * 100) / Math.Max(1, steps.Count)), $"完成 {type}"));
