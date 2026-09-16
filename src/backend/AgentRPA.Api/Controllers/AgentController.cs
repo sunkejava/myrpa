@@ -11,7 +11,7 @@ namespace AgentRPA.Api.Controllers;
 
 /// <summary>自然语言 Agent 控制器：规划、权限预检查以及经确认后的 Task 创建。</summary>
 [ApiController, Route("api/agent"), Authorize]
-public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, AgentRpaDbContext db) : ControllerBase
+public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, AgentRpaDbContext db, ILlmUsageRecorder llmUsageRecorder) : ControllerBase
 {
     [HttpPost("plan")]
     public async Task<IActionResult> Plan(AgentPlanRequest request, CancellationToken ct)
@@ -60,6 +60,7 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
         var version = await db.WorkflowVersions.AsNoTracking().SingleOrDefaultAsync(x => x.WorkflowId == workflowId && x.Version == plan.WorkflowVersion.Value && x.Published, ct);
         if (version is null) return UnprocessableEntity(new { message = "WorkflowVersion 未发布或已失效。" });
 
+        // LLM 用量在规划阶段可能已经产生；规划器当前不暴露主体，因此这里暂不绑定任务 ID。
         var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: subjectId);
         task.AddItem(System.Text.Json.JsonSerializer.Serialize(plan.Parameters));
         task.Queue();
