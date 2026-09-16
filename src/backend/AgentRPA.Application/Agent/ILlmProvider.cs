@@ -4,6 +4,8 @@ namespace AgentRPA.Application.Agent;
 public interface ILlmProvider
 {
     string ProviderId { get; }
+    /// <summary>Provider 当前使用的模型标识；自定义 Provider 未提供时允许使用 configured。</summary>
+    string Model => "configured";
     Task<LlmResponse> CompleteAsync(LlmRequest request, CancellationToken cancellationToken);
 }
 
