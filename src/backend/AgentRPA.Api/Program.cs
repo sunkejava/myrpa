@@ -5,12 +5,14 @@ using AgentRPA.Api.Hubs;
 using AgentRPA.Api.Middleware;
 using AgentRPA.Application.Agent;
 using AgentRPA.Application.Batch;
+using AgentRPA.Application.Execution;
 using AgentRPA.Application.Identity;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Workflow;
 using AgentRPA.Infrastructure.Agent;
+using AgentRPA.Infrastructure.Execution;
 using AgentRPA.Infrastructure.Identity;
 using AgentRPA.Infrastructure.Nodes;
 using AgentRPA.Infrastructure.Permission;
@@ -31,7 +33,6 @@ builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = 
     context.ProblemDetails.Instance = context.HttpContext.Request.Path;
     context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
 });
-
 var jwt = builder.Configuration.GetSection("AgentRPA:Jwt");
 var signingKey = jwt["SigningKey"];
 if (string.IsNullOrWhiteSpace(signingKey))
@@ -40,19 +41,16 @@ if (string.IsNullOrWhiteSpace(signingKey))
     signingKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 }
 else if (signingKey.Length < 32) throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须至少 32 个字符。");
-
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true, ValidIssuer = jwt["Issuer"], ValidateAudience = true, ValidAudience = jwt["Audience"],
-        ValidateIssuerSigningKey = true, IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
-        ValidateLifetime = true, ClockSkew = TimeSpan.FromSeconds(30),
+        ValidateIssuer = true, ValidIssuer = jwt["Issuer"], ValidateAudience = true, ValidAudience = jwt["Audience"], ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)), ValidateLifetime = true, ClockSkew = TimeSpan.FromSeconds(30),
         NameClaimType = System.Security.Claims.ClaimTypes.Name, RoleClaimType = System.Security.Claims.ClaimTypes.Role
     };
 });
 builder.Services.AddAuthorization();
-
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
 builder.Services.AddHostedService<NodeHealthMonitor>();
@@ -78,7 +76,7 @@ builder.Services.Configure<LlmProviderOptions>(builder.Configuration.GetSection(
 builder.Services.AddHttpClient("llm", (sp, client) => client.Timeout = sp.GetRequiredService<IOptions<LlmProviderOptions>>().Value.Timeout);
 builder.Services.AddScoped<ILlmProvider, OpenAiCompatibleLlmProvider>();
 builder.Services.AddScoped<ILlmUsageRecorder, EfLlmUsageRecorder>();
-
+builder.Services.AddSingleton<IArtifactStorage, LocalArtifactStorage>();
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
@@ -90,7 +88,6 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AgentRpaDbContext>();
-    // 生产环境统一通过 EF Core Migration 管理数据库结构，避免 EnsureCreated 绕过迁移历史。
     await db.Database.MigrateAsync();
     await IdentityBootstrapper.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>(), app.Configuration);
 }
