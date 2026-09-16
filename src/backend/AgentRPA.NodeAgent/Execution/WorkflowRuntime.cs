@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Playwright;
 
@@ -8,7 +9,21 @@ public interface IWorkflowRuntime
     Task ExecuteAsync(string definitionJson, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken);
 }
 
-public sealed record WorkflowRuntimeEvent(string Status, string? StepId, int ProgressPercent, string? Message);
+/// <summary>Workflow Runtime 事件；Artifact 仅携带受控本地产物的元数据，不携带文件内容。</summary>
+public sealed record WorkflowRuntimeEvent(
+    string Status,
+    string? StepId,
+    int ProgressPercent,
+    string? Message,
+    WorkflowRuntimeArtifact? Artifact = null);
+
+public sealed record WorkflowRuntimeArtifact(
+    string ArtifactType,
+    string FileName,
+    string StorageKey,
+    string? ContentType,
+    long Size,
+    string? Hash);
 
 /// <summary>基于 Playwright 的确定性浏览器 Workflow Runtime。</summary>
 public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
@@ -50,13 +65,25 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                 case "select": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Select 缺少 selector。"), parameters)).SelectOptionAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
                 case "wait": await page.WaitForTimeoutAsync(Math.Clamp(GetInt(config, "milliseconds") ?? 500, 0, 120_000)); break;
                 case "waitforelement": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("WaitForElement 缺少 selector。"), parameters)).WaitForAsync(new LocatorWaitForOptions { Timeout = GetInt(config, "timeout") ?? 30_000 }); break;
-                case "screenshot": await SaveScreenshotAsync(page, config, parameters, id); break;
-                case "download": await ExecuteDownloadAsync(page, config, parameters, id, cancellationToken); break;
+                case "screenshot":
+                    var screenshotPath = Resolve(GetString(config, "path") ?? $"artifacts/{id}.png", parameters);
+                    await SaveScreenshotAsync(page, screenshotPath, GetBool(config, "fullPage") ?? true);
+                    await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已生成截图", await BuildArtifactAsync("Screenshot", screenshotPath, "image/png")));
+                    break;
+                case "download":
+                    var downloadPath = Resolve(GetString(config, "path") ?? $"artifacts/{id}.download", parameters);
+                    await ExecuteDownloadAsync(page, config, parameters, downloadPath, cancellationToken);
+                    await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已完成下载", await BuildArtifactAsync("Download", downloadPath, null)));
+                    break;
                 case "assert": await ExecuteAssertAsync(page, config, parameters); break;
                 case "extract":
                     var value = await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Extract 缺少 selector。"), parameters)).InnerTextAsync();
                     await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), $"Extract: {value[..Math.Min(value.Length, 500)]}")); break;
-                case "upload": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Upload 缺少 selector。"), parameters)).SetInputFilesAsync(Resolve(GetString(config, "path") ?? throw new InvalidOperationException("Upload 缺少 path。"), parameters)); break;
+                case "upload":
+                    var uploadPath = Resolve(GetString(config, "path") ?? throw new InvalidOperationException("Upload 缺少 path。"), parameters);
+                    await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Upload 缺少 selector。"), parameters)).SetInputFilesAsync(uploadPath);
+                    if (File.Exists(uploadPath)) await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已完成文件上传", await BuildArtifactAsync("Upload", uploadPath, null)));
+                    break;
                 case "condition": await ExecuteConditionAsync(page, config, parameters, report, cancellationToken, depth); break;
                 case "loop": await ExecuteLoopAsync(page, config, parameters, report, cancellationToken, depth); break;
                 case "subworkflow":
@@ -65,7 +92,6 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                 case "end": return;
                 case "script": throw new InvalidOperationException("Script Step 默认被禁止，必须通过受控 Script Provider 执行。 ");
                 case "humantask":
-                    // report 回调会在服务端状态变为 Completed 后收到 ResumeAsync，NodeAgent 随后继续执行。
                     await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。"));
                     break;
                 default: throw new NotSupportedException($"NodeAgent 暂不支持 Workflow Step: {type}");
@@ -89,17 +115,12 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
     {
         var count = Math.Clamp(GetInt(config, "count") ?? 1, 0, 1000);
         var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-        for (var i = 0; i < count; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await ExecuteStepsAsync(page, nested, parameters, report, cancellationToken, depth + 1);
-        }
+        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, report, cancellationToken, depth + 1); }
     }
 
-    private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string id, CancellationToken cancellationToken)
+    private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string target, CancellationToken cancellationToken)
     {
         var selector = Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Download 缺少 selector。"), parameters);
-        var target = Resolve(GetString(config, "path") ?? $"artifacts/{id}.download", parameters);
         var directory = Path.GetDirectoryName(target);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
         var download = await page.RunAndWaitForDownloadAsync(() => page.Locator(selector).ClickAsync(), new PageRunAndWaitForDownloadOptions { Timeout = GetInt(config, "timeout") ?? 30_000 });
@@ -107,12 +128,20 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
         cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private static async Task SaveScreenshotAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string id)
+    private static async Task SaveScreenshotAsync(IPage page, string path, bool fullPage)
     {
-        var path = Resolve(GetString(config, "path") ?? $"artifacts/{id}.png", parameters);
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = GetBool(config, "fullPage") ?? true });
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = fullPage });
+    }
+
+    private static async Task<WorkflowRuntimeArtifact?> BuildArtifactAsync(string type, string path, string? contentType)
+    {
+        if (!File.Exists(path)) return null;
+        var info = new FileInfo(path);
+        await using var stream = File.OpenRead(path);
+        var hash = await SHA256.HashDataAsync(stream);
+        return new(type, info.Name, path, contentType, info.Length, Convert.ToHexString(hash).ToLowerInvariant());
     }
 
     private static async Task ExecuteAssertAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters)
@@ -127,9 +156,5 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
     private static string? GetString(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     private static int? GetInt(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.TryGetInt32(out var result) ? result : null;
     private static bool? GetBool(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
-    private static string Resolve(string value, IReadOnlyDictionary<string, string?> parameters)
-    {
-        foreach (var item in parameters) value = value.Replace("{{" + item.Key + "}}", item.Value ?? string.Empty, StringComparison.Ordinal);
-        return value;
-    }
+    private static string Resolve(string value, IReadOnlyDictionary<string, string?> parameters) { foreach (var item in parameters) value = value.Replace("{{" + item.Key + "}}", item.Value ?? string.Empty, StringComparison.Ordinal); return value; }
 }
