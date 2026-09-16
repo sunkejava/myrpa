@@ -38,9 +38,11 @@ public sealed class TaskItem : Entity
 public sealed class Execution : Entity
 {
     private Execution() { }
-    public Execution(Guid taskItemId, Guid workflowVersionId) { TaskItemId = taskItemId; WorkflowVersionId = workflowVersionId; }
+    public Execution(Guid taskItemId, Guid workflowVersionId, string dispatchKey) { TaskItemId = taskItemId; WorkflowVersionId = workflowVersionId; DispatchKey = dispatchKey; }
     public Guid TaskItemId { get; private set; }
     public Guid WorkflowVersionId { get; private set; }
+    /// <summary>同一 TaskItem 同一重试轮次只允许产生一个 Execution。</summary>
+    public string DispatchKey { get; private set; } = string.Empty;
     public Guid? NodeId { get; private set; }
     public Guid? WorkerSlotId { get; private set; }
     public ExecutionStatus Status { get; private set; } = ExecutionStatus.Pending;
