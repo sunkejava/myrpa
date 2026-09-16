@@ -5,6 +5,9 @@ namespace AgentRPA.Application.Workflow;
 /// <summary>Workflow 发布前的确定性结构校验。</summary>
 public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator parameterSchemaValidator)
 {
+    /// <summary>兼容单元测试及非 DI 调用场景。</summary>
+    public WorkflowDefinitionValidator() : this(new WorkflowParameterSchemaValidator()) { }
+
     public IReadOnlyList<string> Validate(string definitionJson)
     {
         try
