@@ -5,6 +5,8 @@ public interface ILlmUsageRecorder
 {
     Task RecordAsync(
         Guid subjectId,
+        string providerId,
+        string model,
         LlmResponse response,
         Guid? taskId = null,
         Guid? taskItemId = null,
