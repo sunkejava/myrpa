@@ -28,11 +28,14 @@ public sealed class ExecutionDispatchController(
         var item = await db.TaskItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == r.TaskItemId, ct);
         if (item is null)
             return NotFound();
+        if (item.Status != TaskItemStatus.Pending)
+            return Conflict(new { message = "只有 Pending 状态的任务项允许手工派发。" });
 
         var task = await db.Tasks.AsNoTracking().SingleAsync(x => x.Id == item.TaskId, ct);
-        // 不能通过手工派发接口访问其他用户的任务。
         if (task.SubjectId != subjectId)
             return Forbid();
+        if (task.Status is TaskStatus.Draft or TaskStatus.Cancelled or TaskStatus.Succeeded)
+            return Conflict(new { message = "当前任务状态不允许执行。" });
 
         var scope = await ResolveBusinessScopeAsync(task.WorkflowId, ct);
         if (scope is null)
@@ -50,7 +53,9 @@ public sealed class ExecutionDispatchController(
             return StatusCode(StatusCodes.Status403Forbidden, new { message = permission.Reason });
 
         var v = await db.WorkflowVersions.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion, ct);
+            .SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion && x.Published, ct);
+        if (v is null)
+            return Conflict(new { message = "任务引用的工作流版本未发布。" });
 
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(
             x => x.Id == r.NodeId && x.Status == NodeStatus.Online, ct);
@@ -58,7 +63,7 @@ public sealed class ExecutionDispatchController(
             ? null
             : await db.WorkerSlots.SingleOrDefaultAsync(x => x.Id == r.WorkerSlotId && x.NodeId == node.Id, ct);
 
-        if (v is null || node is null || slot is null || !slot.IsAvailable(DateTimeOffset.UtcNow))
+        if (node is null || slot is null || !slot.IsAvailable(DateTimeOffset.UtcNow))
             return BadRequest(new { message = "执行资源不可用。" });
 
         // 手工派发也必须遵循 TaskItem + RetryCount 的幂等约束，避免重复创建 Execution。
