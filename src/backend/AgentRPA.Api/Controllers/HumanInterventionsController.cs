@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using DomainTaskStatus = AgentRPA.Domain.Tasks.TaskStatus;
 
 namespace AgentRPA.Api.Controllers;
 
@@ -84,10 +85,7 @@ public sealed class HumanInterventionsController(
     }
 
     [HttpPost("{id:guid}/qr/consume")]
-    public async Task<ActionResult<HumanInterventionDto>> ConsumeQrToken(
-        Guid id,
-        ConsumeQrTokenRequest request,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<HumanInterventionDto>> ConsumeQrToken(Guid id, ConsumeQrTokenRequest request, CancellationToken cancellationToken)
     {
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId))
             return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
@@ -96,8 +94,7 @@ public sealed class HumanInterventionsController(
 
         var now = DateTimeOffset.UtcNow;
         var tokenHash = HashToken(request.Token.Trim());
-        var intervention = await db.HumanInterventions
-            .SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, cancellationToken);
+        var intervention = await db.HumanInterventions.SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, cancellationToken);
         if (intervention is null) return NotFound();
         if (intervention.Type != InterventionType.QrLogin)
             return BadRequest(new { message = "该人工介入不是二维码授权。" });
@@ -110,13 +107,9 @@ public sealed class HumanInterventionsController(
 
         // 使用条件更新保证并发请求只能成功消费一次；数据库永远不会保存原始令牌。
         var affected = await db.HumanInterventions
-            .Where(x => x.Id == id &&
-                        x.SubjectId == subjectId &&
-                        x.Type == InterventionType.QrLogin &&
-                        x.Status == InterventionStatus.Opened &&
-                        x.TokenConsumedAt == null &&
-                        x.ExpiresAt >= now &&
-                        x.SecureEntryHash == tokenHash)
+            .Where(x => x.Id == id && x.SubjectId == subjectId && x.Type == InterventionType.QrLogin &&
+                        x.Status == InterventionStatus.Opened && x.TokenConsumedAt == null &&
+                        x.ExpiresAt >= now && x.SecureEntryHash == tokenHash)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.TokenConsumedAt, now)
                 .SetProperty(x => x.Status, InterventionStatus.Completed), cancellationToken);
@@ -188,24 +181,15 @@ public sealed class HumanInterventionsController(
                       select execution).SingleOrDefaultAsync(ct);
     }
 
-    private async Task<HumanIntervention?> GetOwnedInterventionAsync(Guid id, Guid subjectId, CancellationToken ct)
-    {
-        return await db.HumanInterventions
-            .SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct);
-    }
+    private async Task<HumanIntervention?> GetOwnedInterventionAsync(Guid id, Guid subjectId, CancellationToken ct) =>
+        await db.HumanInterventions.SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct);
 
     private static HumanInterventionDto ToDto(HumanIntervention x, string? qrToken = null) =>
         new(x.Id, x.ExecutionId, x.Type.ToString(), x.Status.ToString(), x.Title, x.ExpiresAt, qrToken);
 
     private static string CreateQrToken() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace("+", "-").Replace("/", "_").TrimEnd('=');
 
-    private static string HashToken(string token)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-        return Convert.ToHexString(hash);
-    }
+    private static string HashToken(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 }
