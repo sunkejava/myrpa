@@ -9,10 +9,10 @@
 | Phase 0 | 基础工程与统一构建 | 🟢 JWT、数据库用户/角色/登录、PBKDF2、EF Design-time、InitialCreate、自动 Migration、Migration-first 初始化、CI Build/Test 已落地；发布流水线仍待完善 |
 | Phase 1 | 平台基础 + 一托 N 执行节点 | 🟢 注册认证、审批状态、节点健康、数据库乐观并发 Lease、节点池/WorkerSlot 管理已落地；mTLS 待完成 |
 | Phase 2 | Workflow | 🟢 Workflow / Version / Step / Task API 与前端 Designer 已具备；在线调试与完整发布策略待完成 |
-| Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner、HumanTask 等待/恢复原浏览器会话已支持；Desktop、完整执行控制仍待完成 |
+| Phase 3 | RPA Engine / NodeAgent | 🟢 Playwright 确定性 Step Runner、HumanTask 等待/恢复原浏览器会话已支持；运行时截图/下载/上传产物登记已支持；Desktop、完整执行控制仍待完成 |
 | Phase 4 | Scheduler 生产化 | 🟢 Capability Matching、NodePool、Worker Lease、业务权限复核、UKey/硬件 ResourceLock 原子抢占、派发幂等、多实例竞争恢复、无资源重调度、PreferredNode/CredentialAffinity 软评分已具备；大规模性能优化待完成 |
 | Phase 5 | Agent | 🟡 已完成资源解析、动作/风险识别、Workflow 选择、参数基础结构化、权限预检查、确认门禁、OpenAI Compatible/llama.cpp 结构化解析兜底、LLM Token 用量持久化与用户隔离查询；完整参数 Schema/执行摘要待完成 |
-| Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试已完成；执行结果 Artifact 的持久化模型与查询 API 已落地，实际运行时产物采集/存储仍待完成 |
+| Phase 6 | 批量业务 | 🟢 CSV/XLSX 导入、TaskItem 独立状态/重试、ExecutionLog/Artifact 元数据及查询、NodeAgent 运行时 Artifact 自动登记已完成；Artifact 实体存储/下载仍待完成 |
 | Phase 7 | 人工介入与外部集成 | 🟢 HumanIntervention 生命周期、Captcha HTTP Adapter、Webhook/Email、Windows 证书型 UKey Provider、QR 短期一次性令牌及人工完成后恢复 Execution/Browser Session 已具备；厂商 UKey SDK 待完成 |
 | Phase 8 | 运营中心 | 🟢 Node/Pool/Worker 管理 API、人工介入 API、审计模型/API、执行日志/产物查询 API、控制中心前端骨架已完成；完整实时运营 UI/指标待完成 |
 | Phase 9 | 扩展能力 | ⚪ 未开始 |
@@ -30,8 +30,8 @@
 - [x] ExecutionLog：执行级/Step 级日志、Sequence 稳定排序、敏感标记
 - [x] ExecutionArtifact：文件名、StorageKey、Hash、大小、类型、过期时间等元数据
 - [x] 当前用户执行日志/产物元数据隔离查询 API
-- [ ] NodeAgent Runtime 自动写入 ExecutionLog
-- [ ] Screenshot / Download / Upload 等运行时 Artifact 自动登记
+- [x] NodeAgent Runtime 自动上报运行时 Artifact 元数据
+- [x] Screenshot / Download / Upload 等运行时 Artifact 自动登记
 - [ ] Artifact Storage Provider（本地文件、对象存储）
 
 ## 其他阶段剩余任务
