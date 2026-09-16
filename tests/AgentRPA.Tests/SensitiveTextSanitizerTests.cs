@@ -17,6 +17,6 @@ public sealed class SensitiveTextSanitizerTests
         var result = SensitiveTextSanitizer.Sanitize(new string('a', 2100));
         Assert.NotNull(result);
         Assert.Equal(2001, result!.Length);
-        Assert.EndsWith('…', result);
+        Assert.EndsWith("…", result);
     }
 }
