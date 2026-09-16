@@ -1,4 +1,5 @@
 using AgentRPA.Domain.Audit;
+using DomainExecution = AgentRPA.Domain.Execution.Execution;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Identity;
@@ -27,7 +28,7 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<WorkflowStep> WorkflowSteps => Set<WorkflowStep>();
     public DbSet<RpaTask> Tasks => Set<RpaTask>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
-    public DbSet<Execution> Executions => Set<Execution>();
+    public DbSet<DomainExecution> Executions => Set<DomainExecution>();
     public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
     public DbSet<ExecutionArtifact> ExecutionArtifacts => Set<ExecutionArtifact>();
     public DbSet<HumanIntervention> HumanInterventions => Set<HumanIntervention>();
