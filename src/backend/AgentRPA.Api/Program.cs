@@ -63,6 +63,7 @@ builder.Services.AddScoped<INodeRegistryService, EfNodeRegistryService>();
 builder.Services.AddScoped<IExecutionNodeRegistry>(sp => sp.GetRequiredService<INodeRegistryService>());
 builder.Services.AddScoped<IExecutionLeaseService, EfExecutionLeaseService>();
 builder.Services.AddScoped<IExecutionScheduler, CapabilityExecutionScheduler>();
+builder.Services.AddSingleton<WorkflowParameterSchemaValidator>();
 builder.Services.AddSingleton<WorkflowDefinitionValidator>();
 builder.Services.AddSingleton<ISpreadsheetImportService, SpreadsheetImportService>();
 builder.Services.AddScoped<IAgentResourceCatalog, EfAgentResourceCatalog>();
@@ -98,7 +99,6 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AuditMiddleware>();
-// ExecutionEvidenceController 负责按当前 JWT 主体隔离读取执行日志与产物元数据。
 app.MapControllers();
 app.MapHub<NodeAgentHub>("/hubs/node-agent", options => options.AllowStatefulReconnects = true);
 app.Run();
