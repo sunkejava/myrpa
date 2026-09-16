@@ -97,6 +97,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AuditMiddleware>();
+// ExecutionEvidenceController 负责按当前 JWT 主体隔离读取执行日志与产物元数据。
 app.MapControllers();
 app.MapHub<NodeAgentHub>("/hubs/node-agent", options => options.AllowStatefulReconnects = true);
 app.Run();
