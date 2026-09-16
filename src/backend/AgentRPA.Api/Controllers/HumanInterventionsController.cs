@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AgentRPA.Api.Security;
 using AgentRPA.Contracts.Interventions;
 using AgentRPA.Domain.HumanIntervention;
@@ -15,6 +17,8 @@ namespace AgentRPA.Api.Controllers;
 [Authorize]
 public sealed class HumanInterventionsController(AgentRpaDbContext db) : ControllerBase
 {
+    private static readonly TimeSpan MaxQrLifetime = TimeSpan.FromMinutes(10);
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<HumanInterventionDto>>> List([FromQuery] Guid? executionId, CancellationToken cancellationToken)
     {
@@ -22,16 +26,12 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
             return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
 
         var query = from intervention in db.HumanInterventions.AsNoTracking()
-                    join execution in db.Executions.AsNoTracking() on intervention.ExecutionId equals execution.Id
-                    join item in db.TaskItems.AsNoTracking() on execution.TaskItemId equals item.Id
-                    join task in db.Tasks.AsNoTracking() on item.TaskId equals task.Id
-                    where task.SubjectId == subjectId
+                    where intervention.SubjectId == subjectId
                     select intervention;
 
         if (executionId.HasValue)
             query = query.Where(x => x.ExecutionId == executionId.Value);
 
-        // SQLite 项目避免按 DateTimeOffset 排序，防止 provider 不支持该表达式。
         return Ok(await query
             .OrderByDescending(x => x.Id)
             .Select(x => new HumanInterventionDto(
@@ -60,13 +60,66 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
         if (request.ExpiresAt <= DateTimeOffset.UtcNow)
             return BadRequest(new { message = "人工介入过期时间必须晚于当前时间。" });
 
-        var intervention = new HumanIntervention(request.ExecutionId, type, request.Title, request.ExpiresAt);
-        if (!string.IsNullOrWhiteSpace(request.SecureEntry))
-            intervention.Open(request.SecureEntry);
+        if (type == InterventionType.QrLogin && request.ExpiresAt > DateTimeOffset.UtcNow.Add(MaxQrLifetime))
+            return BadRequest(new { message = "二维码授权有效期不能超过 10 分钟。" });
+
+        var intervention = new HumanIntervention(request.ExecutionId, subjectId, type, request.Title, request.ExpiresAt);
+        string? qrToken = null;
+        if (type == InterventionType.QrLogin)
+        {
+            qrToken = CreateQrToken();
+            intervention.Open(HashToken(qrToken));
+        }
 
         db.HumanInterventions.Add(intervention);
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(ToDto(intervention));
+        return Ok(ToDto(intervention, qrToken));
+    }
+
+    [HttpPost("{id:guid}/qr/consume")]
+    public async Task<ActionResult<HumanInterventionDto>> ConsumeQrToken(
+        Guid id,
+        ConsumeQrTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId))
+            return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
+        if (string.IsNullOrWhiteSpace(request.Token) || request.Token.Length > 256)
+            return BadRequest(new { message = "二维码授权令牌无效。" });
+
+        var now = DateTimeOffset.UtcNow;
+        var tokenHash = HashToken(request.Token.Trim());
+        var intervention = await db.HumanInterventions
+            .SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, cancellationToken);
+        if (intervention is null) return NotFound();
+        if (intervention.Type != InterventionType.QrLogin)
+            return BadRequest(new { message = "该人工介入不是二维码授权。" });
+        if (intervention.Status == InterventionStatus.Opened && now > intervention.ExpiresAt)
+        {
+            intervention.Cancel();
+            await db.SaveChangesAsync(cancellationToken);
+            return BadRequest(new { message = "二维码授权已过期。" });
+        }
+
+        // 使用条件更新保证并发请求只能成功消费一次；数据库永远不会保存原始令牌。
+        var affected = await db.HumanInterventions
+            .Where(x => x.Id == id &&
+                        x.SubjectId == subjectId &&
+                        x.Type == InterventionType.QrLogin &&
+                        x.Status == InterventionStatus.Opened &&
+                        x.TokenConsumedAt == null &&
+                        x.ExpiresAt >= now &&
+                        x.SecureEntryHash == tokenHash)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.TokenConsumedAt, now)
+                .SetProperty(x => x.Status, InterventionStatus.Completed), cancellationToken);
+
+        if (affected != 1)
+            return BadRequest(new { message = "二维码授权令牌无效、已使用或已过期。" });
+
+        var result = await db.HumanInterventions.AsNoTracking()
+            .SingleAsync(x => x.Id == id, cancellationToken);
+        return Ok(ToDto(result));
     }
 
     [HttpPost("{id:guid}/complete")]
@@ -106,14 +159,22 @@ public sealed class HumanInterventionsController(AgentRpaDbContext db) : Control
 
     private async Task<HumanIntervention?> GetOwnedInterventionAsync(Guid id, Guid subjectId, CancellationToken ct)
     {
-        return await (from intervention in db.HumanInterventions
-                      join execution in db.Executions on intervention.ExecutionId equals execution.Id
-                      join item in db.TaskItems on execution.TaskItemId equals item.Id
-                      join task in db.Tasks on item.TaskId equals task.Id
-                      where intervention.Id == id && task.SubjectId == subjectId
-                      select intervention).SingleOrDefaultAsync(ct);
+        return await db.HumanInterventions
+            .SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct);
     }
 
-    private static HumanInterventionDto ToDto(HumanIntervention x) =>
-        new(x.Id, x.ExecutionId, x.Type.ToString(), x.Status.ToString(), x.Title, x.ExpiresAt);
+    private static HumanInterventionDto ToDto(HumanIntervention x, string? qrToken = null) =>
+        new(x.Id, x.ExecutionId, x.Type.ToString(), x.Status.ToString(), x.Title, x.ExpiresAt, qrToken);
+
+    private static string CreateQrToken() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+    private static string HashToken(string token)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(hash);
+    }
 }
