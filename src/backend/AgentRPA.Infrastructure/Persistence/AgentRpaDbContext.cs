@@ -32,6 +32,7 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<ExecutionArtifact> ExecutionArtifacts => Set<ExecutionArtifact>();
     public DbSet<HumanIntervention> HumanInterventions => Set<HumanIntervention>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<LlmUsageRecord> LlmUsageRecords => Set<LlmUsageRecord>();
     public DbSet<AccessPolicy> AccessPolicies => Set<AccessPolicy>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
     public DbSet<Role> Roles => Set<Role>();
