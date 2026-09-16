@@ -7,7 +7,8 @@ public static class WorkflowExecutionRequirementParser
 {
     /// <summary>
     /// 支持的 JSON 结构：executionRequirement.osPlatforms/nodeKinds/browsers/requiredCapabilities/
-    /// forbiddenCapabilities/networkZone/nodePoolId/requiredNodeIds/excludedNodeIds/requiredHardwareIds/requiresDesktopUi。
+    /// forbiddenCapabilities/networkZone/nodePoolId/requiredNodeIds/excludedNodeIds/requiredHardwareIds/
+    /// requiresDesktopUi/executionAffinity/preferredNodeIds/credentialAffinityKey。
     /// 缺失字段表示不额外收紧上层 BusinessSystem 要求。
     /// </summary>
     public static ExecutionRequirement? Parse(string? definitionJson)
@@ -29,7 +30,9 @@ public static class WorkflowExecutionRequirementParser
             ReadGuids(root, "excludedNodeIds"),
             ReadStrings(root, "requiredHardwareIds"),
             ReadBool(root, "requiresDesktopUi"),
-            ReadString(root, "executionAffinity") ?? "Item");
+            ReadString(root, "executionAffinity") ?? "Item",
+            ReadGuids(root, "preferredNodeIds"),
+            ReadString(root, "credentialAffinityKey"));
     }
 
     private static IReadOnlySet<string> ReadStrings(JsonElement root, string name)
