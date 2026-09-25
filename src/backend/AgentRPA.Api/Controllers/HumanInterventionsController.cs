@@ -121,9 +121,10 @@ public sealed class HumanInterventionsController(
         if (affected != 1)
             return BadRequest(new { message = "二维码授权令牌无效、已使用或已过期。" });
 
-        var result = await db.HumanInterventions.SingleAsync(x => x.Id == id, cancellationToken);
-        await TryResumeExecutionAsync(result.ExecutionId, subjectId, cancellationToken);
-        return Ok(ToDto(result));
+        // ExecuteUpdate 不同步 DbContext 已追踪的实体；读取真实落库状态再返回。
+        await db.Entry(intervention).ReloadAsync(cancellationToken);
+        await TryResumeExecutionAsync(intervention.ExecutionId, subjectId, cancellationToken);
+        return Ok(ToDto(intervention));
     }
 
     [HttpPost("{id:guid}/complete")]
