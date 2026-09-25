@@ -58,6 +58,31 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+          # Keep one enrolled employee and a receipt while the API process is restarted.
+          curl -fsS -c mock-cookies.txt -d 'username=demo&password=Demo123!' \
+            -o /dev/null http://127.0.0.1:5000/mock/qd-social-security/login
+          curl -fsS -b mock-cookies.txt \
+            -d 'operation=add&employeeName=RestartEmployee&idNumber=11010519491231002X&submissionId=restart-check-001' \
+            http://127.0.0.1:5000/mock/qd-social-security/employees > initial-receipt.html
+          grep -q '增员申报成功' initial-receipt.html
+          kill "$api_pid"
+          wait "$api_pid" || true
+          dotnet run --project ../backend/AgentRPA.Api/AgentRPA.Api.csproj > api-restart.log 2>&1 &
+          api_pid=$!
+          for attempt in $(seq 1 80); do
+            if curl -fsS http://127.0.0.1:5000/swagger/v1/swagger.json >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then cat api-restart.log; exit 1; fi
+            sleep 1
+          done
+          curl -fsS -c mock-cookies.txt -d 'username=demo&password=Demo123!' \
+            -o /dev/null http://127.0.0.1:5000/mock/qd-social-security/login
+          curl -fsS -b mock-cookies.txt \
+            'http://127.0.0.1:5000/mock/qd-social-security/employees/status?idNumber=11010519491231002X' \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin) == {"active": True, "employeeName": "RestartEmployee"}'
+          curl -fsS -b mock-cookies.txt \
+            -d 'operation=add&employeeName=RestartEmployee&idNumber=11010519491231002X&submissionId=restart-check-001' \
+            http://127.0.0.1:5000/mock/qd-social-security/employees > replay-receipt.html
+          grep -q '增员申报成功' replay-receipt.html
       - name: Upload browser traces on failure
         if: failure()
         uses: actions/upload-artifact@v4

@@ -2,6 +2,9 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using AgentRPA.Domain.Mock;
+using AgentRPA.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace AgentRPA.Api.Mock;
 
@@ -11,9 +14,6 @@ public static class MockSocialSecurity
     private const string Root = "/mock/qd-social-security";
     private const string SessionCookie = "qd-social-session";
     private static readonly ConcurrentDictionary<string, DateTimeOffset> Sessions = new();
-    private static readonly ConcurrentDictionary<string, string> Employees = new();
-    private static readonly Dictionary<string, (string Operation, string Id, string Name, string Message)> Receipts = new();
-    private static readonly object SubmissionGate = new();
 
     public static void MapMockSocialSecurity(this WebApplication app)
     {
@@ -55,15 +55,16 @@ public static class MockSocialSecurity
         });
 
         // The read-only reconciliation endpoint reflects the mock site's actual employee registry.
-        app.MapGet(Root + "/employees/status", (HttpContext context, string idNumber) =>
+        app.MapGet(Root + "/employees/status", async (HttpContext context, string idNumber, AgentRpaDbContext db) =>
         {
             if (!Authenticated(context)) return Results.Unauthorized();
             var id = idNumber.Trim().ToUpperInvariant();
             if (!ValidId(id)) return Results.BadRequest(new { message = "身份证号无效" });
-            return Results.Ok(new { active = Employees.TryGetValue(id, out var name), employeeName = name });
+            var name = await db.MockSocialEmployees.Where(x => x.IdNumber == id).Select(x => x.Name).SingleOrDefaultAsync();
+            return Results.Ok(new { active = name is not null, employeeName = name });
         });
 
-        app.MapPost(Root + "/employees", async (HttpContext context) =>
+        app.MapPost(Root + "/employees", async (HttpContext context, AgentRpaDbContext db) =>
         {
             if (!Authenticated(context)) return Results.Redirect(Root);
             var form = await context.Request.ReadFormAsync();
@@ -74,19 +75,30 @@ public static class MockSocialSecurity
             if (name.Length is < 2 or > 40 || !ValidId(id) || operation is not ("add" or "remove") ||
                 submissionId.Length > 0 && !Regex.IsMatch(submissionId, @"^[A-Za-z0-9_-]{6,128}$", RegexOptions.CultureInvariant))
                 return Result(context, false, "姓名、身份证号或业务类型无效", 400);
-            lock (SubmissionGate)
-            {
-                if (submissionId.Length > 0 && Receipts.TryGetValue(submissionId, out var receipt))
-                    return receipt.Operation == operation && receipt.Id == id && receipt.Name == name
-                        ? Result(context, true, receipt.Message)
-                        : Result(context, false, "业务请求号已用于另一笔申报", 409);
-                var success = operation == "add" ? Employees.TryAdd(id, name)
-                    : ((ICollection<KeyValuePair<string, string>>)Employees).Remove(new KeyValuePair<string, string>(id, name));
-                if (!success) return Result(context, false, operation == "add" ? "该人员已参保" : "参保记录不存在或姓名不匹配", 409);
-                var message = operation == "add" ? "增员申报成功" : "减员申报成功";
-                if (submissionId.Length > 0) Receipts[submissionId] = (operation, id, name, message);
-                return Result(context, true, message);
-            }
+            // A transaction keeps the employee transition and its receipt together across process restarts.
+            // SQLite serializes writers; primary keys reject duplicate requests from another API process.
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            var receipt = submissionId.Length == 0 ? null : await db.MockSocialReceipts.FindAsync(submissionId);
+            if (receipt is not null)
+                return receipt.Operation == operation && receipt.IdNumber == id && receipt.Name == name
+                    ? Result(context, true, receipt.Message)
+                    : Result(context, false, "业务请求号已用于另一笔申报", 409);
+            var employee = await db.MockSocialEmployees.FindAsync(id);
+            if (operation == "add" && employee is not null)
+                return Result(context, false, "该人员已参保", 409);
+            if (operation == "remove" && (employee is null || employee.Name != name))
+                return Result(context, false, "参保记录不存在或姓名不匹配", 409);
+            if (operation == "add") db.MockSocialEmployees.Add(new MockSocialEmployee { IdNumber = id, Name = name });
+            else db.MockSocialEmployees.Remove(employee!);
+            var message = operation == "add" ? "增员申报成功" : "减员申报成功";
+            if (submissionId.Length > 0)
+                db.MockSocialReceipts.Add(new MockSocialReceipt
+                {
+                    SubmissionId = submissionId, Operation = operation, IdNumber = id, Name = name, Message = message
+                });
+            await db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return Result(context, true, message);
         });
     }
 

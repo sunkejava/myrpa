@@ -3,6 +3,7 @@ using DomainExecution = AgentRPA.Domain.Tasks.Execution;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Identity;
+using AgentRPA.Domain.Mock;
 using AgentRPA.Domain.Permission;
 using AgentRPA.Domain.Resources;
 using AgentRPA.Domain.Tasks;
@@ -43,6 +44,8 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RoleAccessPolicy> RoleAccessPolicies => Set<RoleAccessPolicy>();
+    public DbSet<MockSocialEmployee> MockSocialEmployees => Set<MockSocialEmployee>();
+    public DbSet<MockSocialReceipt> MockSocialReceipts => Set<MockSocialReceipt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AgentRpaDbContext).Assembly);
