@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -327,6 +327,54 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
       headers: admin, data: { decision: 'NotSubmitted', evidenceReference: 'MOCK-STATUS-ABSENT' }
     })
     expect(exhausted.status()).toBe(409)
+
+    // Simulate a hard node crash with a lease past its deadline. The monitor must retain the
+    // uncertain external outcome for manual review instead of automatically dispatching again.
+    const crashDefinition = JSON.parse(definition) as { steps: Array<{ id: string, type: string, config: Record<string, unknown>, timeoutMs?: number }> }
+    crashDefinition.steps.unshift({ id: 'crash-wait', type: 'Wait', config: { milliseconds: 120_000 }, timeoutMs: 120_000 })
+    const crashWorkflow = await post('/api/workflows', { businessFunctionId: businessFunction.id, name: '节点异常退出', description: '租约到期后核验' })
+    const crashVersion = await post(`/api/workflows/${crashWorkflow.id}/versions`, { definitionJson: JSON.stringify(crashDefinition) })
+    await post(`/api/workflows/${crashWorkflow.id}/versions/${crashVersion.version}/publish`, {})
+    const crashTask = await post('/api/tasks', { workflowId: crashWorkflow.id, workflowVersion: crashVersion.version,
+      name: '崩溃后等待核验', maxRetries: 2, items: [person()] }, operatorHeaders)
+    const crashApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
+    const crashApproval = crashApprovals.find(entry => entry.taskId === crashTask.id)
+    expect(crashApproval).toBeDefined()
+    await post(`/api/task-approvals/${crashApproval!.id}/decide`, { approved: true })
+    await post(`/api/tasks/${crashTask.id}/queue`, {}, operatorHeaders)
+    let crashExecutionId: string | undefined
+    for (let attempt = 0; attempt < 35; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${crashTask.id}`, { headers: operatorHeaders })).json() as
+        { items: Array<{ executions: Array<{ id: string }> }> }
+      const id = detail.items[0].executions[0]?.id
+      if (id) {
+        const checkpoints = await (await request.get(`${api}/api/executions/${id}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string, eventType: string }>
+        if (checkpoints.some(x => x.stepId === 'crash-wait' && x.eventType === 'StepStarted')) { crashExecutionId = id; break }
+      }
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(crashExecutionId, `NodeAgent 日志:\n${output}`).toBeDefined()
+    child.kill('SIGKILL')
+    await new Promise<void>(resolve => child.once('exit', () => resolve()))
+    const dbResult = spawnSync('python3', ['-c', `import sqlite3,sys
+db=sqlite3.connect('browser-test.db',timeout=10)
+db.execute("UPDATE execution_nodes SET Status=0 WHERE lower(Id)=lower(?)",(sys.argv[1],))
+db.execute("UPDATE NodeLeases SET ExpiresAt='2000-01-01 00:00:00+00:00' WHERE Released=0")
+db.commit()
+`, node.nodeId], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(dbResult.status, dbResult.stderr).toBe(0)
+    let crashDetail: { status: string, items: Array<{ retryCount: number, executions: Array<{ id: string, status: string }> }> } | undefined
+    for (let attempt = 0; attempt < 35; attempt++) {
+      crashDetail = await (await request.get(`${api}/api/tasks/${crashTask.id}`, { headers: operatorHeaders })).json()
+      if (crashDetail?.status === 'Failed') break
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(crashDetail?.status).toBe('Failed')
+    expect(crashDetail?.items[0].retryCount).toBe(0)
+    expect(crashDetail?.items[0].executions).toHaveLength(1)
+    expect(crashDetail?.items[0].executions[0]).toMatchObject({ id: crashExecutionId, status: 'Failed' })
+    const crashPending = await (await request.get(`${api}/api/task-reconciliations`, { headers: admin })).json() as Array<{ executionId: string }>
+    expect(crashPending.some(x => x.executionId === crashExecutionId)).toBe(true)
   } finally {
     child.kill('SIGTERM')
   }
