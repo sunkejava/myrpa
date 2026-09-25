@@ -36,6 +36,7 @@ async function confirm(item: Pending) {
       throw new Error(details?.message || `核验失败 (${response.status})`)
     }
     notice.value = `任务 ${item.taskId} 的核验结论已记录。`
+    delete mockEvidence.value[item.executionId]
     await load()
   } catch (e) { error.value = e instanceof Error ? e.message : '核验失败' }
   finally { busy.value = false }
@@ -79,3 +80,4 @@ onMounted(load)
       </tr></tbody></table><p v-if="!rows.length" class="muted empty">暂无需要核验的高风险失败执行。</p></div>
   </section>
 </template>
+
