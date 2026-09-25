@@ -16,8 +16,9 @@ test('审批后的增员任务由真实 NodeAgent 执行并记录提交检查点
   const admin = await login('admin', 'BrowserTestPassword123!')
   const post = async (path: string, data: unknown, headers = admin) => {
     const response = await request.post(`${api}${path}`, { data, headers })
-    expect(response.ok(), `${path}: ${response.status()} ${await response.text()}`).toBeTruthy()
-    return response.json()
+    const body = await response.text()
+    expect(response.ok(), `${path}: ${response.status()} ${body}`).toBeTruthy()
+    return body ? JSON.parse(body) : undefined
   }
   const city = await post('/api/business-resources/cities', { code: `MOCK-${Date.now()}`, name: '模拟社保城市' })
   const system = await post(`/api/business-resources/cities/${city.id}/systems`, { code: 'SOCIAL', name: '模拟社保' })
