@@ -68,6 +68,21 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: '提交任务' }).click()
   await expect(page.getByRole('heading', { name: '任务中心' })).toBeVisible()
   await expect(page.getByText('Agent: Execute')).toBeVisible()
+  const riskyWorkflow = await (await request.post(`${api}/api/workflows`, {
+    headers, data: { businessFunctionId: businessFunction.id, name: '审批演示', description: '高风险审批' }
+  })).json() as { id: string }
+  const riskyVersion = await (await request.post(`${api}/api/workflows/${riskyWorkflow.id}/versions`, {
+    headers, data: { definitionJson: '{"riskLevel":"High","steps":[{"type":"End"}]}' }
+  })).json() as { version: number }
+  expect((await request.post(`${api}/api/workflows/${riskyWorkflow.id}/versions/${riskyVersion.version}/publish`, { headers, data: {} })).ok()).toBeTruthy()
+  const riskyTask = await (await request.post(`${api}/api/tasks`, {
+    headers, data: { workflowId: riskyWorkflow.id, workflowVersion: riskyVersion.version, name: '待审核任务', items: ['{}'] }
+  })).json() as { id: string; approvalRequired: boolean }
+  expect(riskyTask.approvalRequired).toBeTruthy()
+  await page.getByRole('button', { name: '审批中心' }).click()
+  await expect(page.getByText(riskyTask.id)).toBeVisible()
+  await page.getByRole('button', { name: '批准' }).click()
+  await expect(page.getByRole('alert')).toContainText('不得审批本人')
 })
 
 test('theme switch and mobile layout', async ({ page, isMobile }) => {
