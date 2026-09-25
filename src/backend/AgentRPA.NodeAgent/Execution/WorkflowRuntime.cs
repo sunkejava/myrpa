@@ -74,8 +74,9 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                 case "click": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Click 缺少 selector。"), parameters)).ClickAsync(); break;
                 case "input": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Input 缺少 selector。"), parameters)).FillAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
                 case "select": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Select 缺少 selector。"), parameters)).SelectOptionAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
-                case "wait": await Task.Delay(Math.Clamp(GetInt(config, "milliseconds") ?? 500, 0, 120_000), cancellationToken); break;
-                case "waitforelement": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("WaitForElement 缺少 selector。"), parameters)).WaitForAsync(new LocatorWaitForOptions { Timeout = GetInt(config, "timeout") ?? timeoutMs }); break;
+                case "wait": await Task.Delay(Math.Clamp(GetInt(config, "milliseconds") ?? 500, 0, 120_000), cancellationToken)
+                    .WaitAsync(TimeSpan.FromMilliseconds(timeoutMs), cancellationToken); break;
+                case "waitforelement": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("WaitForElement 缺少 selector。"), parameters)).WaitForAsync(new LocatorWaitForOptions { Timeout = Math.Min(GetInt(config, "timeout") ?? timeoutMs, timeoutMs) }); break;
                 case "screenshot":
                     var screenshotPath = Resolve(GetString(config, "path") ?? $"artifacts/{id}.png", parameters);
                     await SaveScreenshotAsync(page, screenshotPath, GetBool(config, "fullPage") ?? true);
@@ -83,7 +84,7 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                     break;
                 case "download":
                     var downloadPath = Resolve(GetString(config, "path") ?? $"artifacts/{id}.download", parameters);
-                    await ExecuteDownloadAsync(page, config, parameters, downloadPath, cancellationToken);
+                    await ExecuteDownloadAsync(page, config, parameters, downloadPath, timeoutMs, cancellationToken);
                     await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已完成下载", await BuildArtifactAsync("Download", downloadPath, null)));
                     break;
                 case "assert": await ExecuteAssertAsync(page, config, parameters); break;
@@ -144,12 +145,12 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
         for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, report, cancellationToken, depth + 1); }
     }
 
-    private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string target, CancellationToken cancellationToken)
+    private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string target, int timeoutMs, CancellationToken cancellationToken)
     {
         var selector = Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Download 缺少 selector。"), parameters);
         var directory = Path.GetDirectoryName(target);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-        var download = await page.RunAndWaitForDownloadAsync(() => page.Locator(selector).ClickAsync(), new PageRunAndWaitForDownloadOptions { Timeout = GetInt(config, "timeout") ?? 30_000 });
+        var download = await page.RunAndWaitForDownloadAsync(() => page.Locator(selector).ClickAsync(), new PageRunAndWaitForDownloadOptions { Timeout = Math.Min(GetInt(config, "timeout") ?? timeoutMs, timeoutMs) });
         await download.SaveAsAsync(target);
         cancellationToken.ThrowIfCancellationRequested();
     }
