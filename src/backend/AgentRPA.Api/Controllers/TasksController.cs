@@ -153,6 +153,10 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (task.Status != DomainTaskStatus.Cancelled)
         {
             task.SetStatus(DomainTaskStatus.Cancelled);
+            // A cancelled running item will become Failed for reconciliation; pending items
+            // must be skipped so the scheduler cannot dispatch them after that transition.
+            foreach (var pending in await db.TaskItems.Where(x => x.TaskId == id && x.Status == TaskItemStatus.Pending).ToListAsync(ct))
+                pending.Skip();
             await db.SaveChangesAsync(ct);
         }
         var signaled = 0;

@@ -211,6 +211,39 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const stoppedWorkflow = await post('/api/workflows', { businessFunctionId: businessFunction.id, name: '停用运行中流程', description: 'NodeAgent 取消验收' })
     const stoppedVersion = await post(`/api/workflows/${stoppedWorkflow.id}/versions`, { definitionJson: JSON.stringify(stoppedDefinition) })
     await post(`/api/workflows/${stoppedWorkflow.id}/versions/${stoppedVersion.version}/publish`, {})
+    const cancelRunning = await post('/api/tasks', { workflowId: stoppedWorkflow.id, workflowVersion: stoppedVersion.version,
+      name: '运行中取消并跳过未开始项', maxRetries: 2, items: [person(), person()] }, operatorHeaders)
+    const cancelApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
+    const cancelApproval = cancelApprovals.find(entry => entry.taskId === cancelRunning.id)
+    expect(cancelApproval).toBeDefined()
+    await post(`/api/task-approvals/${cancelApproval!.id}/decide`, { approved: true })
+    await post(`/api/tasks/${cancelRunning.id}/queue`, {}, operatorHeaders)
+    let cancelExecutionId: string | undefined
+    for (let attempt = 0; attempt < 35; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${cancelRunning.id}`, { headers: operatorHeaders })).json() as
+        { items: Array<{ executions: Array<{ id: string }> }> }
+      const id = detail.items[0].executions[0]?.id
+      if (id) {
+        const checkpoints = await (await request.get(`${api}/api/executions/${id}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string, eventType: string }>
+        if (checkpoints.some(x => x.stepId === 'pause-before-submit' && x.eventType === 'StepStarted')) { cancelExecutionId = id; break }
+      }
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(cancelExecutionId, `NodeAgent 日志:\n${output}`).toBeDefined()
+    const cancelResponse = await post(`/api/tasks/${cancelRunning.id}/cancel`, {}, operatorHeaders) as { activeExecutions: number, signaled: number }
+    expect(cancelResponse).toMatchObject({ activeExecutions: 1, signaled: 1 })
+    let cancelledDetail: { status: string, items: Array<{ status: string, retryCount: number, executions: Array<{ status: string }> }> } | undefined
+    for (let attempt = 0; attempt < 20; attempt++) {
+      cancelledDetail = await (await request.get(`${api}/api/tasks/${cancelRunning.id}`, { headers: operatorHeaders })).json()
+      if (cancelledDetail?.status === 'Failed') break
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(cancelledDetail?.status, `NodeAgent 日志:\n${output}`).toBe('Failed')
+    expect(cancelledDetail?.items[0]).toMatchObject({ status: 'Failed', retryCount: 0 })
+    expect(cancelledDetail?.items[0].executions[0].status).toBe('Failed')
+    expect(cancelledDetail?.items[1]).toMatchObject({ status: 'Skipped', executions: [] })
+    const cancelPending = await (await request.get(`${api}/api/task-reconciliations`, { headers: admin })).json() as Array<{ executionId: string }>
+    expect(cancelPending.some(x => x.executionId === cancelExecutionId)).toBe(true)
     const stoppedTask = await post('/api/tasks', { workflowId: stoppedWorkflow.id, workflowVersion: stoppedVersion.version,
       name: '运行中停用', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '未提交测试', idNumber: '110105194912310046', submissionId: randomUUID() })] }, operatorHeaders)
     const stoppedApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>

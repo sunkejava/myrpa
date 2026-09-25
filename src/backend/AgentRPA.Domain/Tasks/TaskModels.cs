@@ -32,6 +32,7 @@ public sealed class TaskItem : Entity
     public void Start() => Status = TaskItemStatus.Running;
     public void Succeed(string? resultJson = null) { Status = TaskItemStatus.Succeeded; ResultJson = resultJson; }
     public void Fail(string? resultJson = null) { Status = TaskItemStatus.Failed; ResultJson = resultJson; }
+    public void Skip() => Status = TaskItemStatus.Skipped;
     public bool CanRetry(int maxRetries) => Status == TaskItemStatus.Failed && RetryCount < maxRetries;
     public void Retry() { RetryCount++; Status = TaskItemStatus.Pending; ResultJson = null; }
 }
