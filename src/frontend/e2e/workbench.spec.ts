@@ -83,7 +83,7 @@ test('login, resource setup, natural language planning and task submission', asy
   expect(riskyTask.approvalRequired).toBeTruthy()
   await page.getByRole('button', { name: '审批中心' }).click()
   await expect(page.getByText(riskyTask.id)).toBeVisible()
-  await page.getByRole('button', { name: '批准' }).click()
+  await page.locator('tr').filter({ hasText: riskyTask.id }).getByRole('button', { name: '批准' }).click()
   await expect(page.getByRole('alert')).toContainText('不得审批本人')
   await page.getByRole('button', { name: 'Workflow 管理' }).click()
   await page.locator('.resource-grid select').first().selectOption(city.id)
