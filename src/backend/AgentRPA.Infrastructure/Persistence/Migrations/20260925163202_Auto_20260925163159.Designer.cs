@@ -3,6 +3,7 @@ using System;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AgentRPA.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AgentRpaDbContext))]
-    partial class AgentRpaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925163202_Auto_20260925163159")]
+    partial class Auto_20260925163159
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
