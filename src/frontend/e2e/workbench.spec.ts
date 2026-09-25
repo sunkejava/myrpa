@@ -48,6 +48,17 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('名称').fill('山东省')
   await page.getByRole('button', { name: '创建', exact: true }).click()
   await expect(page.getByRole('option', { name: /山东省/ })).toBeAttached()
+  const role = await (await request.post(`${api}/api/user-management/roles`, {
+    headers, data: { name: 'Runner', displayName: '执行员' }
+  })).json() as { id: string }
+  await page.getByRole('button', { name: '权限中心' }).click()
+  await page.getByLabel('授权对象').selectOption('role')
+  await page.locator('form select').nth(1).selectOption(role.id)
+  await page.getByLabel('城市').selectOption(city.id)
+  await page.getByLabel('系统').selectOption(system.id)
+  await page.getByLabel('功能').selectOption(businessFunction.id)
+  await page.getByRole('button', { name: '显式拒绝' }).click()
+  await expect(page.getByText('角色 · 执行员')).toBeVisible()
   await page.getByRole('button', { name: 'AI 工作台' }).click()
   await page.getByLabel('任务描述').fill('青岛市 社保系统 增员')
   await page.getByRole('button', { name: '生成计划' }).click()

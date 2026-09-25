@@ -15,6 +15,7 @@
 - [x] Workflow Step 的 `requiredAction` 可逐步预检；任务创建、入队与派发都会复核，包含嵌套分支。
 - [x] 同一精确资源范围支持显式 Deny，优先于用户/角色 Allow；API 和 UI 支持直接拒绝与恢复授权。
 - [x] 管理员可管理角色的精确资源 Allow/Deny/撤销；CI 冒烟覆盖角色授权与用户拒绝的优先级。
+- [x] 权限中心前端可为用户或角色设置精确 Allow/Deny，并显示及撤销双方的策略。
 - [x] Country、Province、City、District 基础实体及父子资源 API；历史 City 的 ProvinceId 保持可空，迁移不阻断现有数据。
 - [x] 前端接入真实登录、自然语言任务规划、任务列表和城市/系统/功能管理。
 - [x] Chromium 浏览器端验证桌面登录 → Planner → 任务提交与手机视口主题/布局（首轮发现并修复 SQLite APPLY 查询错误）。
