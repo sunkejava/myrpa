@@ -89,7 +89,9 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         }
         if (status == ExecutionStatus.Succeeded && task is not null)
         {
-            var remaining = await db.TaskItems.AnyAsync(x => x.TaskId == task.Id && x.Status != TaskItemStatus.Succeeded && x.Status != TaskItemStatus.Skipped, cancellationToken);
+            // The current item's Succeeded state is still only tracked in memory until SaveChanges.
+            var remaining = await db.TaskItems.AnyAsync(x => x.TaskId == task.Id && x.Id != execution.TaskItemId &&
+                x.Status != TaskItemStatus.Succeeded && x.Status != TaskItemStatus.Skipped, cancellationToken);
             if (!remaining) task.SetStatus(DomainTaskStatus.Succeeded); else task.Queue();
         }
         var nextSequence = (await db.ExecutionLogs.Where(x => x.ExecutionId == execution.Id).Select(x => (long?)x.Sequence).MaxAsync(cancellationToken) ?? -1) + 1;
