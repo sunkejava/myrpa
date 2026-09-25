@@ -224,6 +224,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     }
     expect(stoppedExecutionId).toBeDefined()
     expect(startedWait, `NodeAgent 日志:\n${output}`).toBe(true)
+    const disabledAt = Date.now()
     const disableResult = await post(`/api/workflows/${stoppedWorkflow.id}/disable`, {}) as { activeExecutions: number, signaled: number }
     expect(disableResult.activeExecutions).toBe(1)
     expect(disableResult.signaled).toBe(1)
@@ -235,6 +236,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
       await new Promise(done => setTimeout(done, 1000))
     }
     expect(stoppedStatus, `NodeAgent 日志:\n${output}`).toBe('Failed')
+    expect(Date.now() - disabledAt, '取消命令必须打断 20 秒的等待步骤').toBeLessThan(15_000)
     const stopCheckpoints = await (await request.get(`${api}/api/executions/${stoppedExecutionId}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string, eventType: string }>
     expect(stopCheckpoints.some(x => x.stepId === 'submit')).toBe(false)
     expect(await (await request.get(`${api}/mock/qd-social-security/employees/status?idNumber=110105194912310046`)).json()).toMatchObject({ active: false })

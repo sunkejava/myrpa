@@ -57,7 +57,14 @@ public sealed class NodeAgentWorker(
 
         var hubUrl = $"{config.ServerUrl.TrimEnd('/')}/hubs/node-agent";
         await using var connection = new HubConnectionBuilder().WithUrl(hubUrl).WithAutomaticReconnect().WithStatefulReconnect().Build();
-        connection.On<ExecutionCommand>("ExecuteAsync", command => StartExecutionAsync(connection, command, stoppingToken));
+        connection.On<ExecutionCommand>("ExecuteAsync", command =>
+        {
+            // SignalR client handlers are serialized. Waiting for the entire workflow here would
+            // block CancelAsync / ResumeAsync while the node waits for a human or a long step.
+            // StartExecutionAsync registers its cancellation source before its first await.
+            _ = RunExecutionAsync(connection, command, stoppingToken);
+            return Task.CompletedTask;
+        });
         connection.On<Guid>("CancelAsync", CancelExecutionAsync);
         connection.On<Guid>("PauseAsync", _ => Task.CompletedTask);
         connection.On<Guid>("ResumeAsync", ResumeExecutionAsync);
@@ -77,6 +84,12 @@ public sealed class NodeAgentWorker(
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex) { logger.LogWarning(ex, "NodeAgent communication failed; retrying"); await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
         }
+    }
+
+    private async Task RunExecutionAsync(HubConnection connection, ExecutionCommand command, CancellationToken stoppingToken)
+    {
+        try { await StartExecutionAsync(connection, command, stoppingToken); }
+        catch (Exception ex) { logger.LogError(ex, "Execution {ExecutionId} status report failed", command.ExecutionId); }
     }
 
     private async Task StartExecutionAsync(HubConnection connection, ExecutionCommand command, CancellationToken stoppingToken)
