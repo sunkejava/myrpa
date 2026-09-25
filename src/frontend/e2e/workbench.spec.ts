@@ -55,7 +55,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('授权对象').selectOption('role')
   await page.locator('form select').nth(1).selectOption(role.id)
   await page.getByLabel('城市').selectOption(city.id)
-  await page.getByLabel('系统').selectOption(system.id)
+  await page.locator('form .resource-grid select').nth(1).selectOption(system.id)
   await page.getByLabel('功能').selectOption(businessFunction.id)
   await page.getByRole('button', { name: '显式拒绝' }).click()
   await expect(page.getByText('角色 · 执行员')).toBeVisible()
