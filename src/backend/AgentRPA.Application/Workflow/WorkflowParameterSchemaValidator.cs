@@ -39,7 +39,19 @@ public sealed class WorkflowParameterSchemaValidator
         {
             var schema = property.Value;
             var required = schema.TryGetProperty("required", out var requiredElement) && requiredElement.ValueKind == JsonValueKind.True;
-            if (!values.TryGetValue(property.Name, out var value) || value is null)
+            values.TryGetValue(property.Name, out var value);
+            if (value is JsonElement element)
+                value = element.ValueKind switch
+                {
+                    JsonValueKind.String => element.GetString(),
+                    JsonValueKind.Number when element.TryGetInt64(out var integer) => integer,
+                    JsonValueKind.Number when element.TryGetDecimal(out var number) => number,
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Null => null,
+                    _ => element
+                };
+            if (value is null)
             {
                 if (required && !schema.TryGetProperty("default", out _)) errors.Add($"缺少必填参数：{property.Name}。");
                 continue;

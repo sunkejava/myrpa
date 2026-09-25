@@ -38,6 +38,10 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
   await post(`/api/workflows/${removeWorkflow.id}/versions/${removeVersion.version}/publish`, {})
 
   const operatorHeaders = await login(operatorName, 'MockTestPassword123!')
+  const missingParameters = await request.post(`${api}/api/tasks`, { headers: operatorHeaders,
+    data: { workflowId: workflow.id, workflowVersion: version.version, name: '参数缺失', items: ['{}'] } })
+  expect(missingParameters.status()).toBe(400)
+  expect(await missingParameters.text()).toContain('mockBaseUrl')
   const task = await post('/api/tasks', { workflowId: workflow.id, workflowVersion: version.version,
     name: '模拟增员', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '真实节点测试', idNumber: '110105194912310038' })] }, operatorHeaders)
   expect(task.approvalRequired).toBe(true)

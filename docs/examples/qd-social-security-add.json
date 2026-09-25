@@ -78,5 +78,26 @@
         "contains": "增员申报成功"
       }
     }
-  ]
+  ],
+  "parameters": {
+    "mockBaseUrl": {
+      "type": "string",
+      "required": true,
+      "minLength": 10,
+      "maxLength": 2048
+    },
+    "employeeName": {
+      "type": "string",
+      "required": true,
+      "minLength": 2,
+      "maxLength": 40
+    },
+    "idNumber": {
+      "type": "string",
+      "required": true,
+      "minLength": 18,
+      "maxLength": 18,
+      "sensitive": true
+    }
+  }
 }
