@@ -153,6 +153,43 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const removedStatus = await request.get(employeeStatusUrl)
     expect(removedStatus.ok()).toBeTruthy()
     expect(await removedStatus.json()).toMatchObject({ active: false, employeeName: null })
+
+    // A broken navigation fails before any form is submitted. After checking that this person
+    // is absent, the reviewer permits one explicit retry; the same broken definition fails again.
+    const brokenDefinition = JSON.parse(definition) as { steps: Array<{ id: string, config: { url?: string } }> }
+    brokenDefinition.steps.find(step => step.id === 'open')!.config.url = 'mock://missing'
+    const brokenWorkflow = await post('/api/workflows', { businessFunctionId: businessFunction.id, name: '提交前失败演示', description: '核验未提交后重试' })
+    const brokenVersion = await post(`/api/workflows/${brokenWorkflow.id}/versions`, { definitionJson: JSON.stringify(brokenDefinition) })
+    await post(`/api/workflows/${brokenWorkflow.id}/versions/${brokenVersion.version}/publish`, {})
+    const brokenTask = await post('/api/tasks', { workflowId: brokenWorkflow.id, workflowVersion: brokenVersion.version,
+      name: '提交前故障', maxRetries: 1, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '未提交测试', idNumber: '110105194912310046' })] }, operatorHeaders)
+    const brokenApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
+    const brokenApproval = brokenApprovals.find(item => item.taskId === brokenTask.id)
+    expect(brokenApproval).toBeDefined()
+    await post(`/api/task-approvals/${brokenApproval!.id}/decide`, { approved: true })
+    await post(`/api/tasks/${brokenTask.id}/queue`, {}, operatorHeaders)
+    const waitForFailure = async (retryCount: number) => {
+      let detail: { status: string, items: Array<{ retryCount: number, executions: Array<{ id: string }> }> } | undefined
+      for (let attempt = 0; attempt < 35; attempt++) {
+        detail = await (await request.get(`${api}/api/tasks/${brokenTask.id}`, { headers: operatorHeaders })).json()
+        if (detail?.status === 'Failed' && detail.items[0].retryCount === retryCount) break
+        await new Promise(done => setTimeout(done, 1000))
+      }
+      expect(detail?.status, `NodeAgent 日志:\n${output}`).toBe('Failed')
+      expect(detail!.items[0].retryCount).toBe(retryCount)
+      return detail!.items[0].executions[0].id
+    }
+    const firstFailureId = await waitForFailure(0)
+    const absent = await (await request.get(`${api}/mock/qd-social-security/employees/status?idNumber=110105194912310046`)).json() as { active: boolean }
+    expect(absent.active).toBe(false)
+    const retryDecision = await post(`/api/task-reconciliations/${firstFailureId}/decide`, { decision: 'NotSubmitted', evidenceReference: 'MOCK-STATUS-ABSENT' })
+    expect(retryDecision.itemStatus).toBe('Pending')
+    const secondFailureId = await waitForFailure(1)
+    expect(secondFailureId).not.toBe(firstFailureId)
+    const exhausted = await request.post(`${api}/api/task-reconciliations/${secondFailureId}/decide`, {
+      headers: admin, data: { decision: 'NotSubmitted', evidenceReference: 'MOCK-STATUS-ABSENT' }
+    })
+    expect(exhausted.status()).toBe(409)
   } finally {
     child.kill('SIGTERM')
   }
