@@ -53,6 +53,14 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
   const premature = await request.post(`${api}/api/tasks/${task.id}/queue`, { data: {}, headers: operatorHeaders })
   expect(premature.status()).toBe(428)
   await post(`/api/task-approvals/${approval!.id}/decide`, { approved: true })
+  const cancelledBeforeDispatch = await post('/api/tasks', { workflowId: workflow.id, workflowVersion: version.version,
+    name: '入队前取消', maxRetries: 0, items: [person()] }, operatorHeaders)
+  const unauthorizedCancel = await request.post(`${api}/api/tasks/${cancelledBeforeDispatch.id}/cancel`, { data: {}, headers: admin })
+  expect(unauthorizedCancel.status()).toBe(404)
+  const cancelled = await post(`/api/tasks/${cancelledBeforeDispatch.id}/cancel`, {}, operatorHeaders)
+  expect(cancelled).toMatchObject({ status: 'Cancelled', activeExecutions: 0 })
+  const queuedAfterCancel = await request.post(`${api}/api/tasks/${cancelledBeforeDispatch.id}/queue`, { data: {}, headers: operatorHeaders })
+  expect(queuedAfterCancel.status()).toBe(409)
 
   const registrationKey = 'BrowserNodeRegistrationKey123!'
   const agentKey = `browser-agent-${Date.now()}`
@@ -236,6 +244,9 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
       await new Promise(done => setTimeout(done, 1000))
     }
     expect(stoppedStatus, `NodeAgent 日志:\n${output}`).toBe('Failed')
+    const stoppedDetail = await (await request.get(`${api}/api/tasks/${stoppedTask.id}`, { headers: operatorHeaders })).json() as
+      { items: Array<{ executions: Array<{ status: string }> }> }
+    expect(stoppedDetail.items[0].executions[0].status).toBe('Failed')
     expect(Date.now() - disabledAt, '取消命令必须打断 20 秒的等待步骤').toBeLessThan(15_000)
     const stopCheckpoints = await (await request.get(`${api}/api/executions/${stoppedExecutionId}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string, eventType: string }>
     expect(stopCheckpoints.some(x => x.stepId === 'submit')).toBe(false)

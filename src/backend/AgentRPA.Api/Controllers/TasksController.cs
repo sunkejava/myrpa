@@ -1,4 +1,6 @@
 using AgentRPA.Api.Security;
+using AgentRPA.Api.Hubs;
+using AgentRPA.Contracts.Nodes;
 using AgentRPA.Application.Batch;
 using AgentRPA.Application.Permission;
 using AgentRPA.Application.Workflow;
@@ -7,13 +9,16 @@ using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using System.Text.Json;
+using DomainTaskStatus = AgentRPA.Domain.Tasks.TaskStatus;
 
 namespace AgentRPA.Api.Controllers;
 
 /// <summary>Task API。创建/导入/入队/重试均在服务端再次校验 Workflow 参数 Schema。</summary>
 [ApiController, Route("api/tasks"), Authorize]
-public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportService spreadsheetImport, PermissionService permissionService, WorkflowPermissionPreflight stepPermissions, WorkflowParameterSchemaValidator parameterValidator) : ControllerBase
+public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportService spreadsheetImport, PermissionService permissionService, WorkflowPermissionPreflight stepPermissions, WorkflowParameterSchemaValidator parameterValidator,
+    NodeAgentConnectionRegistry connections, IHubContext<NodeAgentHub, INodeAgentClient> hub, ILogger<TasksController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -78,6 +83,7 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
         if (file.Length == 0) return BadRequest(new { message = "上传文件为空。" });
         var task = await db.Tasks.Include(x => x.Items).SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct); if (task is null) return NotFound();
+        if (task.Status == DomainTaskStatus.Cancelled) return Conflict(new { message = "任务已取消，不能继续导入。" });
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
@@ -97,6 +103,7 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
     {
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
         var task = await db.Tasks.SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct); if (task is null) return NotFound();
+        if (task.Status == DomainTaskStatus.Cancelled) return Conflict(new { message = "任务已取消，不能重新入队。" });
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
@@ -114,6 +121,7 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
     {
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
         var task = await db.Tasks.Include(x => x.Items).SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct); if (task is null) return NotFound();
+        if (task.Status == DomainTaskStatus.Cancelled) return Conflict(new { message = "任务已取消，不能重试。" });
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
@@ -126,6 +134,35 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
             return Conflict(new { message = "Workflow 含提交、上传、下载、人工操作或高风险步骤；必须先核验外部系统状态，禁止盲目重试。" });
         var count = 0; foreach (var item in task.Items) if (item.CanRetry(task.MaxRetries)) { var errors = ValidateInput(definition.Value, item.InputJson); if (errors.Count > 0) return BadRequest(new { message = $"TaskItem {item.Sequence} 参数校验失败。", errors }); item.Retry(); count++; }
         if (count > 0) task.Queue(); await db.SaveChangesAsync(ct); return Ok(new { retried = count });
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+    {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
+        var task = await db.Tasks.SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct);
+        if (task is null) return NotFound();
+        if (task.Status is DomainTaskStatus.Succeeded or DomainTaskStatus.Failed)
+            return Conflict(new { message = "任务已结束，不能取消。" });
+        var active = await (from execution in db.Executions.AsNoTracking()
+            join item in db.TaskItems.AsNoTracking() on execution.TaskItemId equals item.Id
+            where item.TaskId == id && execution.NodeId != null &&
+                (execution.Status == ExecutionStatus.Dispatched || execution.Status == ExecutionStatus.Running ||
+                 execution.Status == ExecutionStatus.Paused || execution.Status == ExecutionStatus.WaitingForHuman)
+            select new { execution.Id, execution.NodeId }).ToListAsync(ct);
+        if (task.Status != DomainTaskStatus.Cancelled)
+        {
+            task.SetStatus(DomainTaskStatus.Cancelled);
+            await db.SaveChangesAsync(ct);
+        }
+        var signaled = 0;
+        foreach (var execution in active)
+        {
+            if (!connections.TryGet(execution.NodeId!.Value, out var connectionId) || connectionId is null) continue;
+            try { await hub.Clients.Client(connectionId).CancelAsync(execution.Id); signaled++; }
+            catch (Exception ex) { logger.LogWarning(ex, "任务 {TaskId} 取消通知 Execution {ExecutionId} 失败", id, execution.Id); }
+        }
+        return Ok(new { task.Id, status = task.Status.ToString(), activeExecutions = active.Count, signaled });
     }
 
     private async Task<JsonElement?> GetDefinitionAsync(Guid workflowId, int version, CancellationToken ct)

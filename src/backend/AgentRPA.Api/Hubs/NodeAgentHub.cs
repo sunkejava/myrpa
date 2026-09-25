@@ -41,7 +41,9 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         var disabledExecutions = await (from execution in db.Executions.AsNoTracking()
             join version in db.WorkflowVersions.AsNoTracking() on execution.WorkflowVersionId equals version.Id
             join workflow in db.Workflows.AsNoTracking() on version.WorkflowId equals workflow.Id
-            where execution.NodeId == request.NodeId && workflow.Status == WorkflowStatus.Disabled &&
+            join item in db.TaskItems.AsNoTracking() on execution.TaskItemId equals item.Id
+            join task in db.Tasks.AsNoTracking() on item.TaskId equals task.Id
+            where execution.NodeId == request.NodeId && (workflow.Status == WorkflowStatus.Disabled || task.Status == DomainTaskStatus.Cancelled) &&
                 (execution.Status == ExecutionStatus.Dispatched || execution.Status == ExecutionStatus.Running ||
                  execution.Status == ExecutionStatus.Paused || execution.Status == ExecutionStatus.WaitingForHuman)
             select execution.Id).ToListAsync(cancellationToken);
@@ -71,22 +73,29 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if ((started || completed) && (string.IsNullOrWhiteSpace(progress.StepId) || progress.StepId.Length > 128 ||
             !Enum.TryParse<WorkflowStepType>(progress.StepType, true, out _)))
             throw new HubException("Step 事件缺少有效的步骤 ID 或类型。");
-        if (started && await (from version in db.WorkflowVersions.AsNoTracking()
+        var item = await db.TaskItems.SingleOrDefaultAsync(x => x.Id == execution.TaskItemId, cancellationToken);
+        var task = item is null ? null : await db.Tasks.SingleOrDefaultAsync(x => x.Id == item.TaskId, cancellationToken);
+        if (started && (task?.Status == DomainTaskStatus.Cancelled || await (from version in db.WorkflowVersions.AsNoTracking()
             join workflow in db.Workflows.AsNoTracking() on version.WorkflowId equals workflow.Id
             where version.Id == execution.WorkflowVersionId && workflow.Status != WorkflowStatus.Published
-            select workflow.Id).AnyAsync(cancellationToken))
+            select workflow.Id).AnyAsync(cancellationToken)))
         {
             await Clients.Caller.CancelAsync(execution.Id);
-            throw new HubException("Workflow 已停用，禁止开始后续步骤。");
+            throw new HubException("任务已取消或 Workflow 已停用，禁止开始后续步骤。");
         }
         if (!Enum.TryParse<ExecutionStatus>(progress.Status, true, out var status)) status = ExecutionStatus.Running;
         var safeMessage = SensitiveTextSanitizer.Sanitize(progress.Message);
         var terminal = status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.Cancelled;
         var lease = await db.Set<NodeLease>().AsNoTracking().SingleOrDefaultAsync(x => x.ExecutionId == execution.Id && !x.Released, cancellationToken);
         if (lease is not null && !terminal && !await leases.RenewAsync(lease.Id, execution.Id, cancellationToken)) throw new HubException("执行租约已失效，请重新调度任务。");
-        execution.SetStatus(status, status == ExecutionStatus.Failed ? safeMessage : null);
-        var item = await db.TaskItems.SingleOrDefaultAsync(x => x.Id == execution.TaskItemId, cancellationToken);
-        var task = item is null ? null : await db.Tasks.SingleOrDefaultAsync(x => x.Id == item.TaskId, cancellationToken);
+        if (task?.Status == DomainTaskStatus.Cancelled && status == ExecutionStatus.Succeeded)
+        {
+            // The node may have finished an external action before the cancellation reached it.
+            // Require reconciliation instead of treating a late success as permission to run more items.
+            status = ExecutionStatus.Cancelled;
+        }
+        execution.SetStatus(status == ExecutionStatus.Cancelled ? ExecutionStatus.Failed : status,
+            status == ExecutionStatus.Cancelled ? "执行已取消；外部业务状态未确认，请管理员先核验。" : status == ExecutionStatus.Failed ? safeMessage : null);
         if (item is not null)
         {
             if (status == ExecutionStatus.Running) item.Start();
@@ -97,7 +106,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
                 item.Fail(safeMessage);
                 var definition = await db.WorkflowVersions.AsNoTracking().Where(x => x.Id == execution.WorkflowVersionId)
                     .Select(x => x.DefinitionJson).SingleOrDefaultAsync(cancellationToken);
-                if (task is not null && item.CanRetry(task.MaxRetries) && definition is not null && WorkflowRetrySafety.IsSafeToRetry(definition))
+                if (task is not null && task.Status != DomainTaskStatus.Cancelled && item.CanRetry(task.MaxRetries) && definition is not null && WorkflowRetrySafety.IsSafeToRetry(definition))
                 {
                     item.Retry(); task.Queue();
                 }
@@ -105,7 +114,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
             }
             else if (status == ExecutionStatus.Cancelled)
             {
-                item.Fail("执行已取消；若外部提交可能已发生，请管理员先核验。" );
+                item.Fail("执行已取消；外部业务状态未确认，请管理员先核验。");
                 task?.SetStatus(DomainTaskStatus.Failed);
             }
         }

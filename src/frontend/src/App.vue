@@ -93,6 +93,14 @@ async function retryTask(id: string) {
     await loadTasks()
   } catch (e) { error.value = e instanceof Error ? e.message : '重试失败' }
 }
+async function cancelTask(id: string) {
+  if (!window.confirm('确认取消任务？已执行的外部操作可能需要管理员核验。')) return
+  error.value = ''
+  try {
+    await api(`/api/tasks/${id}/cancel`, { method: 'POST', body: '{}' })
+    await loadTasks()
+  } catch (e) { error.value = e instanceof Error ? e.message : '取消任务失败' }
+}
 
 async function makePlan() {
   busy.value = true
@@ -169,7 +177,7 @@ onMounted(() => { if (token.value) void loadTasks() })
           <WorkflowDesigner v-else-if="nav === 'Workflow 管理' && admin" :token="token" />
           <div v-else>
             <div class="panel-title"><span>我的任务</span><button class="action-btn" @click="loadTasks">刷新</button></div>
-            <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" :inspect="id => selectedTaskId = id" />
+            <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" :cancel="cancelTask" :inspect="id => selectedTaskId = id" />
             <TaskDetail v-if="selectedTaskId" :key="selectedTaskId" :task-id="selectedTaskId" :token="token" />
             <p v-if="tasks.length === 0" class="muted empty">暂无任务。可以从 AI 工作台创建任务。</p>
           </div>
