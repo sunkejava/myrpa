@@ -19,7 +19,7 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
     public async Task<IActionResult> List(CancellationToken ct)
     {
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
-        return Ok(await db.Tasks.AsNoTracking().Where(x => x.SubjectId == subjectId).OrderByDescending(x => x.Id)
+        var rows = await db.Tasks.AsNoTracking().Where(x => x.SubjectId == subjectId).OrderByDescending(x => x.Id)
             .Select(x => new
             {
                 x.Id, x.Name, x.WorkflowId, x.WorkflowVersion, x.MaxRetries,
@@ -27,7 +27,13 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
                 Total = db.TaskItems.Count(item => item.TaskId == x.Id),
                 Succeeded = db.TaskItems.Count(item => item.TaskId == x.Id && item.Status == TaskItemStatus.Succeeded),
                 Failed = db.TaskItems.Count(item => item.TaskId == x.Id && item.Status == TaskItemStatus.Failed)
-            }).ToListAsync(ct));
+            }).ToListAsync(ct);
+        var taskIds = rows.Select(x => x.Id).ToArray();
+        var approvals = await db.TaskApprovals.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
+            .Select(x => new { x.TaskId, x.Status }).ToListAsync(ct);
+        var statuses = approvals.ToDictionary(x => x.TaskId, x => x.Status.ToString());
+        return Ok(rows.Select(x => new { x.Id, x.Name, x.WorkflowId, x.WorkflowVersion, x.MaxRetries, x.Status,
+            x.Total, x.Succeeded, x.Failed, ApprovalStatus = statuses.GetValueOrDefault(x.Id) }));
     }
 
     [HttpGet("{id:guid}")]
@@ -36,7 +42,8 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
         var task = await db.Tasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct); if (task is null) return NotFound();
         var items = await db.TaskItems.AsNoTracking().Where(x => x.TaskId == id).OrderBy(x => x.Sequence).Select(x => new { x.Id, x.Sequence, x.Status, x.RetryCount, x.ResultJson }).ToListAsync(ct);
-        return Ok(new { task.Id, task.Name, task.WorkflowId, task.WorkflowVersion, task.MaxRetries, Status = task.Status.ToString(), Items = items });
+        var approval = await db.TaskApprovals.AsNoTracking().Where(x => x.TaskId == id).Select(x => (TaskApprovalStatus?)x.Status).SingleOrDefaultAsync(ct);
+        return Ok(new { task.Id, task.Name, task.WorkflowId, task.WorkflowVersion, task.MaxRetries, Status = task.Status.ToString(), ApprovalStatus = approval?.ToString(), Items = items });
     }
 
     [HttpPost]
@@ -52,7 +59,10 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (errors.Length > 0) return BadRequest(new { message = "任务参数校验失败。", errors });
         var task = new RpaTask(request.WorkflowId, request.WorkflowVersion, request.Name, request.MaxRetries, subjectId);
         foreach (var item in request.Items ?? []) task.AddItem(item);
-        db.Tasks.Add(task); await db.SaveChangesAsync(ct); return Created($"api/tasks/{task.Id}", new { task.Id });
+        db.Tasks.Add(task);
+        TaskApprovalGate.AddPending(db, task, subjectId, definition.Value.GetRawText());
+        await db.SaveChangesAsync(ct);
+        return Created($"api/tasks/{task.Id}", new { task.Id, approvalRequired = WorkflowApprovalPolicy.RequiresApproval(definition.Value.GetRawText()) });
     }
 
     [HttpPost("{id:guid}/import"), RequestSizeLimit(50_000_000)]
@@ -70,7 +80,9 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         foreach (var row in rows) { var json = JsonSerializer.Serialize(row); validationErrors.AddRange(ValidateInput(definition.Value, json)); }
         if (validationErrors.Count > 0) return BadRequest(new { message = "导入数据未通过 Workflow 参数校验。", errors = validationErrors.Take(100) });
         foreach (var row in rows) task.AddItem(JsonSerializer.Serialize(row));
-        if (rows.Count > 0) task.Queue(); await db.SaveChangesAsync(ct); return Ok(new { imported = rows.Count, taskId = task.Id });
+        var approval = await TaskApprovalGate.GetStatusAsync(db, task.Id, definition.Value.GetRawText(), ct);
+        if (rows.Count > 0 && approval is null) task.Queue();
+        await db.SaveChangesAsync(ct); return Ok(new { imported = rows.Count, taskId = task.Id, approvalStatus = approval?.ToString() });
     }
 
     [HttpPost("{id:guid}/queue")]
@@ -81,6 +93,9 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
+        var approval = await TaskApprovalGate.GetStatusAsync(db, id, definition.Value.GetRawText(), ct);
+        if (approval == TaskApprovalStatus.Pending) return StatusCode(StatusCodes.Status428PreconditionRequired, new { message = "任务等待管理员审批。", approvalStatus = "Pending" });
+        if (approval == TaskApprovalStatus.Rejected) return StatusCode(StatusCodes.Status403Forbidden, new { message = "任务审批已拒绝。", approvalStatus = "Rejected" });
         var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
         if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         foreach (var item in await db.TaskItems.AsNoTracking().Where(x => x.TaskId == id && x.Status == TaskItemStatus.Pending).ToListAsync(ct)) { var errors = ValidateInput(definition.Value, item.InputJson); if (errors.Count > 0) return BadRequest(new { message = $"TaskItem {item.Sequence} 参数校验失败。", errors }); }
@@ -95,6 +110,9 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
+        var approval = await TaskApprovalGate.GetStatusAsync(db, id, definition.Value.GetRawText(), ct);
+        if (approval == TaskApprovalStatus.Pending) return StatusCode(StatusCodes.Status428PreconditionRequired, new { message = "任务等待管理员审批。", approvalStatus = "Pending" });
+        if (approval == TaskApprovalStatus.Rejected) return StatusCode(StatusCodes.Status403Forbidden, new { message = "任务审批已拒绝。", approvalStatus = "Rejected" });
         var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
         if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         var count = 0; foreach (var item in task.Items) if (item.CanRetry(task.MaxRetries)) { var errors = ValidateInput(definition.Value, item.InputJson); if (errors.Count > 0) return BadRequest(new { message = $"TaskItem {item.Sequence} 参数校验失败。", errors }); item.Retry(); count++; }

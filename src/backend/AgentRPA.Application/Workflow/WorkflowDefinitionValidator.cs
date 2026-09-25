@@ -17,6 +17,11 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return ["Workflow 根节点必须是 JSON Object。"];
             var errors = new List<string>(parameterSchemaValidator.ValidateDefinition(root));
+            if (root.TryGetProperty("requiresApproval", out var rootApproval) && rootApproval.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                errors.Add("requiresApproval 必须是布尔值。");
+            if (root.TryGetProperty("riskLevel", out var risk) &&
+                (risk.ValueKind != JsonValueKind.String || !new[] { "Low", "Medium", "High", "Critical" }.Contains(risk.GetString(), StringComparer.OrdinalIgnoreCase)))
+                errors.Add("riskLevel 必须是 Low、Medium、High 或 Critical。");
             if (!root.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array) return [.. errors, "Workflow 必须包含 steps 数组。"];
             ValidateSteps(steps, errors, "", 0);
             return errors;
@@ -37,6 +42,8 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             var type = typeElement.GetString() ?? string.Empty;
             if (!Enum.TryParse<WorkflowStepType>(type, true, out var stepType)) { errors.Add($"第 {index} 个 Step 类型不支持：{type}"); continue; }
             if (stepType == WorkflowStepType.Script) errors.Add($"第 {index} 个 Script Step 必须通过受控 Provider 执行。");
+            if (step.TryGetProperty("requiresApproval", out var approval) && approval.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                errors.Add($"{location} 的 requiresApproval 必须是布尔值。");
             if (step.TryGetProperty("timeoutMs", out var timeout) &&
                 (timeout.ValueKind != JsonValueKind.Number || !timeout.TryGetInt32(out var timeoutValue) || timeoutValue is < 100 or > 120_000))
                 errors.Add($"{location} 的 timeoutMs 必须在 100 至 120000 毫秒之间。");

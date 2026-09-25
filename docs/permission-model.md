@@ -142,3 +142,9 @@ Workflow 的每个 Step 默认需要当前城市、业务系统与功能范围�
 ```
 
 任务创建、导入、入队、重试、Agent 提交、手工派发和后台自动派发均复核权限。管理员撤销权限后，未派发的任务不会继续派发；已派发并正在外部网站运行的 Step 尚不能中途撤销，后续需要执行节点的实时授权协议。此机制只覆盖业务动作：Capability、Agent、Tool、租户范围以及显式 Deny 尚需独立建模，不能据此视作完整权限链。
+
+## 任务级高风险审批
+
+已发布 Workflow 的 `requiresApproval: true`、`riskLevel: "High"/"Critical"`，或任一嵌套 Step 的 `requiresApproval: true`、`requiredAction: "Approve"`，会创建持久化的待审批记录。Agent 的风险确认仍是提交前本人确认；需要确认的 Agent 任务也进入服务端待审批状态。管理员调用 `GET /api/task-approvals` 查询审批记录，使用 `POST /api/task-approvals/{id}/decide` 提交 `{ "approved": true }` 或 `{ "approved": false, "reason": "原因" }`。发起人不能审批本人任务，拒绝必须填写原因，审批决定不可重复修改。
+
+获批后任务发起人通过 `POST /api/tasks/{id}/queue` 入队。队列入口、失败重试及后台派发都会重新读取审批状态；缺少审批记录的高风险 Workflow 按待审批处理。任务入队前还需原有的业务权限和 Step 权限检查。当前实现只覆盖任务级审批，不代表每一个高风险 Step 都经过单独的逐步复核；批量审批和运行中的撤销同样尚未实现。

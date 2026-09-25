@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentRPA.Api.Hubs;
+using AgentRPA.Api.Security;
 using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Contracts.Nodes;
@@ -43,6 +44,15 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             if (active) continue;
             var version = await db.WorkflowVersions.SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion, cancellationToken);
             if (version is null || !version.Published) continue;
+
+            // 防止绕过 API 直接入队，审批缺失或未批准的任务永远不会派发。
+            if (await TaskApprovalGate.GetStatusAsync(db, task.Id, version.DefinitionJson, cancellationToken) is { } approval && approval != TaskApprovalStatus.Approved)
+            {
+                task.SetStatus(approval == TaskApprovalStatus.Rejected ? DomainTaskStatus.Failed : DomainTaskStatus.Draft);
+                if (approval == TaskApprovalStatus.Rejected) item.Fail("任务审批已拒绝，禁止派发。");
+                await db.SaveChangesAsync(cancellationToken);
+                continue;
+            }
 
             // 权限可能在任务入队后被撤销，因此真正派发到执行节点前必须再次校验。
             var businessScope = await ResolveBusinessScopeAsync(db, task.WorkflowId, cancellationToken);

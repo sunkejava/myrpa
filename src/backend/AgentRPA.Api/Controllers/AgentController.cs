@@ -1,6 +1,7 @@
 using AgentRPA.Api.Security;
 using AgentRPA.Application.Agent;
 using AgentRPA.Application.Permission;
+using AgentRPA.Application.Workflow;
 using AgentRPA.Domain.Tasks;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
@@ -52,10 +53,13 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
         if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: subjectId);
         task.AddItem(System.Text.Json.JsonSerializer.Serialize(plan.Parameters));
-        task.Queue();
+        var requiresApproval = plan.RequiresConfirmation || WorkflowApprovalPolicy.RequiresApproval(version.DefinitionJson);
+        if (!requiresApproval) task.Queue();
         db.Tasks.Add(task);
+        TaskApprovalGate.AddPending(db, task, subjectId, version.DefinitionJson, plan.RequiresConfirmation);
         await db.SaveChangesAsync(ct);
-        return Accepted($"api/tasks/{task.Id}", new { task.Id, plan, message = "任务已通过权限与确认检查并进入执行队列。" });
+        return Accepted($"api/tasks/{task.Id}", new { task.Id, plan, approvalStatus = requiresApproval ? "Pending" : null,
+            message = requiresApproval ? "任务已创建，等待另一名管理员审批，获批后由任务所有者入队。" : "任务已通过权限检查并进入执行队列。" });
     }
 }
 

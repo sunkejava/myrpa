@@ -30,6 +30,7 @@ public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> option
     public DbSet<WorkflowVersion> WorkflowVersions => Set<WorkflowVersion>();
     public DbSet<WorkflowStep> WorkflowSteps => Set<WorkflowStep>();
     public DbSet<RpaTask> Tasks => Set<RpaTask>();
+    public DbSet<TaskApproval> TaskApprovals => Set<TaskApproval>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<DomainExecution> Executions => Set<DomainExecution>();
     public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
