@@ -78,7 +78,7 @@
 ### Phase 2
 - [ ] Designer 完整 API（创建、版本查询、发布和停用已接入页面；逐 Step 表单与在线调试仍待完成）
 - [ ] Workflow 在线测试 / Step Debug
-- [ ] 完整 Publish / Disable 策略（停用后的新任务与待派发任务已阻断，运行中执行节点的安全停机仍待完成）
+- [ ] 完整 Publish / Disable 策略（停用后阻断新任务及待派发任务，通知在线 NodeAgent 协作取消，StepStarted 再次检查停用状态；取消记录失败供高风险任务核验，CI 覆盖运行中 Wait 后停用且未进入外部提交步骤。跨节点断线与正在进行的外部副作用仍不能保证立即中止，待完成生产级安全停机）。
 - [ ] ExecutionRequirement 全约束覆盖
 
 ### Phase 3

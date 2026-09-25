@@ -197,6 +197,48 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await receiptRow.getByRole('button', { name: '确认核验' }).click()
     await expect(page.getByRole('status')).toContainText('核验结论已记录')
 
+    // Disabling a workflow stops an in-flight node before it can reach the external submit step.
+    const stoppedDefinition = JSON.parse(definition) as { steps: Array<{ id: string, type: string, config: Record<string, unknown>, timeoutMs?: number }> }
+    stoppedDefinition.steps.unshift({ id: 'pause-before-submit', type: 'Wait', config: { milliseconds: 20_000 }, timeoutMs: 25_000 })
+    const stoppedWorkflow = await post('/api/workflows', { businessFunctionId: businessFunction.id, name: '停用运行中流程', description: 'NodeAgent 取消验收' })
+    const stoppedVersion = await post(`/api/workflows/${stoppedWorkflow.id}/versions`, { definitionJson: JSON.stringify(stoppedDefinition) })
+    await post(`/api/workflows/${stoppedWorkflow.id}/versions/${stoppedVersion.version}/publish`, {})
+    const stoppedTask = await post('/api/tasks', { workflowId: stoppedWorkflow.id, workflowVersion: stoppedVersion.version,
+      name: '运行中停用', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '未提交测试', idNumber: '110105194912310046', submissionId: randomUUID() })] }, operatorHeaders)
+    const stoppedApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
+    const stoppedApproval = stoppedApprovals.find(entry => entry.taskId === stoppedTask.id)
+    expect(stoppedApproval).toBeDefined()
+    await post(`/api/task-approvals/${stoppedApproval!.id}/decide`, { approved: true })
+    await post(`/api/tasks/${stoppedTask.id}/queue`, {}, operatorHeaders)
+    let stoppedExecutionId: string | undefined
+    let startedWait = false
+    for (let attempt = 0; attempt < 55; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${stoppedTask.id}`, { headers: operatorHeaders })).json() as
+        { items: Array<{ executions: Array<{ id: string }> }> }
+      stoppedExecutionId = detail.items[0].executions[0]?.id
+      if (stoppedExecutionId) {
+        const checkpoints = await (await request.get(`${api}/api/executions/${stoppedExecutionId}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string, eventType: string }>
+        if (checkpoints.some(x => x.stepId === 'pause-before-submit' && x.eventType === 'StepStarted')) { startedWait = true; break }
+      }
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(stoppedExecutionId).toBeDefined()
+    expect(startedWait, `NodeAgent 日志:\n${output}`).toBe(true)
+    const disableResult = await post(`/api/workflows/${stoppedWorkflow.id}/disable`, {}) as { activeExecutions: number, signaled: number }
+    expect(disableResult.activeExecutions).toBe(1)
+    expect(disableResult.signaled).toBe(1)
+    let stoppedStatus: string | undefined
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${stoppedTask.id}`, { headers: operatorHeaders })).json() as { status: string }
+      stoppedStatus = detail.status
+      if (stoppedStatus === 'Failed') break
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(stoppedStatus, `NodeAgent 日志:\n${output}`).toBe('Failed')
+    const stopCheckpoints = await (await request.get(`${api}/api/executions/${stoppedExecutionId}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string, eventType: string }>
+    expect(stopCheckpoints.some(x => x.stepId === 'submit')).toBe(false)
+    expect(await (await request.get(`${api}/mock/qd-social-security/employees/status?idNumber=110105194912310046`)).json()).toMatchObject({ active: false })
+
     // A broken navigation fails before any form is submitted. After checking that this person
     // is absent, the reviewer permits one explicit retry; the same broken definition fails again.
     const brokenDefinition = JSON.parse(definition) as { steps: Array<{ id: string, config: { url?: string } }> }

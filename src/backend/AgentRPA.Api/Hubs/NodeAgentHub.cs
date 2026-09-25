@@ -61,6 +61,14 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if ((started || completed) && (string.IsNullOrWhiteSpace(progress.StepId) || progress.StepId.Length > 128 ||
             !Enum.TryParse<WorkflowStepType>(progress.StepType, true, out _)))
             throw new HubException("Step 事件缺少有效的步骤 ID 或类型。");
+        if (started && await (from version in db.WorkflowVersions.AsNoTracking()
+            join workflow in db.Workflows.AsNoTracking() on version.WorkflowId equals workflow.Id
+            where version.Id == execution.WorkflowVersionId && workflow.Status != WorkflowStatus.Published
+            select workflow.Id).AnyAsync(cancellationToken))
+        {
+            await Clients.Caller.CancelAsync(execution.Id);
+            throw new HubException("Workflow 已停用，禁止开始后续步骤。");
+        }
         if (!Enum.TryParse<ExecutionStatus>(progress.Status, true, out var status)) status = ExecutionStatus.Running;
         var safeMessage = SensitiveTextSanitizer.Sanitize(progress.Message);
         var terminal = status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.Cancelled;
@@ -85,7 +93,11 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
                 }
                 else if (task is not null) task.SetStatus(DomainTaskStatus.Failed);
             }
-            else if (status == ExecutionStatus.Cancelled) item.Fail(safeMessage);
+            else if (status == ExecutionStatus.Cancelled)
+            {
+                item.Fail("执行已取消；若外部提交可能已发生，请管理员先核验。" );
+                task?.SetStatus(DomainTaskStatus.Failed);
+            }
         }
         if (status == ExecutionStatus.Succeeded && task is not null)
         {

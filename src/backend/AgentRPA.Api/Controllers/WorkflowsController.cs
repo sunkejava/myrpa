@@ -2,12 +2,18 @@ using Microsoft.AspNetCore.Authorization;
 using AgentRPA.Application.Workflow;
 using AgentRPA.Domain.Workflow;
 using AgentRPA.Infrastructure.Persistence;
+using AgentRPA.Api.Hubs;
+using AgentRPA.Contracts.Nodes;
+using AgentRPA.Domain.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 namespace AgentRPA.Api.Controllers;
 
 [ApiController, Route("api/workflows"), Authorize]
-public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinitionValidator validator) : ControllerBase
+public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinitionValidator validator,
+    NodeAgentConnectionRegistry connections, IHubContext<NodeAgentHub, INodeAgentClient> hub,
+    ILogger<WorkflowsController> logger) : ControllerBase
 {
     [HttpGet] public async Task<IActionResult> List(CancellationToken ct) => Ok(await db.Workflows.AsNoTracking().OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.BusinessFunctionId, Status = x.Status.ToString() }).ToListAsync(ct));
     [Authorize(Roles = "Admin"), HttpPost] public async Task<IActionResult> Create(CreateWorkflowRequest request, CancellationToken ct)
@@ -59,7 +65,23 @@ public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinition
         var workflow = await db.Workflows.FindAsync([id], ct);
         if (workflow is null) return NotFound();
         workflow.Disable(); await db.SaveChangesAsync(ct);
-        return Ok(new { workflow.Id, status = workflow.Status.ToString() });
+        // Stop active nodes after the persisted state change. If a node is offline, the StepStarted
+        // gate in NodeAgentHub will stop its next step when it reconnects.
+        var active = await (from execution in db.Executions.AsNoTracking()
+            join item in db.TaskItems.AsNoTracking() on execution.TaskItemId equals item.Id
+            join task in db.Tasks.AsNoTracking() on item.TaskId equals task.Id
+            where task.WorkflowId == id && execution.NodeId != null &&
+                (execution.Status == ExecutionStatus.Dispatched || execution.Status == ExecutionStatus.Running ||
+                 execution.Status == ExecutionStatus.Paused || execution.Status == ExecutionStatus.WaitingForHuman)
+            select new { execution.Id, execution.NodeId }).ToListAsync(ct);
+        var signaled = 0;
+        foreach (var execution in active)
+        {
+            if (!connections.TryGet(execution.NodeId!.Value, out var connectionId) || connectionId is null) continue;
+            try { await hub.Clients.Client(connectionId).CancelAsync(execution.Id); signaled++; }
+            catch (Exception ex) { logger.LogWarning(ex, "Workflow {WorkflowId} 停用后通知 Execution {ExecutionId} 取消失败", id, execution.Id); }
+        }
+        return Ok(new { workflow.Id, status = workflow.Status.ToString(), activeExecutions = active.Count, signaled });
     }
 }
 public sealed record CreateWorkflowRequest(Guid BusinessFunctionId, string Name, string? Description);
