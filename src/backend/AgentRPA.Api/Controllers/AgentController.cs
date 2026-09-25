@@ -11,7 +11,7 @@ namespace AgentRPA.Api.Controllers;
 
 /// <summary>自然语言 Agent 控制器：规划、权限预检查以及经确认后的 Task 创建。</summary>
 [ApiController, Route("api/agent"), Authorize]
-public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, AgentRpaDbContext db) : ControllerBase
+public sealed class AgentController(AgentPlanningService planner, PermissionService permissionService, WorkflowPermissionPreflight stepPermissions, AgentRpaDbContext db) : ControllerBase
 {
     [HttpPost("plan")]
     public async Task<IActionResult> Plan(AgentPlanRequest request, CancellationToken ct)
@@ -48,6 +48,8 @@ public sealed class AgentController(AgentPlanningService planner, PermissionServ
             return UnprocessableEntity(new { message = "Workflow 已失效或与业务功能不匹配。" });
         var version = await db.WorkflowVersions.AsNoTracking().SingleOrDefaultAsync(x => x.WorkflowId == workflowId && x.Version == plan.WorkflowVersion.Value && x.Published, ct);
         if (version is null) return UnprocessableEntity(new { message = "WorkflowVersion 未发布或已失效。" });
+        var stepsAllowed = await stepPermissions.CheckAsync(subjectId, plan.CityId, plan.SystemId, plan.FunctionId, version.DefinitionJson, ct);
+        if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         var task = new RpaTask(workflowId, version.Version, $"Agent: {plan.Action}", subjectId: subjectId);
         task.AddItem(System.Text.Json.JsonSerializer.Serialize(plan.Parameters));
         task.Queue();

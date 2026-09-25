@@ -17,6 +17,11 @@ public sealed class WorkflowDefinitionValidatorTests
         Assert.Contains(errors, x => x.Contains("type", StringComparison.OrdinalIgnoreCase)); Assert.Contains(errors, x => x.Contains("required", StringComparison.OrdinalIgnoreCase));
     }
     [Fact] public void Valid_parameter_schema_is_accepted() => Assert.Empty(_validator.Validate("{\"parameters\":{\"employeeId\":{\"type\":\"string\",\"required\":true,\"sensitive\":false}},\"steps\":[{\"type\":\"End\"}]}"));
+    [Fact] public void Unsupported_nested_action_cannot_be_published()
+    {
+        const string definition = """{"steps":[{"type":"Condition","config":{"then":[{"type":"Click","requiredAction":"SuperAdmin","config":{"selector":"#submit"}}]}}]}""";
+        Assert.Contains(_validator.Validate(definition), x => x.Contains("requiredAction", StringComparison.Ordinal));
+    }
     [Fact] public void Parameter_values_are_checked_against_schema()
     {
         var schema = JsonDocument.Parse("{\"parameters\":{\"employeeId\":{\"type\":\"string\",\"required\":true},\"count\":{\"type\":\"integer\",\"required\":true}}}").RootElement;

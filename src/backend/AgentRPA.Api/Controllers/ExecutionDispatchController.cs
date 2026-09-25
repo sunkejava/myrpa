@@ -17,6 +17,7 @@ namespace AgentRPA.Api.Controllers;
 public sealed class ExecutionDispatchController(
     AgentRpaDbContext db,
     PermissionService permissionService,
+    WorkflowPermissionPreflight stepPermissions,
     IExecutionScheduler scheduler,
     IExecutionLeaseService leaseService,
     NodeAgentConnectionRegistry connections,
@@ -61,6 +62,9 @@ public sealed class ExecutionDispatchController(
             .SingleOrDefaultAsync(x => x.WorkflowId == task.WorkflowId && x.Version == task.WorkflowVersion && x.Published, ct);
         if (v is null)
             return Conflict(new { message = "任务引用的工作流版本未发布。" });
+        var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId,
+            scope.Value.FunctionId, v.DefinitionJson, ct);
+        if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
 
         // 手工指定节点只是“候选范围收窄”，仍由统一 Scheduler 执行 OS、能力、NodePool、硬件与 WorkerSlot 租约校验。
         var workflowRequirement = WorkflowExecutionRequirementParser.Parse(v.DefinitionJson)

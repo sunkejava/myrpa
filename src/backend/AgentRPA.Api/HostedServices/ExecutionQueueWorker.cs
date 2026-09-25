@@ -30,6 +30,7 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
         var db = scope.ServiceProvider.GetRequiredService<AgentRpaDbContext>();
         var scheduler = scope.ServiceProvider.GetRequiredService<IExecutionScheduler>();
         var permissionService = scope.ServiceProvider.GetRequiredService<PermissionService>();
+        var stepPermissions = scope.ServiceProvider.GetRequiredService<WorkflowPermissionPreflight>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
         var items = await db.TaskItems.Where(x => x.Status == TaskItemStatus.Pending).OrderBy(x => x.Sequence).Take(20).ToListAsync(cancellationToken);
 
@@ -57,6 +58,15 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
             {
                 task.SetStatus(DomainTaskStatus.Failed);
                 item.Fail("当前用户执行权限已失效，任务拒绝派发。");
+                await db.SaveChangesAsync(cancellationToken);
+                continue;
+            }
+            var stepsAllowed = await stepPermissions.CheckAsync(task.SubjectId ?? Guid.Empty, businessScope.Value.CityId,
+                businessScope.Value.SystemId, businessScope.Value.FunctionId, version.DefinitionJson, cancellationToken);
+            if (!stepsAllowed.Allowed)
+            {
+                task.SetStatus(DomainTaskStatus.Failed);
+                item.Fail($"Workflow Step 权限已失效：{stepsAllowed.Reason}");
                 await db.SaveChangesAsync(cancellationToken);
                 continue;
             }

@@ -13,7 +13,7 @@ namespace AgentRPA.Api.Controllers;
 
 /// <summary>Task API。创建/导入/入队/重试均在服务端再次校验 Workflow 参数 Schema。</summary>
 [ApiController, Route("api/tasks"), Authorize]
-public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportService spreadsheetImport, PermissionService permissionService, WorkflowParameterSchemaValidator parameterValidator) : ControllerBase
+public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportService spreadsheetImport, PermissionService permissionService, WorkflowPermissionPreflight stepPermissions, WorkflowParameterSchemaValidator parameterValidator) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -46,6 +46,8 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         var scope = await ResolveWorkflowScopeAsync(request.WorkflowId, request.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 或已发布版本不存在。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(request.WorkflowId, request.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
+        var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
+        if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         var errors = request.Items is null ? [] : request.Items.SelectMany(item => ValidateInput(definition.Value, item)).ToArray();
         if (errors.Length > 0) return BadRequest(new { message = "任务参数校验失败。", errors });
         var task = new RpaTask(request.WorkflowId, request.WorkflowVersion, request.Name, request.MaxRetries, subjectId);
@@ -60,6 +62,9 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (file.Length == 0) return BadRequest(new { message = "上传文件为空。" });
         var task = await db.Tasks.Include(x => x.Items).SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct); if (task is null) return NotFound();
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
+        var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
+        var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
+        if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         await using var stream = file.OpenReadStream(); var rows = await spreadsheetImport.ReadAsync(stream, file.FileName, ct);
         var validationErrors = new List<string>();
         foreach (var row in rows) { var json = JsonSerializer.Serialize(row); validationErrors.AddRange(ValidateInput(definition.Value, json)); }
@@ -76,6 +81,8 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
+        var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
+        if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         foreach (var item in await db.TaskItems.AsNoTracking().Where(x => x.TaskId == id && x.Status == TaskItemStatus.Pending).ToListAsync(ct)) { var errors = ValidateInput(definition.Value, item.InputJson); if (errors.Count > 0) return BadRequest(new { message = $"TaskItem {item.Sequence} 参数校验失败。", errors }); }
         task.Queue(); await db.SaveChangesAsync(ct); return Ok();
     }
@@ -88,6 +95,8 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         var scope = await ResolveWorkflowScopeAsync(task.WorkflowId, task.WorkflowVersion, ct); if (scope is null) return UnprocessableEntity(new { message = "Workflow 已失效。" });
         var permission = await permissionService.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, scope.Value.Action, ct); if (!permission.Allowed) return StatusCode(StatusCodes.Status403Forbidden, permission);
         var definition = await GetDefinitionAsync(task.WorkflowId, task.WorkflowVersion, ct); if (definition is null) return UnprocessableEntity(new { message = "Workflow 定义不存在。" });
+        var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
+        if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
         var count = 0; foreach (var item in task.Items) if (item.CanRetry(task.MaxRetries)) { var errors = ValidateInput(definition.Value, item.InputJson); if (errors.Count > 0) return BadRequest(new { message = $"TaskItem {item.Sequence} 参数校验失败。", errors }); item.Retry(); count++; }
         if (count > 0) task.Queue(); await db.SaveChangesAsync(ct); return Ok(new { retried = count });
     }
