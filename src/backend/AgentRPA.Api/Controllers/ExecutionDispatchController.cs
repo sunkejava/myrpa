@@ -65,9 +65,10 @@ public sealed class ExecutionDispatchController(
         // 手工指定节点只是“候选范围收窄”，仍由统一 Scheduler 执行 OS、能力、NodePool、硬件与 WorkerSlot 租约校验。
         var workflowRequirement = WorkflowExecutionRequirementParser.Parse(v.DefinitionJson)
             ?? new ExecutionRequirement(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), new HashSet<string>());
-        var requiredNodes = workflowRequirement.RequiredNodeIds is null
-            ? new HashSet<Guid> { r.NodeId }
-            : new HashSet<Guid>(workflowRequirement.RequiredNodeIds) { r.NodeId };
+        // 手动派发只能收窄 Workflow 允许的节点范围，不能通过并集加入不允许的节点。
+        if (workflowRequirement.RequiredNodeIds is { Count: > 0 } allowedNodes && !allowedNodes.Contains(r.NodeId))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "指定节点不在 Workflow 允许的节点范围内。" });
+        var requiredNodes = new HashSet<Guid> { r.NodeId };
         var requirement = workflowRequirement with { RequiredNodeIds = requiredNodes };
 
         var dispatchKey = $"{item.Id:N}:{item.RetryCount}";

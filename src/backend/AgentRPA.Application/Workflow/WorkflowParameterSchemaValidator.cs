@@ -92,8 +92,17 @@ public sealed class WorkflowParameterSchemaValidator
         _ => false
     };
 
-    private static bool TryInt(JsonElement root, string name, out int value) => root.TryGetProperty(name, out var e) && e.TryGetInt32(out value) && value >= 0;
-    private static bool TryDecimal(JsonElement root, string name, out decimal value) => root.TryGetProperty(name, out var e) && e.TryGetDecimal(out value);
+    private static bool TryInt(JsonElement root, string name, out int value)
+    {
+        value = default;
+        return root.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out value) && value >= 0;
+    }
+
+    private static bool TryDecimal(JsonElement root, string name, out decimal value)
+    {
+        value = default;
+        return root.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.Number && e.TryGetDecimal(out value);
+    }
     private static bool TryDecimal(object value, out decimal result)
     {
         switch (value) { case decimal d: result = d; return true; case double d when !double.IsNaN(d) && !double.IsInfinity(d): result = (decimal)d; return true; case float f when !float.IsNaN(f) && !float.IsInfinity(f): result = (decimal)f; return true; case byte b: result = b; return true; case sbyte b: result = b; return true; case short b: result = b; return true; case ushort b: result = b; return true; case int b: result = b; return true; case uint b: result = b; return true; case long b: result = b; return true; case ulong b: result = b; return true; default: result = 0; return false; }
