@@ -1,6 +1,6 @@
 # AgentRPA 发布包部署
 
-GitHub Actions 的 **Release Packages** 工作流为 `linux-x64` 和 `win-x64` 生成同结构的自包含压缩包：`api/`、`node-agent/`、`frontend/`。推送 `v` 开头的版本标签且两种平台打包成功后，压缩包会附到 GitHub Release。工作流也支持手动运行；提交此文档或工作流会自动打包供验收。当前默认数据存储为 SQLite，多个 API 实例和生产级高可用尚未验收。
+GitHub Actions 的 **Release Packages** 工作流先运行后端测试，再为 `linux-x64` 和 `win-x64` 生成同结构的自包含压缩包：`api/`、`node-agent/`、`frontend/`。推送 `v` 开头的版本标签且测试、两种平台打包都成功后，压缩包会附到 GitHub Release。工作流也支持手动运行；提交此文档或工作流会自动打包供验收。当前默认数据存储为 SQLite，多个 API 实例和生产级高可用尚未验收。
 
 ## 启动 API
 

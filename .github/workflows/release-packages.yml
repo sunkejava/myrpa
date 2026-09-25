@@ -13,7 +13,18 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run backend tests before packaging
+        run: dotnet test tests/AgentRPA.Tests/AgentRPA.Tests.csproj --configuration Release
+
   package:
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
