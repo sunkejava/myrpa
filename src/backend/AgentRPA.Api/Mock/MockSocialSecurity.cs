@@ -13,6 +13,7 @@ public static class MockSocialSecurity
 {
     private const string Root = "/mock/qd-social-security";
     private const string SessionCookie = "qd-social-session";
+    // Restart invalidates login sessions; employee data and completed receipts live in the database.
     private static readonly ConcurrentDictionary<string, DateTimeOffset> Sessions = new();
 
     public static void MapMockSocialSecurity(this WebApplication app)
