@@ -27,8 +27,9 @@ public sealed class NodeAgentConnectionRegistry
 
 public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeRegistryService nodeRegistry, IExecutionLeaseService leases, AgentRpaDbContext db) : Hub<INodeAgentClient>
 {
-    public async Task Connect(NodeAgentConnectRequest request, CancellationToken cancellationToken)
+    public async Task Connect(NodeAgentConnectRequest request)
     {
+        var cancellationToken = Context.ConnectionAborted;
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == request.NodeId, cancellationToken);
         if (node is null) throw new HubException("Node 不存在。");
         if (!string.Equals(node.AgentKey, request.AgentKey, StringComparison.Ordinal)) throw new HubException("Node 身份认证失败。");
@@ -39,15 +40,17 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         foreach (var executionId in resumableExecutionIds) await Clients.Caller.ResumeAsync(executionId);
     }
 
-    public async Task<NodeHeartbeatAck> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
+    public async Task<NodeHeartbeatAck> Heartbeat(NodeHeartbeatRequest request)
     {
+        var cancellationToken = Context.ConnectionAborted;
         if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != request.NodeId) throw new HubException("Node 身份校验失败。");
         if (!await nodeRegistry.HeartbeatAsync(request.NodeId, request.AgentVersion, DateTimeOffset.UtcNow, cancellationToken)) throw new HubException("Node 不存在或已被禁用。");
         return new NodeHeartbeatAck(request.NodeId, DateTimeOffset.UtcNow, request.Status);
     }
 
-    public async Task ReportProgress(ExecutionProgress progress, CancellationToken cancellationToken)
+    public async Task ReportProgress(ExecutionProgress progress)
     {
+        var cancellationToken = Context.ConnectionAborted;
         if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != progress.NodeId) throw new HubException("Node 身份校验失败。");
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == progress.ExecutionId, cancellationToken); if (execution is null) throw new HubException("Execution 不存在。");
         if (execution.NodeId != progress.NodeId || execution.WorkerSlotId != progress.WorkerSlotId) throw new HubException("Execution 与 Node/WorkerSlot 不匹配。");
@@ -99,8 +102,9 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
     }
 
-    public async Task ReportArtifact(ExecutionArtifactReport report, CancellationToken cancellationToken)
+    public async Task ReportArtifact(ExecutionArtifactReport report)
     {
+        var cancellationToken = Context.ConnectionAborted;
         if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != report.NodeId) throw new HubException("Node 身份校验失败。");
         if (report.ExecutionId == Guid.Empty || report.WorkerSlotId == Guid.Empty || string.IsNullOrWhiteSpace(report.FileName) || report.FileName.Length > 260 || string.IsNullOrWhiteSpace(report.StorageKey) || report.StorageKey.Length > 1024 || report.Size < 0 || report.Size > 10L * 1024 * 1024 * 1024) throw new HubException("产物元数据无效。");
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == report.ExecutionId, cancellationToken);
