@@ -1,0 +1,3 @@
+# Test review
+
+The city/system/function construction tests assert normalized codes, exact parent IDs, invalid inputs and disabled state. PermissionServiceTests asserts that an invalid resource scope refuses a grant even when both direct and role policy fixtures return true. GitHub Actions backend-tests passed for 2fdaaa9d59cc253bf33165f9c6bde2fdc48a54bd; backend-build (including startup/login smoke) passed for the same commit. A wider integration smoke check for non-admin city creation, exact Qingdao permission, Jinan isolation and mismatched city/system IDs is being added. Full per-step authorization, agent/tool boundaries and approval workflows remain unimplemented and untested.
