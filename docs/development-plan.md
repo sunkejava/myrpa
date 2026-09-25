@@ -4,6 +4,26 @@
 
 ## 总体进度
 
+> 2026-09-25 复核：表中的绿色标记仅代表原仓库该阶段已有部分基础能力，并非整阶段验收通过。下方未完成项与新增的验收缺口必须继续完成。
+
+## 本轮已验证的纵向能力
+
+- [x] 原项目 .NET 10 Solution 在 GitHub Actions Release 构建通过；现有后端测试及 Vue 构建通过。
+- [x] API 在全新 SQLite 数据库执行 Migration 后启动，管理员登录、匿名接口拦截通过 CI 冒烟测试。
+- [x] 城市、业务系统、业务功能可由管理员创建；停用的城市/系统不进入 Agent 资源目录及权限检查。
+- [x] 普通用户创建、城市资源精确授权，以及跨城市/错误系统 ID 拒绝有可执行 CI 冒烟脚本。
+- [x] 前端接入真实登录、自然语言任务规划、任务列表和城市/系统/功能管理。
+
+## 核心验收缺口
+
+- [ ] Country → Province → City → District 完整 Region 树与租户资源边界。
+- [ ] Capability 与 Agent SDK/注册路由；执行前逐 Step 权限、Tool 权限和 Deny 优先规则。
+- [ ] 高风险操作服务端审批门禁，含任务、步骤和批量审批。
+- [ ] 青岛 Mock 社保增减员全链路及可替换 Playwright Adapter。
+- [ ] 高风险提交幂等、外部状态核验、Checkpoint 恢复与自动恢复测试。
+- [ ] 真实浏览器端测试、手机布局验证、100 任务/1000 子任务压力测试。
+- [ ] Docker/PostgreSQL/Redis/MAF、可观测性与生产部署验收。
+
 | 阶段 | 主题 | 状态 |
 |---|---|---|
 | Phase 0 | 基础工程与统一构建 | 🟢 JWT、数据库用户/角色/登录、PBKDF2、EF Design-time、InitialCreate、自动 Migration、Migration-first 初始化、CI Build/Test 已落地；发布流水线仍待完善 |
