@@ -18,12 +18,23 @@ public sealed class PermissionPoliciesController(PermissionManagementService ser
         try
         {
             var policy = await service.GrantAsync(request.SubjectId, request.CityId, request.SystemId, request.FunctionId, request.Action, ct);
-            return Ok(new { policy.Id, policy.SubjectId, policy.CityId, policy.SystemId, policy.FunctionId, policy.Action, policy.Enabled });
+            return Ok(new { policy.Id, policy.SubjectId, policy.CityId, policy.SystemId, policy.FunctionId, policy.Action, policy.Enabled, policy.Denied });
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("deny")]
+    public async Task<IActionResult> Deny(GrantPermissionRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var policy = await service.DenyAsync(request.SubjectId, request.CityId, request.SystemId, request.FunctionId, request.Action, ct);
+            return Ok(new { policy.Id, policy.SubjectId, policy.CityId, policy.SystemId, policy.FunctionId, policy.Action, policy.Enabled, policy.Denied });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPost("{id:guid}/revoke")]

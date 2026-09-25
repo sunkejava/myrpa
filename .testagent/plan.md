@@ -13,3 +13,6 @@
 - e2e/workbench.spec.ts login/resource/plan/task: launch .NET API with an empty SQLite DB, create scoped business resources and a published Workflow through authenticated API, grant Execute, then drive the visible workbench and assert task listing.
 - e2e/workbench.spec.ts theme/mobile: verify theme persistence after reload and no root horizontal overflow on Pixel 7 viewport.
 - CI: install Chromium, run tests after frontend build, upload failed traces.
+
+- PermissionServiceTests.Explicit_deny_takes_precedence_over_direct_and_role_allow: deny short-circuits grant lookups.
+- API smoke: grant → deny → check 403 → regrant → check 200 against real SQLite and migrated Denied field.

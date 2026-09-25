@@ -53,6 +53,18 @@ public sealed class PermissionServiceTests
     }
 
     [Fact]
+    public async Task Explicit_deny_takes_precedence_over_direct_and_role_allow()
+    {
+        var repository = new FakeAccessPolicyRepository { DenyResult = true, DirectResult = true, RoleResult = true };
+        var result = await new PermissionService(repository).CheckAsync(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Execute", CancellationToken.None);
+
+        Assert.False(result.Allowed);
+        Assert.Contains("显式拒绝", result.Reason);
+        Assert.Equal(2, repository.LookupCount);
+    }
+
+    [Fact]
     public async Task Disabled_or_mismatched_resource_scope_denies_even_existing_grant()
     {
         var repository = new FakeAccessPolicyRepository { ValidScope = false, DirectResult = true, RoleResult = true };
@@ -87,8 +99,15 @@ public sealed class PermissionServiceTests
         }
         public bool DirectResult { get; init; }
         public bool RoleResult { get; init; }
+        public bool DenyResult { get; init; }
         public int LookupCount { get; private set; }
         public string? LastAction { get; private set; }
+
+        public Task<bool> IsDeniedAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
+        {
+            LookupCount++;
+            return Task.FromResult(DenyResult);
+        }
 
         public Task<bool> ExistsAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
         {

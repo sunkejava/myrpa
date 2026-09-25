@@ -9,11 +9,17 @@ public sealed class PermissionManagementService(IAccessPolicyRepository reposito
         => repository.ListAsync(subjectId, cancellationToken);
 
     public async Task<AccessPolicy> GrantAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
+        => await SetPolicyAsync(subjectId, cityId, systemId, functionId, action, denied: false, cancellationToken: cancellationToken);
+
+    public async Task<AccessPolicy> DenyAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
+        => await SetPolicyAsync(subjectId, cityId, systemId, functionId, action, denied: true, cancellationToken: cancellationToken);
+
+    private async Task<AccessPolicy> SetPolicyAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, bool denied, CancellationToken cancellationToken)
     {
         Validate(subjectId, cityId, systemId, functionId, action);
         if (!await repository.IsValidScopeAsync(subjectId, cityId, systemId, functionId, cancellationToken))
             throw new ArgumentException("用户或城市、系统、功能之间的资源关系无效。");
-        return await repository.GrantAsync(new AccessPolicy(subjectId, cityId, systemId, functionId, action.Trim()), cancellationToken);
+        return await repository.GrantAsync(new AccessPolicy(subjectId, cityId, systemId, functionId, action.Trim(), denied), cancellationToken);
     }
 
     public Task<bool> RevokeAsync(Guid policyId, CancellationToken cancellationToken)

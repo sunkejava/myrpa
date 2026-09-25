@@ -7,13 +7,14 @@ public sealed class AccessPolicy : Entity
 {
     private AccessPolicy() { }
 
-    public AccessPolicy(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action)
+    public AccessPolicy(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, bool denied = false)
     {
         SubjectId = subjectId;
         CityId = cityId;
         SystemId = systemId;
         FunctionId = functionId;
         Action = action;
+        Denied = denied;
     }
 
     public Guid SubjectId { get; private set; }
@@ -22,8 +23,10 @@ public sealed class AccessPolicy : Entity
     public Guid FunctionId { get; private set; }
     public string Action { get; private set; } = string.Empty;
     public bool Enabled { get; private set; } = true;
+    public bool Denied { get; private set; }
 
     public void SetEnabled(bool enabled) => Enabled = enabled;
+    public void SetDenied(bool denied) => Denied = denied;
 }
 
 /// <summary>权限检查结果，明确记录拒绝原因，便于 API 和审计层复用。</summary>

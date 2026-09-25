@@ -99,6 +99,12 @@ jobs:
           post('/api/permission-policies', {'subjectId': user['id'], 'cityId': qd['id'],
               'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, token)
           assert check(qd, qd_system, qd_function) == 200
+          post('/api/permission-policies/deny', {'subjectId': user['id'], 'cityId': qd['id'],
+              'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, token)
+          assert check(qd, qd_system, qd_function) == 403
+          post('/api/permission-policies', {'subjectId': user['id'], 'cityId': qd['id'],
+              'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, token)
+          assert check(qd, qd_system, qd_function) == 200
           assert check(jn, jn_system, jn_function) == 403
           assert check(qd, jn_system, jn_function) == 403
           def publish_workflow(function, definition=None):

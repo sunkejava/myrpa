@@ -56,6 +56,7 @@ public sealed class WorkflowPermissionPreflightTests
     {
         public List<string> CheckedActions { get; } = [];
         public Task<bool> IsValidScopeAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, CancellationToken ct) => Task.FromResult(true);
+        public Task<bool> IsDeniedAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken ct) => Task.FromResult(false);
         public Task<bool> ExistsAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken ct)
         {
             CheckedActions.Add(action);

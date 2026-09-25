@@ -57,9 +57,10 @@ public sealed class UserRole
 public sealed class RoleAccessPolicy : Entity
 {
     private RoleAccessPolicy() { }
-    public RoleAccessPolicy(Guid roleId, Guid cityId, Guid systemId, Guid functionId, string action)
+    public RoleAccessPolicy(Guid roleId, Guid cityId, Guid systemId, Guid functionId, string action, bool denied = false)
     {
         RoleId = roleId; CityId = cityId; SystemId = systemId; FunctionId = functionId; Action = action.Trim();
+        Denied = denied;
     }
     public Guid RoleId { get; private set; }
     public Guid CityId { get; private set; }
@@ -67,5 +68,7 @@ public sealed class RoleAccessPolicy : Entity
     public Guid FunctionId { get; private set; }
     public string Action { get; private set; } = string.Empty;
     public bool Enabled { get; private set; } = true;
+    public bool Denied { get; private set; }
     public void SetEnabled(bool enabled) => Enabled = enabled;
+    public void SetDenied(bool denied) => Denied = denied;
 }

@@ -8,6 +8,18 @@ namespace AgentRPA.Infrastructure.Permission;
 /// <summary>EF Core 权限策略查询与管理实现。</summary>
 public sealed class EfAccessPolicyRepository(AgentRpaDbContext db) : IAccessPolicyRepository
 {
+    public async Task<bool> IsDeniedAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
+    {
+        if (await db.AccessPolicies.AsNoTracking().AnyAsync(x => x.Enabled && x.Denied && x.SubjectId == subjectId &&
+            x.CityId == cityId && x.SystemId == systemId && x.FunctionId == functionId && x.Action == action, cancellationToken)) return true;
+        return await (from userRole in db.UserRoles.AsNoTracking()
+            join role in db.Roles.AsNoTracking() on userRole.RoleId equals role.Id
+            join policy in db.RoleAccessPolicies.AsNoTracking() on role.Id equals policy.RoleId
+            where userRole.UserAccountId == subjectId && role.Enabled && policy.Enabled && policy.Denied &&
+                  policy.CityId == cityId && policy.SystemId == systemId && policy.FunctionId == functionId && policy.Action == action
+            select policy.Id).AnyAsync(cancellationToken);
+    }
+
     public async Task<bool> IsValidScopeAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, CancellationToken cancellationToken) =>
         await db.UserAccounts.AsNoTracking().AnyAsync(x => x.Id == subjectId && x.Enabled, cancellationToken) &&
         await db.Cities.AsNoTracking().AnyAsync(x => x.Id == cityId && x.Enabled, cancellationToken) &&
@@ -15,13 +27,13 @@ public sealed class EfAccessPolicyRepository(AgentRpaDbContext db) : IAccessPoli
         await db.BusinessFunctions.AsNoTracking().AnyAsync(x => x.Id == functionId && x.SystemId == systemId, cancellationToken);
 
     public Task<bool> ExistsAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken) =>
-        db.AccessPolicies.AsNoTracking().AnyAsync(x => x.Enabled && x.SubjectId == subjectId && x.CityId == cityId && x.SystemId == systemId && x.FunctionId == functionId && x.Action == action, cancellationToken);
+        db.AccessPolicies.AsNoTracking().AnyAsync(x => x.Enabled && !x.Denied && x.SubjectId == subjectId && x.CityId == cityId && x.SystemId == systemId && x.FunctionId == functionId && x.Action == action, cancellationToken);
 
     public Task<bool> ExistsThroughRoleAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken) =>
         (from ur in db.UserRoles.AsNoTracking()
          join role in db.Roles.AsNoTracking() on ur.RoleId equals role.Id
          join policy in db.RoleAccessPolicies.AsNoTracking() on role.Id equals policy.RoleId
-         where ur.UserAccountId == subjectId && role.Enabled && policy.Enabled && policy.CityId == cityId && policy.SystemId == systemId && policy.FunctionId == functionId && policy.Action == action
+         where ur.UserAccountId == subjectId && role.Enabled && policy.Enabled && !policy.Denied && policy.CityId == cityId && policy.SystemId == systemId && policy.FunctionId == functionId && policy.Action == action
          select policy.Id).AnyAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AccessPolicy>> ListAsync(Guid? subjectId, CancellationToken cancellationToken)
@@ -30,7 +42,7 @@ public sealed class EfAccessPolicyRepository(AgentRpaDbContext db) : IAccessPoli
     public async Task<AccessPolicy> GrantAsync(AccessPolicy policy, CancellationToken cancellationToken)
     {
         var existing = await db.AccessPolicies.SingleOrDefaultAsync(x => x.SubjectId == policy.SubjectId && x.CityId == policy.CityId && x.SystemId == policy.SystemId && x.FunctionId == policy.FunctionId && x.Action == policy.Action, cancellationToken);
-        if (existing is not null) { existing.SetEnabled(true); await db.SaveChangesAsync(cancellationToken); return existing; }
+        if (existing is not null) { existing.SetDenied(policy.Denied); existing.SetEnabled(true); await db.SaveChangesAsync(cancellationToken); return existing; }
         db.AccessPolicies.Add(policy);
         await db.SaveChangesAsync(cancellationToken);
         return policy;

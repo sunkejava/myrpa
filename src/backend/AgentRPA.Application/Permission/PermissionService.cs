@@ -13,6 +13,8 @@ public sealed class PermissionService(IAccessPolicyRepository repository)
         if (!await repository.IsValidScopeAsync(subjectId, cityId, systemId, functionId, cancellationToken))
             return new(false, "用户或业务资源已停用，或城市、系统、功能的归属关系无效。");
         var normalizedAction = action.Trim();
+        if (await repository.IsDeniedAsync(subjectId, cityId, systemId, functionId, normalizedAction, cancellationToken))
+            return new(false, "当前用户在该资源范围存在显式拒绝，拒绝执行。");
         if (await repository.ExistsAsync(subjectId, cityId, systemId, functionId, normalizedAction, cancellationToken)) return new(true, "用户直接权限检查通过。");
         if (await repository.ExistsThroughRoleAsync(subjectId, cityId, systemId, functionId, normalizedAction, cancellationToken)) return new(true, "角色继承权限检查通过。");
         return new(false, "当前用户没有该城市/业务系统/业务功能/动作的执行权限。");
@@ -23,6 +25,7 @@ public sealed class PermissionService(IAccessPolicyRepository repository)
 public interface IAccessPolicyRepository
 {
     Task<bool> IsValidScopeAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, CancellationToken cancellationToken);
+    Task<bool> IsDeniedAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken);
     Task<bool> ExistsAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken);
     Task<bool> ExistsThroughRoleAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken);
     Task<IReadOnlyList<AccessPolicy>> ListAsync(Guid? subjectId, CancellationToken cancellationToken);

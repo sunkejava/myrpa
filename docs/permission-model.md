@@ -131,6 +131,8 @@ Audit
 
 ## Workflow Step 业务动作预检
 
+同一城市、系统、功能、动作组合上的显式 `Deny` 优先于用户或角色的 `Allow`；管理员可通过 `/api/permission-policies/deny` 写入用户拒绝策略，再通过授权接口覆盖为允许，或撤销该策略。用户/角色停用与城市/系统停用同样会拒绝执行。现阶段不提供按资源树自动继承的范围授权，所有业务授权仍为精确匹配。
+
 Workflow 的每个 Step 默认需要当前城市、业务系统与功能范围内的 `Execute` 权限。管理员可以在 Step 顶层增加 `requiredAction`（例如 `Approve`）；执行该 Step 时同时需要 `Execute` 和 `Approve`。`Condition.config.then/else`、`Loop.config.steps` 和 `SubWorkflow.config.steps` 都会在任务正式执行前遍历，即使某个运行时分支最后未命中也会预检。未识别的动作与畸形嵌套结构直接拒绝。
 
 ```json
