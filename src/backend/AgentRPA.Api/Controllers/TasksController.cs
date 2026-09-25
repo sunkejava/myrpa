@@ -42,8 +42,13 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
         var task = await db.Tasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.SubjectId == subjectId, ct); if (task is null) return NotFound();
         var items = await db.TaskItems.AsNoTracking().Where(x => x.TaskId == id).OrderBy(x => x.Sequence).Select(x => new { x.Id, x.Sequence, x.Status, x.RetryCount, x.ResultJson }).ToListAsync(ct);
+        var itemIds = items.Select(x => x.Id).ToArray();
+        var executions = await db.Executions.AsNoTracking().Where(x => itemIds.Contains(x.TaskItemId))
+            .OrderByDescending(x => x.Id).Select(x => new { x.Id, x.TaskItemId, Status = x.Status.ToString(), x.Error }).ToListAsync(ct);
         var approval = await db.TaskApprovals.AsNoTracking().Where(x => x.TaskId == id).Select(x => (TaskApprovalStatus?)x.Status).SingleOrDefaultAsync(ct);
-        return Ok(new { task.Id, task.Name, task.WorkflowId, task.WorkflowVersion, task.MaxRetries, Status = task.Status.ToString(), ApprovalStatus = approval?.ToString(), Items = items });
+        return Ok(new { task.Id, task.Name, task.WorkflowId, task.WorkflowVersion, task.MaxRetries, Status = task.Status.ToString(), ApprovalStatus = approval?.ToString(),
+            Items = items.Select(x => new { x.Id, x.Sequence, Status = x.Status.ToString(), x.RetryCount, x.ResultJson,
+                Executions = executions.Where(e => e.TaskItemId == x.Id).ToArray() }) });
     }
 
     [HttpPost]

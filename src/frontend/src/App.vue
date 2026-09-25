@@ -5,6 +5,7 @@ import BusinessResources from './components/resources/BusinessResources.vue'
 import PermissionCenter from './components/permissions/PermissionCenter.vue'
 import TaskApprovalCenter from './components/task/TaskApprovalCenter.vue'
 import WorkflowDesigner from './components/workflow/WorkflowDesigner.vue'
+import TaskDetail from './components/task/TaskDetail.vue'
 
 type Task = { id: string; name: string; status: string; approvalStatus?: string | null; total: number; succeeded: number; failed: number }
 type Plan = { cityId: string; systemId: string; functionId: string; action: string; riskLevel: string; workflowId: string; workflowVersion: number; requiresConfirmation: boolean }
@@ -18,6 +19,7 @@ const password = ref('')
 const instruction = ref('')
 const plan = ref<PlanResponse | null>(null)
 const tasks = ref<Task[]>([])
+const selectedTaskId = ref('')
 const error = ref('')
 const busy = ref(false)
 const nav = ref('AI 工作台')
@@ -164,7 +166,8 @@ onMounted(() => { if (token.value) void loadTasks() })
           <WorkflowDesigner v-else-if="nav === 'Workflow 管理' && admin" :token="token" />
           <div v-else>
             <div class="panel-title"><span>我的任务</span><button class="action-btn" @click="loadTasks">刷新</button></div>
-            <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" />
+            <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" :inspect="id => selectedTaskId = id" />
+            <TaskDetail v-if="selectedTaskId" :key="selectedTaskId" :task-id="selectedTaskId" :token="token" />
             <p v-if="tasks.length === 0" class="muted empty">暂无任务。可以从 AI 工作台创建任务。</p>
           </div>
         </template>

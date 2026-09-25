@@ -68,6 +68,8 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: '提交任务' }).click()
   await expect(page.getByRole('heading', { name: '任务中心' })).toBeVisible()
   await expect(page.getByText('Agent: Execute')).toBeVisible()
+  await page.getByRole('button', { name: '查看详情' }).first().click()
+  await expect(page.getByText('任务详情', { exact: false })).toBeVisible()
   const riskyWorkflow = await (await request.post(`${api}/api/workflows`, {
     headers, data: { businessFunctionId: businessFunction.id, name: '审批演示', description: '高风险审批' }
   })).json() as { id: string }
