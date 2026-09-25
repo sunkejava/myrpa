@@ -241,7 +241,10 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     expect(cancelledDetail?.status, `NodeAgent 日志:\n${output}`).toBe('Failed')
     expect(cancelledDetail?.items[0]).toMatchObject({ status: 'Failed', retryCount: 0 })
     expect(cancelledDetail?.items[0].executions[0].status).toBe('Failed')
-    expect(cancelledDetail?.items[1]).toMatchObject({ status: 'Skipped', executions: [] })
+    expect(cancelledDetail?.items[1].status).toBe('Skipped')
+    // The scheduler may have recorded a Pending attempt before the only worker slot
+    // became available; cancellation must prevent that attempt from being dispatched.
+    expect(cancelledDetail?.items[1].executions.every(execution => execution.status === 'Pending')).toBe(true)
     const cancelPending = await (await request.get(`${api}/api/task-reconciliations`, { headers: admin })).json() as Array<{ executionId: string }>
     expect(cancelPending.some(x => x.executionId === cancelExecutionId)).toBe(true)
     const stoppedTask = await post('/api/tasks', { workflowId: stoppedWorkflow.id, workflowVersion: stoppedVersion.version,
