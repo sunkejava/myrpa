@@ -56,15 +56,26 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
             var type = GetString(step, "type") ?? "Wait";
             var id = GetString(step, "id") ?? $"step-{index + 1}";
             var config = step.TryGetProperty("config", out var cfg) ? cfg : default;
+            var timeoutMs = Math.Clamp(GetInt(step, "timeoutMs") ?? 30_000, 100, 120_000);
+            var retries = GetInt(step, "retryCount") ?? 0;
+            var safeToRetry = type.ToLowerInvariant() is "navigate" or "waitforelement" or "assert" or "extract";
+            if (retries is < 0 or > 3 || retries > 0 && !safeToRetry)
+                throw new InvalidOperationException($"Step {id} 不支持该重试配置。");
             await report(new("Running", id, Math.Clamp((index * 100) / Math.Max(1, steps.Count), 0, 99), $"开始执行 {type}"));
+            for (var attempt = 0; attempt <= retries; attempt++)
+            {
+                page.SetDefaultTimeout(timeoutMs);
+                page.SetDefaultNavigationTimeout(timeoutMs);
+                try
+                {
             switch (type.ToLowerInvariant())
             {
                 case "navigate": await page.GotoAsync(Resolve(GetString(config, "url") ?? throw new InvalidOperationException("Navigate 缺少 url。"), parameters)); break;
                 case "click": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Click 缺少 selector。"), parameters)).ClickAsync(); break;
                 case "input": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Input 缺少 selector。"), parameters)).FillAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
                 case "select": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Select 缺少 selector。"), parameters)).SelectOptionAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
-                case "wait": await page.WaitForTimeoutAsync(Math.Clamp(GetInt(config, "milliseconds") ?? 500, 0, 120_000)); break;
-                case "waitforelement": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("WaitForElement 缺少 selector。"), parameters)).WaitForAsync(new LocatorWaitForOptions { Timeout = GetInt(config, "timeout") ?? 30_000 }); break;
+                case "wait": await Task.Delay(Math.Clamp(GetInt(config, "milliseconds") ?? 500, 0, 120_000), cancellationToken); break;
+                case "waitforelement": await page.Locator(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("WaitForElement 缺少 selector。"), parameters)).WaitForAsync(new LocatorWaitForOptions { Timeout = GetInt(config, "timeout") ?? timeoutMs }); break;
                 case "screenshot":
                     var screenshotPath = Resolve(GetString(config, "path") ?? $"artifacts/{id}.png", parameters);
                     await SaveScreenshotAsync(page, screenshotPath, GetBool(config, "fullPage") ?? true);
@@ -96,6 +107,21 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                     break;
                 default: throw new NotSupportedException($"NodeAgent 暂不支持 Workflow Step: {type}");
             }
+                    break;
+                }
+                catch (Exception ex) when (attempt < retries && safeToRetry && !cancellationToken.IsCancellationRequested &&
+                    (ex is PlaywrightException or TimeoutException || type.Equals("Assert", StringComparison.OrdinalIgnoreCase) && ex is InvalidOperationException))
+                {
+                    await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), $"步骤失败，准备第 {attempt + 1} 次重试。"));
+                    await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(2000, 250 * (attempt + 1))), cancellationToken);
+                }
+                finally
+                {
+                    page.SetDefaultTimeout(30_000);
+                    page.SetDefaultNavigationTimeout(30_000);
+                }
+            }
+            cancellationToken.ThrowIfCancellationRequested();
             await report(new("Running", id, Math.Min(99, ((index + 1) * 100) / Math.Max(1, steps.Count)), $"完成 {type}"));
         }
     }
@@ -154,7 +180,7 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
 
     private static JsonElement[] GetSteps(JsonElement root) => root.TryGetProperty("steps", out var stepArray) && stepArray.ValueKind == JsonValueKind.Array ? stepArray.EnumerateArray().ToArray() : [];
     private static string? GetString(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    private static int? GetInt(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.TryGetInt32(out var result) ? result : null;
+    private static int? GetInt(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var result) ? result : null;
     private static bool? GetBool(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;
     private static string Resolve(string value, IReadOnlyDictionary<string, string?> parameters) { foreach (var item in parameters) value = value.Replace("{{" + item.Key + "}}", item.Value ?? string.Empty, StringComparison.Ordinal); return value; }
 }

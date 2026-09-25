@@ -81,7 +81,7 @@
 - [ ] Windows Desktop UI Worker
 - [x] HumanTask / Resume：NodeAgent 保持原 Playwright Browser Session 等待人工完成；服务端通过 SignalR ResumeAsync 恢复
 - [ ] Cancel / Pause 完整运行时控制
-- [ ] Step Timeout / Retry
+- [x] Step Timeout / Retry：按 Step 指定 timeoutMs；仅 Navigate、WaitForElement、Assert、Extract 允许最多 3 次重试，发布校验包括嵌套 Step；Click/Upload/Download 等有副作用步骤禁止自动重试。
 - [ ] UKey / Captcha / File Provider Runtime 集成
 
 ### Phase 4

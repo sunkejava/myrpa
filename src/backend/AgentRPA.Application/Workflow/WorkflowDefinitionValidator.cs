@@ -37,6 +37,13 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             var type = typeElement.GetString() ?? string.Empty;
             if (!Enum.TryParse<WorkflowStepType>(type, true, out var stepType)) { errors.Add($"第 {index} 个 Step 类型不支持：{type}"); continue; }
             if (stepType == WorkflowStepType.Script) errors.Add($"第 {index} 个 Script Step 必须通过受控 Provider 执行。");
+            if (step.TryGetProperty("timeoutMs", out var timeout) &&
+                (timeout.ValueKind != JsonValueKind.Number || !timeout.TryGetInt32(out var timeoutValue) || timeoutValue is < 100 or > 120_000))
+                errors.Add($"{location} 的 timeoutMs 必须在 100 至 120000 毫秒之间。");
+            if (step.TryGetProperty("retryCount", out var retry) &&
+                (retry.ValueKind != JsonValueKind.Number || !retry.TryGetInt32(out var retryValue) || retryValue is < 0 or > 3 ||
+                 retryValue > 0 && stepType is not (WorkflowStepType.Navigate or WorkflowStepType.WaitForElement or WorkflowStepType.Assert or WorkflowStepType.Extract)))
+                errors.Add($"{location} 的 retryCount 仅支持 Navigate、WaitForElement、Assert、Extract，范围为 0 至 3。");
             if (step.TryGetProperty("requiredAction", out var requiredAction) &&
                 (requiredAction.ValueKind != JsonValueKind.String || !WorkflowPermissionPreflight.IsAllowedAction(requiredAction.GetString() ?? string.Empty)))
                 errors.Add($"{location} 的 requiredAction 无效。");

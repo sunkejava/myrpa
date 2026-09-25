@@ -22,6 +22,21 @@ public sealed class WorkflowDefinitionValidatorTests
         const string definition = """{"steps":[{"type":"Condition","config":{"then":[{"type":"Click","requiredAction":"SuperAdmin","config":{"selector":"#submit"}}]}}]}""";
         Assert.Contains(_validator.Validate(definition), x => x.Contains("requiredAction", StringComparison.Ordinal));
     }
+    [Fact] public void Mutating_step_cannot_be_retried()
+    {
+        const string definition = """{"steps":[{"type":"Click","retryCount":1,"config":{"selector":"#submit"}}]}""";
+        Assert.Contains(_validator.Validate(definition), x => x.Contains("retryCount", StringComparison.Ordinal));
+    }
+
+    [Fact] public void Nested_step_timeout_and_retry_limits_are_validated()
+    {
+        const string invalid = """{"steps":[{"type":"Loop","config":{"steps":[{"type":"Assert","timeoutMs":50,"retryCount":4,"config":{"selector":"#ready"}}]}}]}""";
+        var errors = _validator.Validate(invalid);
+        Assert.Contains(errors, x => x.Contains("timeoutMs", StringComparison.Ordinal));
+        Assert.Contains(errors, x => x.Contains("retryCount", StringComparison.Ordinal));
+        const string valid = """{"steps":[{"type":"WaitForElement","timeoutMs":1000,"retryCount":2,"config":{"selector":"#ready"}}]}""";
+        Assert.Empty(_validator.Validate(valid));
+    }
     [Fact] public void Parameter_values_are_checked_against_schema()
     {
         var schema = JsonDocument.Parse("{\"parameters\":{\"employeeId\":{\"type\":\"string\",\"required\":true},\"count\":{\"type\":\"integer\",\"required\":true}}}").RootElement;
