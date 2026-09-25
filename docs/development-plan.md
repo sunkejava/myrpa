@@ -21,7 +21,7 @@
 
 ## 核心验收缺口
 
-- [ ] Country → Province → City → District 树的停用继承、租户边界、权限范围及前端管理（基础实体与 API 已落地）。
+- [ ] Country → Province → City → District 树的租户边界、跨层级权限范围及前端管理（基础实体/API 和父级停用权限检查已落地）。
 - [ ] Capability 与 Agent SDK/注册路由；逐 Step Capability/Tool 权限以及跨层级资源继承。当前仅支持 Step 所声明的业务动作和精确范围 Deny。
 - [ ] 高风险操作服务端审批门禁，含任务、步骤和批量审批。
 - [ ] 青岛 Mock 社保增减员全链路及可替换 Playwright Adapter。

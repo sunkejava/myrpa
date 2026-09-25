@@ -22,7 +22,9 @@ public sealed class EfAccessPolicyRepository(AgentRpaDbContext db) : IAccessPoli
 
     public async Task<bool> IsValidScopeAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, CancellationToken cancellationToken) =>
         await db.UserAccounts.AsNoTracking().AnyAsync(x => x.Id == subjectId && x.Enabled, cancellationToken) &&
-        await db.Cities.AsNoTracking().AnyAsync(x => x.Id == cityId && x.Enabled, cancellationToken) &&
+        await db.Cities.AsNoTracking().AnyAsync(x => x.Id == cityId && x.Enabled &&
+            (!x.ProvinceId.HasValue || db.Provinces.Any(p => p.Id == x.ProvinceId && p.Enabled &&
+                db.Countries.Any(c => c.Id == p.CountryId && c.Enabled))), cancellationToken) &&
         await db.BusinessSystems.AsNoTracking().AnyAsync(x => x.Id == systemId && x.CityId == cityId && x.Enabled, cancellationToken) &&
         await db.BusinessFunctions.AsNoTracking().AnyAsync(x => x.Id == functionId && x.SystemId == systemId, cancellationToken);
 

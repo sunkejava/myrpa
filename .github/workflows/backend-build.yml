@@ -79,7 +79,16 @@ jobs:
               raise AssertionError('Non-admin created a city')
           except urllib.error.HTTPError as error:
               assert error.code == 403, error.code
-          qd = post('/api/business-resources/cities', {'code': 'CN-SD-QD', 'name': '青岛市'}, token)
+          country = post('/api/business-resources/countries', {'code': 'CN', 'name': '中国'}, token)
+          province = post(f'/api/business-resources/countries/{country["id"]}/provinces',
+              {'code': 'SD', 'name': '山东省'}, token)
+          qd = post('/api/business-resources/cities',
+              {'code': 'CN-SD-QD', 'name': '青岛市', 'provinceId': province['id']}, token)
+          district = post(f'/api/business-resources/cities/{qd["id"]}/districts',
+              {'code': 'SN', 'name': '市南区'}, token)
+          with urllib.request.urlopen(urllib.request.Request(base + f'/api/business-resources/cities/{qd["id"]}/districts',
+              headers={'Authorization': 'Bearer ' + user_token})) as response:
+              assert any(x['id'] == district['id'] for x in json.load(response))
           jn = post('/api/business-resources/cities', {'code': 'CN-SD-JN', 'name': '济南市'}, token)
           def add_function(city):
               system = post(f'/api/business-resources/cities/{city["id"]}/systems',
@@ -98,6 +107,10 @@ jobs:
           assert check(qd, qd_system, qd_function) == 403
           post('/api/permission-policies', {'subjectId': user['id'], 'cityId': qd['id'],
               'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, token)
+          assert check(qd, qd_system, qd_function) == 200
+          post(f'/api/business-resources/provinces/{province["id"]}/enabled', {'enabled': False}, token)
+          assert check(qd, qd_system, qd_function) == 403
+          post(f'/api/business-resources/provinces/{province["id"]}/enabled', {'enabled': True}, token)
           assert check(qd, qd_system, qd_function) == 200
           post('/api/permission-policies/deny', {'subjectId': user['id'], 'cityId': qd['id'],
               'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, token)

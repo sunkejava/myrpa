@@ -63,6 +63,33 @@ public sealed class BusinessResourcesController(AgentRpaDbContext db) : Controll
         db.Districts.Add(district); await db.SaveChangesAsync(ct);
         return Created($"/api/business-resources/cities/{cityId}/districts", new { district.Id, district.CityId, district.Code, district.Name });
     }
+
+    [Authorize(Roles = "Admin"), HttpPost("countries/{countryId:guid}/enabled")]
+    public async Task<IActionResult> SetCountryEnabled(Guid countryId, SetEnabledRequest request, CancellationToken ct)
+    {
+        var country = await db.Countries.FindAsync([countryId], ct);
+        if (country is null) return NotFound();
+        country.SetEnabled(request.Enabled); await db.SaveChangesAsync(ct);
+        return Ok(new { country.Id, country.Enabled });
+    }
+
+    [Authorize(Roles = "Admin"), HttpPost("provinces/{provinceId:guid}/enabled")]
+    public async Task<IActionResult> SetProvinceEnabled(Guid provinceId, SetEnabledRequest request, CancellationToken ct)
+    {
+        var province = await db.Provinces.FindAsync([provinceId], ct);
+        if (province is null) return NotFound();
+        province.SetEnabled(request.Enabled); await db.SaveChangesAsync(ct);
+        return Ok(new { province.Id, province.Enabled });
+    }
+
+    [Authorize(Roles = "Admin"), HttpPost("districts/{districtId:guid}/enabled")]
+    public async Task<IActionResult> SetDistrictEnabled(Guid districtId, SetEnabledRequest request, CancellationToken ct)
+    {
+        var district = await db.Districts.FindAsync([districtId], ct);
+        if (district is null) return NotFound();
+        district.SetEnabled(request.Enabled); await db.SaveChangesAsync(ct);
+        return Ok(new { district.Id, district.Enabled });
+    }
     [HttpGet("cities")]
     public async Task<IActionResult> Cities(CancellationToken ct) => Ok(await db.Cities.AsNoTracking()
         .OrderBy(x => x.Code).Select(x => new { x.Id, x.ProvinceId, x.Code, x.Name, x.Enabled }).ToListAsync(ct));
@@ -94,7 +121,9 @@ public sealed class BusinessResourcesController(AgentRpaDbContext db) : Controll
     [Authorize(Roles = "Admin"), HttpPost("cities/{cityId:guid}/systems")]
     public async Task<IActionResult> CreateSystem(Guid cityId, CreateSystemRequest request, CancellationToken ct)
     {
-        if (!await db.Cities.AnyAsync(x => x.Id == cityId && x.Enabled, ct)) return NotFound(new { message = "城市不存在或已停用。" });
+        if (!await db.Cities.AnyAsync(x => x.Id == cityId && x.Enabled &&
+            (!x.ProvinceId.HasValue || db.Provinces.Any(p => p.Id == x.ProvinceId && p.Enabled &&
+                db.Countries.Any(c => c.Id == p.CountryId && c.Enabled))), ct)) return NotFound(new { message = "城市或上级区域不存在或已停用。" });
         BusinessSystem system;
         try { system = new BusinessSystem(cityId, request.Code, request.Name, request.BaseUrl); }
         catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
