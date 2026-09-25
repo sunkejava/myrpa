@@ -89,7 +89,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('功能').selectOption(businessFunction.id)
   await page.getByLabel('名称').fill('可发布流程')
   await page.getByRole('button', { name: '创建 Workflow' }).click()
-  await page.getByLabel('风险级别').selectOption('High')
+  await page.getByRole('combobox', { name: 'Workflow 风险级别' }).selectOption('High')
   await page.getByRole('button', { name: '创建并发布新版本' }).click()
   await expect(page.getByRole('status')).toContainText('已发布')
 })

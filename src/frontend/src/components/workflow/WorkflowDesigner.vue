@@ -136,7 +136,7 @@ onMounted(async () => {
     </div>
     <template v-if="workflowId">
       <h3>定义与风险</h3>
-      <div class="resource-grid"><label>风险级别<select :value="parsedDefinition?.riskLevel || 'Low'" @change="updateDefinition({ riskLevel: ($event.target as HTMLSelectElement).value })"><option v-for="risk in ['Low', 'Medium', 'High', 'Critical']" :key="risk">{{ risk }}</option></select></label>
+      <div class="resource-grid"><label>风险级别<select aria-label="Workflow 风险级别" :value="parsedDefinition?.riskLevel || 'Low'" @change="updateDefinition({ riskLevel: ($event.target as HTMLSelectElement).value })"><option v-for="risk in ['Low', 'Medium', 'High', 'Critical']" :key="risk">{{ risk }}</option></select></label>
       <label>审批门禁<select :value="parsedDefinition?.requiresApproval ? 'true' : 'false'" @change="updateDefinition({ requiresApproval: ($event.target as HTMLSelectElement).value === 'true' })"><option value="false">按风险级别自动判定</option><option value="true">必须审批</option></select></label></div>
       <div class="actions"><button v-for="type in stepTypes" :key="type" type="button" class="action-btn" @click="addStep(type)">＋ {{ type }}</button></div>
       <p class="muted">步骤：{{ steps.map(step => `${step.id || '未命名'} (${step.type || '未知'})`).join(' → ') || '无' }}。编辑下方 JSON 可配置 selector、参数、嵌套步骤、timeoutMs 和 retryCount。</p>
