@@ -115,6 +115,8 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         if (approval == TaskApprovalStatus.Rejected) return StatusCode(StatusCodes.Status403Forbidden, new { message = "任务审批已拒绝。", approvalStatus = "Rejected" });
         var stepsAllowed = await stepPermissions.CheckAsync(subjectId, scope.Value.CityId, scope.Value.SystemId, scope.Value.FunctionId, definition.Value.GetRawText(), ct);
         if (!stepsAllowed.Allowed) return StatusCode(StatusCodes.Status403Forbidden, stepsAllowed);
+        if (task.Items.Any(item => item.CanRetry(task.MaxRetries)) && !WorkflowRetrySafety.IsSafeToRetry(definition.Value.GetRawText()))
+            return Conflict(new { message = "Workflow 含提交、上传、下载、人工操作或高风险步骤；必须先核验外部系统状态，禁止盲目重试。" });
         var count = 0; foreach (var item in task.Items) if (item.CanRetry(task.MaxRetries)) { var errors = ValidateInput(definition.Value, item.InputJson); if (errors.Count > 0) return BadRequest(new { message = $"TaskItem {item.Sequence} 参数校验失败。", errors }); item.Retry(); count++; }
         if (count > 0) task.Queue(); await db.SaveChangesAsync(ct); return Ok(new { retried = count });
     }

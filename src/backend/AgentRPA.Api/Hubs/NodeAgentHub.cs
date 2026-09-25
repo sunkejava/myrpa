@@ -2,12 +2,14 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Application.Nodes;
+using AgentRPA.Application.Workflow;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Common;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Resources;
 using AgentRPA.Domain.Tasks;
+using AgentRPA.Domain.Workflow;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +51,13 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != progress.NodeId) throw new HubException("Node 身份校验失败。");
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == progress.ExecutionId, cancellationToken); if (execution is null) throw new HubException("Execution 不存在。");
         if (execution.NodeId != progress.NodeId || execution.WorkerSlotId != progress.WorkerSlotId) throw new HubException("Execution 与 Node/WorkerSlot 不匹配。");
+        if (execution.Status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.Cancelled)
+            throw new HubException("已结束的 Execution 不接受新的进度报告。");
+        var started = string.Equals(progress.Status, "StepStarted", StringComparison.OrdinalIgnoreCase);
+        var completed = string.Equals(progress.Status, "StepCompleted", StringComparison.OrdinalIgnoreCase);
+        if ((started || completed) && (string.IsNullOrWhiteSpace(progress.StepId) || progress.StepId.Length > 128 ||
+            !Enum.TryParse<WorkflowStepType>(progress.StepType, true, out _)))
+            throw new HubException("Step 事件缺少有效的步骤 ID 或类型。");
         if (!Enum.TryParse<ExecutionStatus>(progress.Status, true, out var status)) status = ExecutionStatus.Running;
         var safeMessage = SensitiveTextSanitizer.Sanitize(progress.Message);
         var terminal = status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.Cancelled;
@@ -62,7 +71,17 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
             if (status == ExecutionStatus.Running) item.Start();
             else if (status == ExecutionStatus.WaitingForHuman) task?.SetStatus(DomainTaskStatus.WaitingForHuman);
             else if (status == ExecutionStatus.Succeeded) item.Succeed(safeMessage);
-            else if (status == ExecutionStatus.Failed) { item.Fail(safeMessage); if (task is not null && item.CanRetry(task.MaxRetries)) { item.Retry(); task.Queue(); } else if (task is not null) task.SetStatus(DomainTaskStatus.Failed); }
+            else if (status == ExecutionStatus.Failed)
+            {
+                item.Fail(safeMessage);
+                var definition = await db.WorkflowVersions.AsNoTracking().Where(x => x.Id == execution.WorkflowVersionId)
+                    .Select(x => x.DefinitionJson).SingleOrDefaultAsync(cancellationToken);
+                if (task is not null && item.CanRetry(task.MaxRetries) && definition is not null && WorkflowRetrySafety.IsSafeToRetry(definition))
+                {
+                    item.Retry(); task.Queue();
+                }
+                else if (task is not null) task.SetStatus(DomainTaskStatus.Failed);
+            }
             else if (status == ExecutionStatus.Cancelled) item.Fail(safeMessage);
         }
         if (status == ExecutionStatus.Succeeded && task is not null)
@@ -72,7 +91,10 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         }
         var nextSequence = (await db.ExecutionLogs.Where(x => x.ExecutionId == execution.Id).Select(x => (long?)x.Sequence).MaxAsync(cancellationToken) ?? -1) + 1;
         var level = status == ExecutionStatus.Failed ? ExecutionLogLevel.Error : ExecutionLogLevel.Information;
-        db.ExecutionLogs.Add(new ExecutionLog(execution.Id, nextSequence, level, ExecutionLogEventType.Execution, $"NodeAgent 报告执行状态：{status}", progress.StepId, $"{{\"progressPercent\":{(progress.ProgressPercent.HasValue ? progress.ProgressPercent.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")}}}"));
+        var eventType = started ? ExecutionLogEventType.StepStarted : completed ? ExecutionLogEventType.StepCompleted : ExecutionLogEventType.Execution;
+        db.ExecutionLogs.Add(new ExecutionLog(execution.Id, nextSequence, level, eventType,
+            started || completed ? safeMessage ?? $"Step {progress.StepId}" : $"NodeAgent 报告执行状态：{status}",
+            progress.StepId, JsonSerializer.Serialize(new { progressPercent = progress.ProgressPercent, stepType = progress.StepType })));
         await db.SaveChangesAsync(cancellationToken);
         if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
     }

@@ -2,7 +2,7 @@
 import StatusBadge from '../common/StatusBadge.vue'
 
 type TaskRow = { id: string; name: string; status: string; approvalStatus?: string | null; total: number; succeeded: number; failed: number; progress: number }
-defineProps<{ tasks: TaskRow[]; queue: (id: string) => Promise<void> }>()
+defineProps<{ tasks: TaskRow[]; queue: (id: string) => Promise<void>; retry: (id: string) => Promise<void> }>()
 </script>
 
 <template>
@@ -17,7 +17,7 @@ defineProps<{ tasks: TaskRow[]; queue: (id: string) => Promise<void> }>()
             <td><div class="progress"><i :style="{ width: `${task.progress}%` }"></i></div><small>{{ task.progress }}%</small></td>
             <td>{{ task.succeeded }} / {{ task.total }}</td><td>{{ task.failed }}</td>
             <td><StatusBadge :label="task.approvalStatus === 'Pending' ? '待审批' : task.approvalStatus === 'Rejected' ? '审批拒绝' : task.status" :tone="task.status === 'Running' ? 'info' : task.status === 'Succeeded' ? 'success' : 'warning'" /></td>
-            <td><button v-if="task.status === 'Draft' && task.approvalStatus !== 'Pending' && task.approvalStatus !== 'Rejected'" class="action-btn" @click="queue(task.id)">入队执行</button></td>
+            <td><button v-if="task.status === 'Draft' && task.approvalStatus !== 'Pending' && task.approvalStatus !== 'Rejected'" class="action-btn" @click="queue(task.id)">入队执行</button><button v-if="task.status === 'Failed' && task.failed" class="action-btn" @click="retry(task.id)">重试失败项</button></td>
           </tr>
         </tbody>
       </table>

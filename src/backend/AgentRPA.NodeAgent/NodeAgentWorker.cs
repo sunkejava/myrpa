@@ -85,7 +85,7 @@ public sealed class NodeAgentWorker(
             await ReportAsync(connection, command, "Running", null, 0, "NodeAgent 开始执行 Workflow", linked.Token);
             await runtime.ExecuteAsync(command.WorkflowPayload, command.Parameters, async e =>
             {
-                await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token);
+                await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token, e.StepType);
                 if (e.Artifact is not null)
                     await connection.InvokeAsync("ReportArtifact", new ExecutionArtifactReport(command.ExecutionId, command.NodeId, command.WorkerSlotId, e.Artifact.ArtifactType, e.Artifact.FileName, e.Artifact.StorageKey, e.Artifact.ContentType, e.Artifact.Size, e.Artifact.Hash, DateTimeOffset.UtcNow), linked.Token);
                 if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase)) await resumeSignal.Task.WaitAsync(linked.Token);
@@ -98,7 +98,7 @@ public sealed class NodeAgentWorker(
 
     private Task CancelExecutionAsync(Guid executionId) { if (executions.TryGetValue(executionId, out var source)) source.Cancel(); if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetCanceled(); return Task.CompletedTask; }
     private Task ResumeExecutionAsync(Guid executionId) { if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetResult(true); return Task.CompletedTask; }
-    private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow), cancellationToken);
+    private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken, string? stepType = null) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow, stepType), cancellationToken);
 
     private async Task<NodeRegistrationResponse?> RegisterAsync(NodeAgentOptions config, CancellationToken cancellationToken)
     {

@@ -1,5 +1,6 @@
 using AgentRPA.Api.Security;
 using AgentRPA.Application.Execution;
+using AgentRPA.Domain.Execution;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,22 @@ namespace AgentRPA.Api.Controllers;
 [ApiController, Route("api/executions"), Authorize]
 public sealed class ExecutionEvidenceController(AgentRpaDbContext db, IArtifactStorage artifactStorage) : ControllerBase
 {
+    /// <summary>按序查看 Step 开始与完成事件；未完成的写入步骤必须先在外部系统人工核验。</summary>
+    [HttpGet("{executionId:guid}/checkpoints")]
+    public async Task<IActionResult> Checkpoints(Guid executionId, CancellationToken ct = default)
+    {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized();
+        var ownsExecution = await db.Executions.AsNoTracking().Where(x => x.Id == executionId)
+            .Join(db.TaskItems, x => x.TaskItemId, x => x.Id, (_, item) => item)
+            .Join(db.Tasks, x => x.TaskId, x => x.Id, (_, task) => task.SubjectId == subjectId)
+            .SingleOrDefaultAsync(ct);
+        if (ownsExecution != true) return NotFound();
+        return Ok(await db.ExecutionLogs.AsNoTracking().Where(x => x.ExecutionId == executionId &&
+                (x.EventType == ExecutionLogEventType.StepStarted || x.EventType == ExecutionLogEventType.StepCompleted))
+            .OrderBy(x => x.Sequence).Select(x => new { x.StepId, x.Sequence, EventType = x.EventType.ToString(), x.MetadataJson, x.CreatedAt })
+            .ToListAsync(ct));
+    }
+
     [HttpGet("{executionId:guid}/logs")]
     public async Task<IActionResult> Logs(Guid executionId, [FromQuery] long afterSequence = -1, [FromQuery] int limit = 200, CancellationToken ct = default)
     {

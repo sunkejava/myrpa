@@ -83,6 +83,13 @@ async function queueTask(id: string) {
     await loadTasks()
   } catch (e) { error.value = e instanceof Error ? e.message : '入队失败' }
 }
+async function retryTask(id: string) {
+  error.value = ''
+  try {
+    await api(`/api/tasks/${id}/retry-failed`, { method: 'POST', body: '{}' })
+    await loadTasks()
+  } catch (e) { error.value = e instanceof Error ? e.message : '重试失败' }
+}
 
 async function makePlan() {
   busy.value = true
@@ -157,7 +164,7 @@ onMounted(() => { if (token.value) void loadTasks() })
           <WorkflowDesigner v-else-if="nav === 'Workflow 管理' && admin" :token="token" />
           <div v-else>
             <div class="panel-title"><span>我的任务</span><button class="action-btn" @click="loadTasks">刷新</button></div>
-            <TaskOverview :tasks="taskRows" :queue="queueTask" />
+            <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" />
             <p v-if="tasks.length === 0" class="muted empty">暂无任务。可以从 AI 工作台创建任务。</p>
           </div>
         </template>

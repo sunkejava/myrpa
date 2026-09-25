@@ -15,7 +15,8 @@ public sealed record WorkflowRuntimeEvent(
     string? StepId,
     int ProgressPercent,
     string? Message,
-    WorkflowRuntimeArtifact? Artifact = null);
+    WorkflowRuntimeArtifact? Artifact = null,
+    string? StepType = null);
 
 public sealed record WorkflowRuntimeArtifact(
     string ArtifactType,
@@ -61,7 +62,7 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
             var safeToRetry = type.ToLowerInvariant() is "navigate" or "waitforelement" or "assert" or "extract";
             if (retries is < 0 or > 3 || retries > 0 && !safeToRetry)
                 throw new InvalidOperationException($"Step {id} 不支持该重试配置。");
-            await report(new("Running", id, Math.Clamp((index * 100) / Math.Max(1, steps.Count), 0, 99), $"开始执行 {type}"));
+            await report(new("StepStarted", id, Math.Clamp((index * 100) / Math.Max(1, steps.Count), 0, 99), $"开始执行 {type}", StepType: type));
             for (var attempt = 0; attempt <= retries; attempt++)
             {
                 page.SetDefaultTimeout(timeoutMs);
@@ -123,7 +124,7 @@ public sealed class PlaywrightWorkflowRuntime : IWorkflowRuntime
                 }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            await report(new("Running", id, Math.Min(99, ((index + 1) * 100) / Math.Max(1, steps.Count)), $"完成 {type}"));
+            await report(new("StepCompleted", id, Math.Min(99, ((index + 1) * 100) / Math.Max(1, steps.Count)), $"完成 {type}", StepType: type));
         }
     }
 
