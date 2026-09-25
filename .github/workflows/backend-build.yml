@@ -175,10 +175,53 @@ jobs:
               assert error.code == 403, error.code
           post('/api/permission-policies', {'subjectId': user['id'], 'cityId': qd['id'],
               'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Approve'}, token)
-          assert create_task(protected_workflow, protected_version)['id']
+          protected_task = create_task(protected_workflow, protected_version)
+          assert protected_task['approvalRequired']
           try:
               create_task(jn_workflow, jn_version)
               raise AssertionError('UserA created a Jinan task without permission')
+          except urllib.error.HTTPError as error:
+              assert error.code == 403, error.code
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/task-approvals', headers={'Authorization': 'Bearer ' + token})) as response:
+              approvals = json.load(response)
+          approval = next(x for x in approvals if x['taskId'] == protected_task['id'])
+          assert approval['status'] == 'Pending'
+          try:
+              post(f'/api/tasks/{protected_task["id"]}/queue', {}, user_token)
+              raise AssertionError('Unapproved task was queued')
+          except urllib.error.HTTPError as error:
+              assert error.code == 428, error.code
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/user-management/roles', headers={'Authorization': 'Bearer ' + token})) as response:
+              admin_role = next(x for x in json.load(response) if x['name'] == 'Admin')
+          post(f'/api/user-management/users/{user["id"]}/roles/{admin_role["id"]}', {}, token)
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/login',
+              json.dumps({'userName': 'usera', 'password': 'UserATestPassword123!'}).encode(),
+              {'Content-Type': 'application/json'})) as response:
+              user_admin_token = json.load(response)['accessToken']
+          try:
+              post(f'/api/task-approvals/{approval["id"]}/decide', {'approved': True}, user_admin_token)
+              raise AssertionError('Requester approved own task')
+          except urllib.error.HTTPError as error:
+              assert error.code == 403, error.code
+          decided = post(f'/api/task-approvals/{approval["id"]}/decide', {'approved': True}, token)
+          assert decided['status'] == 'Approved'
+          try:
+              post(f'/api/task-approvals/{approval["id"]}/decide', {'approved': False, 'reason': '再次审核'}, token)
+              raise AssertionError('Approval was decided twice')
+          except urllib.error.HTTPError as error:
+              assert error.code == 409, error.code
+          with urllib.request.urlopen(urllib.request.Request(base + f'/api/tasks/{protected_task["id"]}/queue', b'{}',
+              {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + user_token})) as response:
+              assert response.status == 200
+          rejected_task = create_task(protected_workflow, protected_version)
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/task-approvals', headers={'Authorization': 'Bearer ' + token})) as response:
+              rejected_approval = next(x for x in json.load(response) if x['taskId'] == rejected_task['id'])
+          rejected = post(f'/api/task-approvals/{rejected_approval["id"]}/decide',
+              {'approved': False, 'reason': '资料不完整'}, token)
+          assert rejected['status'] == 'Rejected'
+          try:
+              post(f'/api/tasks/{rejected_task["id"]}/queue', {}, user_token)
+              raise AssertionError('Rejected task was queued')
           except urllib.error.HTTPError as error:
               assert error.code == 403, error.code
           print('API startup, login, administration and city-isolated permission checks passed')
