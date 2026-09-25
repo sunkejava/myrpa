@@ -41,6 +41,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: 'AI 工作台' }).click()
   await page.getByLabel('任务描述').fill('青岛市 社保系统 增员')
   await page.getByRole('button', { name: '生成计划' }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '规划结果' })).toBeVisible()
   await expect(page.getByText('青岛增员演示', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: '提交任务' }).click()

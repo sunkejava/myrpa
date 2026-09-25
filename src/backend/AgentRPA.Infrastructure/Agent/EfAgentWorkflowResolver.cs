@@ -9,12 +9,12 @@ public sealed class EfAgentWorkflowResolver(AgentRpaDbContext db) : IAgentWorkfl
 {
     public async Task<IReadOnlyList<AgentWorkflowResource>> ResolveAsync(Guid functionId, CancellationToken cancellationToken)
     {
-        var workflows = await db.Workflows
-            .AsNoTracking()
-            .Where(x => x.BusinessFunctionId == functionId && x.Status == AgentRPA.Domain.Workflow.WorkflowStatus.Published)
-            .SelectMany(x => x.Versions
-                .Where(v => v.Published)
-                .Select(v => new { x.Id, x.Name, v.Version, v.DefinitionJson }))
+        // SQLite 不支持某些相关 SelectMany 翻译出的 APPLY；使用明确的等值 JOIN。
+        var workflows = await (from workflow in db.Workflows.AsNoTracking()
+            join version in db.WorkflowVersions.AsNoTracking() on workflow.Id equals version.WorkflowId
+            where workflow.BusinessFunctionId == functionId &&
+                  workflow.Status == AgentRPA.Domain.Workflow.WorkflowStatus.Published && version.Published
+            select new { workflow.Id, workflow.Name, version.Version, version.DefinitionJson })
             .ToListAsync(cancellationToken);
 
         return workflows
