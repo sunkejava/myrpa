@@ -90,6 +90,12 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
       ]))
     }
     await verifyTask(task.id)
+    const mockSession = await request.post(`${api}/mock/qd-social-security/login`, { form: { username: 'demo', password: 'Demo123!' } })
+    expect(mockSession.ok()).toBeTruthy()
+    const employeeStatusUrl = `${api}/mock/qd-social-security/employees/status?idNumber=110105194912310038`
+    const addedStatus = await request.get(employeeStatusUrl)
+    expect(addedStatus.ok()).toBeTruthy()
+    expect(await addedStatus.json()).toMatchObject({ active: true, employeeName: '真实节点测试' })
     const removeTask = await post('/api/tasks', { workflowId: removeWorkflow.id, workflowVersion: removeVersion.version,
       name: '模拟减员', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '真实节点测试', idNumber: '110105194912310038' })] }, operatorHeaders)
     expect(removeTask.approvalRequired).toBe(true)
@@ -99,6 +105,9 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await post(`/api/task-approvals/${removeApproval!.id}/decide`, { approved: true })
     await post(`/api/tasks/${removeTask.id}/queue`, {}, operatorHeaders)
     await verifyTask(removeTask.id)
+    const removedStatus = await request.get(employeeStatusUrl)
+    expect(removedStatus.ok()).toBeTruthy()
+    expect(await removedStatus.json()).toMatchObject({ active: false, employeeName: null })
   } finally {
     child.kill('SIGTERM')
   }

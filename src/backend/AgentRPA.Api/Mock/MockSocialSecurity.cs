@@ -51,6 +51,15 @@ public static class MockSocialSecurity
                 """);
         });
 
+        // The read-only reconciliation endpoint reflects the mock site's actual employee registry.
+        app.MapGet(Root + "/employees/status", (HttpContext context, string idNumber) =>
+        {
+            if (!Authenticated(context)) return Results.Unauthorized();
+            var id = idNumber.Trim().ToUpperInvariant();
+            if (!ValidId(id)) return Results.BadRequest(new { message = "身份证号无效" });
+            return Results.Ok(new { active = Employees.TryGetValue(id, out var name), employeeName = name });
+        });
+
         app.MapPost(Root + "/employees", async (HttpContext context) =>
         {
             if (!Authenticated(context)) return Results.Redirect(Root);

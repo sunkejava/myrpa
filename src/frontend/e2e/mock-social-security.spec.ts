@@ -3,8 +3,9 @@ import { expect, test } from '@playwright/test'
 const site = 'http://127.0.0.1:5000/mock/qd-social-security'
 const employee = { employeeName: '测试人员', idNumber: '11010519491231002X' }
 
-test('青岛模拟社保登录、增员、重复申报、减员及校验', async ({ page, isMobile }) => {
+test('青岛模拟社保登录、增员、重复申报、减员及校验', async ({ page, request, isMobile }) => {
   test.skip(isMobile, 'Mock 服务共用人员数据，桌面浏览器覆盖完整业务链。')
+  expect((await request.get(`${site}/employees/status?idNumber=${employee.idNumber}`)).status()).toBe(401)
   await page.goto(`${site}/employees`)
   await expect(page.getByRole('heading', { name: '登录' })).toBeVisible()
   await page.locator('[name=username]').fill('demo')
