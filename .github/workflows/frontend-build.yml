@@ -34,7 +34,11 @@ jobs:
       - name: Build
         run: npm run build
       - name: Install browser
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright@1.55.0 install chromium
+      - name: Build browser execution node
+        run: dotnet build ../backend/AgentRPA.NodeAgent/AgentRPA.NodeAgent.csproj --configuration Release
       - name: Browser integration tests
         env:
           ASPNETCORE_ENVIRONMENT: Development
@@ -42,6 +46,7 @@ jobs:
           AgentRPA__Bootstrap__AdminPassword: BrowserTestPassword123!
           ConnectionStrings__AgentRPA: Data Source=browser-test.db
           VITE_API_PROXY_TARGET: http://127.0.0.1:5000
+          NodeAuthentication__RegistrationKey: BrowserNodeRegistrationKey123!
         run: |
           set -euo pipefail
           dotnet run --project ../backend/AgentRPA.Api/AgentRPA.Api.csproj > api-browser.log 2>&1 &

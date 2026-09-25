@@ -36,16 +36,21 @@ public sealed class NodeAgentWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var config = options.Value;
-        var registration = await RegisterAsync(config, stoppingToken);
+        NodeRegistrationResponse? registration = null;
+        while (registration is null && !stoppingToken.IsCancellationRequested)
+        {
+            registration = await RegisterAsync(config, stoppingToken);
+            if (registration is null) await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        }
         if (registration is null) return;
         if (string.Equals(registration.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase))
         {
             logger.LogWarning("Node {NodeId} is pending administrator approval; waiting before connecting for execution.", registration.NodeId);
             while (!stoppingToken.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 registration = await RegisterAsync(config, stoppingToken);
-                if (registration is null) return;
+                if (registration is null) continue;
                 if (!string.Equals(registration.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase)) break;
             }
         }
