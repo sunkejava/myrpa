@@ -83,6 +83,15 @@ test('login, resource setup, natural language planning and task submission', asy
   await expect(page.getByText(riskyTask.id)).toBeVisible()
   await page.getByRole('button', { name: '批准' }).click()
   await expect(page.getByRole('alert')).toContainText('不得审批本人')
+  await page.getByRole('button', { name: 'Workflow 管理' }).click()
+  await page.locator('.resource-grid select').first().selectOption(city.id)
+  await page.locator('.resource-grid select').nth(1).selectOption(system.id)
+  await page.getByLabel('功能').selectOption(businessFunction.id)
+  await page.getByLabel('名称').fill('可发布流程')
+  await page.getByRole('button', { name: '创建 Workflow' }).click()
+  await page.getByLabel('风险级别').selectOption('High')
+  await page.getByRole('button', { name: '创建并发布新版本' }).click()
+  await expect(page.getByRole('status')).toContainText('已发布')
 })
 
 test('theme switch and mobile layout', async ({ page, isMobile }) => {

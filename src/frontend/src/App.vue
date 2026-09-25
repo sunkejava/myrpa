@@ -4,6 +4,7 @@ import TaskOverview from './components/task/TaskOverview.vue'
 import BusinessResources from './components/resources/BusinessResources.vue'
 import PermissionCenter from './components/permissions/PermissionCenter.vue'
 import TaskApprovalCenter from './components/task/TaskApprovalCenter.vue'
+import WorkflowDesigner from './components/workflow/WorkflowDesigner.vue'
 
 type Task = { id: string; name: string; status: string; approvalStatus?: string | null; total: number; succeeded: number; failed: number }
 type Plan = { cityId: string; systemId: string; functionId: string; action: string; riskLevel: string; workflowId: string; workflowVersion: number; requiresConfirmation: boolean }
@@ -118,6 +119,7 @@ onMounted(() => { if (token.value) void loadTasks() })
         <button v-for="item in ['AI 工作台', '任务中心', '城市与系统']" :key="item" :class="{ active: nav === item }" @click="nav = item; if (item === '任务中心') loadTasks()">{{ item }}</button>
         <button v-if="admin" :class="{ active: nav === '权限中心' }" @click="nav = '权限中心'">权限中心</button>
         <button v-if="admin" :class="{ active: nav === '审批中心' }" @click="nav = '审批中心'">审批中心</button>
+        <button v-if="admin" :class="{ active: nav === 'Workflow 管理' }" @click="nav = 'Workflow 管理'">Workflow 管理</button>
       </nav>
       <div class="sidebar-foot">{{ token ? `已登录：${userName}` : '请登录后继续' }}</div>
     </aside>
@@ -152,6 +154,7 @@ onMounted(() => { if (token.value) void loadTasks() })
           <BusinessResources v-else-if="nav === '城市与系统'" :token="token" :admin="admin" />
           <PermissionCenter v-else-if="nav === '权限中心' && admin" :token="token" />
           <TaskApprovalCenter v-else-if="nav === '审批中心' && admin" :token="token" />
+          <WorkflowDesigner v-else-if="nav === 'Workflow 管理' && admin" :token="token" />
           <div v-else>
             <div class="panel-title"><span>我的任务</span><button class="action-btn" @click="loadTasks">刷新</button></div>
             <TaskOverview :tasks="taskRows" :queue="queueTask" />

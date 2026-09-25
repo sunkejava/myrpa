@@ -10,7 +10,19 @@ namespace AgentRPA.Api.Controllers;
 public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinitionValidator validator) : ControllerBase
 {
     [HttpGet] public async Task<IActionResult> List(CancellationToken ct) => Ok(await db.Workflows.AsNoTracking().OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.BusinessFunctionId, Status = x.Status.ToString() }).ToListAsync(ct));
-    [Authorize(Roles = "Admin"), HttpPost] public async Task<IActionResult> Create(CreateWorkflowRequest request, CancellationToken ct) { var e = new Workflow(request.BusinessFunctionId, request.Name, request.Description); db.Workflows.Add(e); await db.SaveChangesAsync(ct); return Created($"api/workflows/{e.Id}", new { e.Id }); }
+    [Authorize(Roles = "Admin"), HttpPost] public async Task<IActionResult> Create(CreateWorkflowRequest request, CancellationToken ct)
+    {
+        if (request.BusinessFunctionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
+            return BadRequest(new { message = "业务功能和 Workflow 名称必须有效。" });
+        if (!await db.BusinessFunctions.AnyAsync(f => f.Id == request.BusinessFunctionId &&
+            db.BusinessSystems.Any(s => s.Id == f.SystemId && s.Enabled && db.Cities.Any(c => c.Id == s.CityId && c.Enabled &&
+                (!c.ProvinceId.HasValue || db.Provinces.Any(p => p.Id == c.ProvinceId && p.Enabled &&
+                    db.Countries.Any(country => country.Id == p.CountryId && country.Enabled))))), ct))
+            return BadRequest(new { message = "业务功能不存在或其区域、系统已停用。" });
+        var e = new Workflow(request.BusinessFunctionId, request.Name.Trim(), request.Description);
+        db.Workflows.Add(e); await db.SaveChangesAsync(ct);
+        return Created($"api/workflows/{e.Id}", new { e.Id });
+    }
     [HttpGet("{id:guid}/versions")] public async Task<IActionResult> Versions(Guid id, CancellationToken ct) => Ok(await db.WorkflowVersions.AsNoTracking().Where(x => x.WorkflowId == id).OrderByDescending(x => x.Version).Select(x => new { x.Id, x.Version, x.Published, x.CreatedAt }).ToListAsync(ct));
     [Authorize(Roles = "Admin"), HttpPost("{id:guid}/versions")] public async Task<IActionResult> CreateVersion(Guid id, CreateWorkflowVersionRequest request, CancellationToken ct)
     {
@@ -40,6 +52,14 @@ public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinition
     {
         if (!await db.WorkflowVersions.AnyAsync(x => x.WorkflowId == id && x.Published, ct)) return BadRequest(new { message = "Workflow 至少需要一个已发布版本。" });
         var e = await db.Workflows.FindAsync([id], ct); if (e is null) return NotFound(); e.Publish(); await db.SaveChangesAsync(ct); return Ok();
+    }
+    [Authorize(Roles = "Admin"), HttpPost("{id:guid}/disable")]
+    public async Task<IActionResult> Disable(Guid id, CancellationToken ct)
+    {
+        var workflow = await db.Workflows.FindAsync([id], ct);
+        if (workflow is null) return NotFound();
+        workflow.Disable(); await db.SaveChangesAsync(ct);
+        return Ok(new { workflow.Id, status = workflow.Status.ToString() });
     }
 }
 public sealed record CreateWorkflowRequest(Guid BusinessFunctionId, string Name, string? Description);

@@ -134,7 +134,7 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
 
     private static async Task<(Guid CityId, Guid SystemId, Guid FunctionId)?> ResolveBusinessScopeAsync(AgentRpaDbContext db, Guid workflowId, CancellationToken ct)
     {
-        var row = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId)
+        var row = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId && x.Status == AgentRPA.Domain.Workflow.WorkflowStatus.Published)
             .Join(db.BusinessFunctions.AsNoTracking(), w => w.BusinessFunctionId, f => f.Id, (w, f) => new { f.Id, f.SystemId })
             .Join(db.BusinessSystems.AsNoTracking(), x => x.SystemId, s => s.Id, (x, s) => new { FunctionId = x.Id, SystemId = s.Id, s.CityId })
             .SingleOrDefaultAsync(ct);

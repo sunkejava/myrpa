@@ -134,7 +134,7 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
 
     private async Task<(Guid CityId, Guid SystemId, Guid FunctionId, string Action)?> ResolveWorkflowScopeAsync(Guid workflowId, int version, CancellationToken ct)
     {
-        var row = await db.WorkflowVersions.AsNoTracking().Where(x => x.WorkflowId == workflowId && x.Version == version && x.Published).Join(db.Workflows.AsNoTracking(), v => v.WorkflowId, w => w.Id, (v, w) => new { w.BusinessFunctionId }).SingleOrDefaultAsync(ct); if (row is null) return null;
+        var row = await db.WorkflowVersions.AsNoTracking().Where(x => x.WorkflowId == workflowId && x.Version == version && x.Published).Join(db.Workflows.AsNoTracking().Where(w => w.Status == AgentRPA.Domain.Workflow.WorkflowStatus.Published), v => v.WorkflowId, w => w.Id, (v, w) => new { w.BusinessFunctionId }).SingleOrDefaultAsync(ct); if (row is null) return null;
         var scope = await db.BusinessFunctions.AsNoTracking().Where(f => f.Id == row.BusinessFunctionId).Join(db.BusinessSystems.AsNoTracking(), f => f.SystemId, s => s.Id, (f, s) => new { FunctionId = f.Id, SystemId = s.Id, s.CityId }).SingleOrDefaultAsync(ct);
         return scope is null ? null : (scope.CityId, scope.SystemId, scope.FunctionId, "Execute");
     }

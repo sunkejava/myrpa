@@ -224,5 +224,11 @@ jobs:
               raise AssertionError('Rejected task was queued')
           except urllib.error.HTTPError as error:
               assert error.code == 403, error.code
+          post(f'/api/workflows/{protected_workflow["id"]}/disable', {}, token)
+          try:
+              create_task(protected_workflow, protected_version)
+              raise AssertionError('Disabled workflow accepted new task')
+          except urllib.error.HTTPError as error:
+              assert error.code == 422, error.code
           print('API startup, login, administration and city-isolated permission checks passed')
           PY
