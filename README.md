@@ -80,6 +80,28 @@ Provider / Adapter 用于隔离外部服务：
 - Swagger / OpenAPI
 - Vue 3 + TypeScript（前端建设中）
 
+## 开发启动
+
+需要 .NET 10 SDK 与 Node.js 22。首次运行 API 自动执行 EF Core Migration；默认数据库是 API 工作目录下的 SQLite 文件。
+
+```bash
+export AgentRPA__Bootstrap__AdminPassword='自行设置至少十位的密码'
+export AgentRPA__Jwt__SigningKey='自行设置至少三十二位的随机签名密钥'
+dotnet run --project src/backend/AgentRPA.Api --urls http://127.0.0.1:5000
+```
+
+另开终端启动前端：
+
+```bash
+cd src/frontend
+npm install
+npm run dev
+```
+
+访问 `http://localhost:5173`，开发环境 `/api` 默认代理到 `http://localhost:5000`，可通过 `VITE_API_PROXY_TARGET` 覆盖。Swagger 在开发环境的 `http://localhost:5000/swagger`。首次启动的管理员账号为 `admin`，密码为配置的 `AgentRPA__Bootstrap__AdminPassword`。生产环境必须显式设置 JWT 签名密钥；不要将密码提交到仓库。
+
+当前前端接入登录、本人任务列表、自然语言规划和任务提交；其余导航与业务管理能力仍按 `docs/development-plan.md` 逐阶段开发。CI 除编译外验证 API 启动、登录和匿名访问控制。
+
 ```text
 src/backend/
 ├── AgentRPA.Domain/
@@ -93,47 +115,9 @@ src/backend/
 
 ## 当前开发进度
 
-**Phase 1：平台基础 + 一托 N 执行节点。** 当前已完成持久化 Registry 和 NodeAgent SignalR 通信骨架，下一步进入节点认证、Lease/ResourceLock、真实 ExecutionDispatch。
+项目已具备账户登录、任务调度、Workflow、节点注册、浏览器执行和基础权限校验。前端已接入登录、本人任务列表与自然语言规划。城市资源树、逐 Step 权限、审批、真实社保 Adapter、恢复机制及完整运营页面仍在开发中；准确的剩余事项参见 `docs/development-plan.md`。
 
-### 已完成
-
-- [x] 一托 N 异构执行节点总体架构
-- [x] `ExecutionNode / NodePool / NodeCapability / WorkerSlot`
-- [x] `NodeKind / OsPlatform / AgentKey`
-- [x] `ExecutionRequirement` + Scheduler 硬过滤/软评分
-- [x] Node 注册/心跳 Contracts 与 API
-- [x] EF Core 10 + SQLite DbContext
-- [x] City / BusinessSystem / BusinessFunction 持久化映射
-- [x] Node Registry EF Core 持久化实现
-- [x] WorkerSlot / NodeCapability 注册与刷新
-- [x] 最近心跳节点筛选
-- [x] SignalR Hub + typed NodeAgent contract
-- [x] NodeAgent 注册 → SignalR Connect
-- [x] NodeAgent 自动重连与命令接收骨架
-- [x] GitHub Actions restore/build 基础 CI
-
-### 正在开发
-
-- [ ] API Key / mTLS / 证书认证
-- [ ] 节点注册审批 / Disabled 控制
-- [ ] NodePool / Node / WorkerSlot 管理 API
-- [ ] 节点离线自动落库
-- [ ] NodeLease / ResourceLock
-- [ ] SignalR Heartbeat / ACK / Progress 完整协议
-- [ ] ExecutionDispatch
-- [ ] Scheduler 接入真实 Lease
-
-### 后续阶段
-
-- [ ] Workflow 编辑、版本和发布
-- [ ] Playwright Browser Worker
-- [ ] Windows Desktop UI Worker
-- [ ] Task / TaskItem / Execution 状态机
-- [ ] Excel/CSV 批量执行、断点续跑、跨 Node 并发
-- [ ] UKey / Captcha / Human Intervention / Notification Provider 实现
-- [ ] Agent 自然语言规划与权限预检查
-- [ ] 前端节点、调度、执行、人工介入运营中心
-- [ ] 集成测试及 Windows NodeAgent 发布
+本仓库的 CI 分别运行后端 Build/Test、前端 Build，以及 API 启动与登录冒烟检查。
 
 ## 安全原则
 

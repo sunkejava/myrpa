@@ -41,6 +41,8 @@ if (string.IsNullOrWhiteSpace(signingKey))
     signingKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 }
 else if (signingKey.Length < 32) throw new InvalidOperationException("AgentRPA:Jwt:SigningKey 必须至少 32 个字符。");
+// 开发环境生成的临时密钥必须同时用于 JWT 签发与校验。
+builder.Configuration["AgentRPA:Jwt:SigningKey"] = signingKey;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
     options.TokenValidationParameters = new TokenValidationParameters
