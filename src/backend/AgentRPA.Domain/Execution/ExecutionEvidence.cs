@@ -21,7 +21,8 @@ public enum ExecutionLogEventType
     Browser = 4,
     HumanIntervention = 5,
     Artifact = 6,
-    System = 7
+    System = 7,
+    ManualReconciliation = 8
 }
 
 /// <summary>执行过程日志。Sequence 是 SQLite 下稳定排序的业务序号，避免按 DateTimeOffset 排序。</summary>
