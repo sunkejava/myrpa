@@ -31,3 +31,35 @@ jobs:
         run: dotnet restore AgentRPA.sln
       - name: Build
         run: dotnet build AgentRPA.sln --configuration Release --no-restore
+      - name: Start API and verify login and access control
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5017
+          ConnectionStrings__AgentRPA: Data Source=smoke-test.db
+          AgentRPA__Bootstrap__AdminPassword: SmokeTestPassword123!
+        run: |
+          set -euo pipefail
+          dotnet run --project src/backend/AgentRPA.Api/AgentRPA.Api.csproj --configuration Release --no-build > api-smoke.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; cat api-smoke.log' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:5017/swagger/v1/swagger.json >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then exit 1; fi
+            sleep 1
+          done
+          python3 - <<'PY'
+          import json, urllib.error, urllib.request
+          base = 'http://127.0.0.1:5017'
+          payload = json.dumps({'userName': 'admin', 'password': 'SmokeTestPassword123!'}).encode()
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/login', payload, {'Content-Type': 'application/json'})) as response:
+              token = json.load(response)['accessToken']
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/me', headers={'Authorization': 'Bearer ' + token})) as response:
+              assert json.load(response)['userName'] == 'admin'
+          for path in ('/api/tasks', '/api/workflows', '/api/audit', '/api/node-management/nodes'):
+              try:
+                  urllib.request.urlopen(base + path)
+                  raise AssertionError(f'Anonymous request unexpectedly succeeded: {path}')
+              except urllib.error.HTTPError as error:
+                  assert error.code == 401, (path, error.code)
+          print('API startup, admin login and anonymous access checks passed')
+          PY
