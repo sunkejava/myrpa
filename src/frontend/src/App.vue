@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import TaskOverview from './components/task/TaskOverview.vue'
+import BusinessResources from './components/resources/BusinessResources.vue'
 
 type Task = { id: string; name: string; status: string }
 type Plan = { cityId: string; systemId: string; functionId: string; action: string; riskLevel: string; workflowId: string; workflowVersion: number; requiresConfirmation: boolean }
@@ -8,6 +9,7 @@ type PlanResponse = { success: boolean; summary: string; ambiguities: string[]; 
 
 const dark = ref(localStorage.getItem('agentrpa-theme') !== 'light')
 const token = ref(sessionStorage.getItem('agentrpa-token') || '')
+const admin = ref(sessionStorage.getItem('agentrpa-admin') === 'true')
 const userName = ref(sessionStorage.getItem('agentrpa-user') || '')
 const password = ref('')
 const instruction = ref('')
@@ -42,13 +44,15 @@ async function login() {
   busy.value = true
   error.value = ''
   try {
-    const result = await api<{ accessToken: string; userName: string }>('/api/auth/login', {
+    const result = await api<{ accessToken: string; userName: string; roles: string[] }>('/api/auth/login', {
       method: 'POST', body: JSON.stringify({ userName: userName.value, password: password.value })
     })
     token.value = result.accessToken
+    admin.value = result.roles.includes('Admin')
     userName.value = result.userName
     sessionStorage.setItem('agentrpa-token', token.value)
     sessionStorage.setItem('agentrpa-user', userName.value)
+    sessionStorage.setItem('agentrpa-admin', String(admin.value))
     password.value = ''
     await loadTasks()
   } catch (e) { error.value = e instanceof Error ? e.message : '登录失败' }
@@ -57,10 +61,12 @@ async function login() {
 
 function logout() {
   token.value = ''
+  admin.value = false
   plan.value = null
   tasks.value = []
   sessionStorage.removeItem('agentrpa-token')
   sessionStorage.removeItem('agentrpa-user')
+  sessionStorage.removeItem('agentrpa-admin')
 }
 
 async function loadTasks() {
@@ -100,7 +106,7 @@ onMounted(() => { if (token.value) void loadTasks() })
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">AR</span><div><b>AgentRPA</b><small>Automation Control Plane</small></div></div>
       <nav v-if="token">
-        <button v-for="item in ['AI 工作台', '任务中心']" :key="item" :class="{ active: nav === item }" @click="nav = item; if (item === '任务中心') loadTasks()">{{ item }}</button>
+        <button v-for="item in ['AI 工作台', '任务中心', '城市与系统']" :key="item" :class="{ active: nav === item }" @click="nav = item; if (item === '任务中心') loadTasks()">{{ item }}</button>
       </nav>
       <div class="sidebar-foot">{{ token ? `已登录：${userName}` : '请登录后继续' }}</div>
     </aside>
@@ -132,6 +138,7 @@ onMounted(() => { if (token.value) void loadTasks() })
               <button v-if="plan.plan" class="action-btn primary" :disabled="busy" @click="execute">{{ plan.plan.requiresConfirmation ? '确认并提交任务' : '提交任务' }}</button>
             </div>
           </section>
+          <BusinessResources v-else-if="nav === '城市与系统'" :token="token" :admin="admin" />
           <div v-else>
             <div class="panel-title"><span>我的任务</span><button class="action-btn" @click="loadTasks">刷新</button></div>
             <TaskOverview :tasks="taskRows" />
