@@ -51,9 +51,8 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
     public async Task<int> MarkOfflineNodesAsync(TimeSpan heartbeatTimeout, CancellationToken cancellationToken)
     {
         var timeout = DateTimeOffset.UtcNow.Subtract(heartbeatTimeout);
-        var staleNodes = await db.ExecutionNodes
-            .Where(x => x.Status == NodeStatus.Online && (x.LastHeartbeatAt == null || x.LastHeartbeatAt < timeout))
-            .ToListAsync(cancellationToken);
+        var onlineNodes = await db.ExecutionNodes.Where(x => x.Status == NodeStatus.Online).ToListAsync(cancellationToken);
+        var staleNodes = onlineNodes.Where(x => x.LastHeartbeatAt == null || x.LastHeartbeatAt < timeout).ToList();
 
         foreach (var node in staleNodes)
             node.SetStatus(NodeStatus.Offline);
@@ -68,7 +67,8 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
     {
         var now = DateTimeOffset.UtcNow;
         var timeout = now.AddSeconds(-45);
-        var nodes = await db.ExecutionNodes.AsNoTracking().Where(x => x.Status == NodeStatus.Online && x.LastHeartbeatAt >= timeout).ToListAsync(cancellationToken);
+        var onlineNodes = await db.ExecutionNodes.AsNoTracking().Where(x => x.Status == NodeStatus.Online).ToListAsync(cancellationToken);
+        var nodes = onlineNodes.Where(x => x.LastHeartbeatAt >= timeout).ToList();
         var ids = nodes.Select(x => x.Id).ToArray();
         var capabilities = await db.NodeCapabilities.AsNoTracking().Where(x => ids.Contains(x.NodeId) && x.Enabled).ToListAsync(cancellationToken);
         var slots = await db.WorkerSlots.AsNoTracking().Where(x => ids.Contains(x.NodeId) && x.Enabled).ToListAsync(cancellationToken);
@@ -82,8 +82,15 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
     private async Task ReplaceCapabilitiesInternalAsync(Guid nodeId, IEnumerable<NodeCapabilityInput> inputs, CancellationToken cancellationToken)
     {
         var old = await db.NodeCapabilities.Where(x => x.NodeId == nodeId).ToListAsync(cancellationToken);
-        db.NodeCapabilities.RemoveRange(old);
-        db.NodeCapabilities.AddRange(inputs.Where(x => !string.IsNullOrWhiteSpace(x.Code)).Select(x => new NodeCapability(nodeId, x.Code.Trim(), x.Version, x.MetadataJson)));
+        var requested = inputs.Where(x => !string.IsNullOrWhiteSpace(x.Code))
+            .DistinctBy(x => x.Code.Trim(), StringComparer.OrdinalIgnoreCase).ToArray();
+        db.NodeCapabilities.RemoveRange(old.Where(x => requested.All(input => !string.Equals(input.Code.Trim(), x.Code, StringComparison.OrdinalIgnoreCase))));
+        foreach (var input in requested)
+        {
+            var existing = old.FirstOrDefault(x => string.Equals(x.Code, input.Code.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (existing is null) db.NodeCapabilities.Add(new NodeCapability(nodeId, input.Code.Trim(), input.Version, input.MetadataJson));
+            else existing.Refresh(input.Version, input.MetadataJson);
+        }
     }
 
     private async Task ReplaceSlotsInternalAsync(Guid nodeId, IEnumerable<string> slotNames, CancellationToken cancellationToken)

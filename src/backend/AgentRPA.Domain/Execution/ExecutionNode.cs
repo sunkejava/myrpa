@@ -50,6 +50,8 @@ public sealed class NodeCapability : Entity
     public string? Version { get; private set; }
     public bool Enabled { get; private set; } = true;
     public string? MetadataJson { get; private set; }
+    public void Refresh(string? version, string? metadataJson)
+    { Version = version; MetadataJson = metadataJson; Enabled = true; }
     public void Disable() => Enabled = false;
 }
 
