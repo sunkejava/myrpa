@@ -30,7 +30,7 @@
 - [ ] Country → Province → City → District 树的租户边界及跨层级权限范围（基础实体/API、父级停用权限检查和前端管理已落地）。
 - [ ] Capability 与 Agent SDK/注册路由；逐 Step Capability/Tool 权限以及跨层级资源继承。当前仅支持 Step 所声明的业务动作和精确范围 Deny。
 - [ ] 高风险操作服务端审批门禁，含任务、步骤和批量审批（任务级持久化审批、不同管理员复核、入队与派发门禁已实现；逐 Step 与批量审批仍待完成）。
-- [ ] 青岛 Mock 社保增减员全链路及可替换 Playwright Adapter（开发环境隔离的模拟站点、登录、身份证校验、增减员冲突处理、浏览器测试及增员 Workflow 的真实 NodeAgent 审批、派发、执行与检查点集成验收已落地；减员的 NodeAgent 集成测试及可替换 Adapter 尚待完成）。
+- [ ] 青岛 Mock 社保增减员全链路及可替换 Playwright Adapter（开发环境隔离的模拟站点、登录、身份证校验、增减员冲突处理、浏览器测试及增减员 Workflow 的真实 NodeAgent 审批、派发、执行与检查点集成验收已落地；可替换 Adapter 尚待完成）。
 - [ ] 高风险提交幂等、外部状态核验、Checkpoint 恢复与自动恢复测试（当前已有 Step 事件记录和盲重试阻断，尚不具备安全断点续跑）。
 - [ ] 真实浏览器端测试、手机布局验证、100 任务/1000 子任务压力测试。
 - [ ] Docker/PostgreSQL/Redis/MAF、可观测性与生产部署验收。
