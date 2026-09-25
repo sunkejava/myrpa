@@ -107,6 +107,18 @@ jobs:
           assert check(qd, qd_system, qd_function) == 200
           assert check(jn, jn_system, jn_function) == 403
           assert check(qd, jn_system, jn_function) == 403
+          role = post('/api/user-management/roles', {'name': 'JinanOperator', 'displayName': '济南社保操作员'}, token)
+          post(f'/api/user-management/users/{user["id"]}/roles/{role["id"]}', {}, token)
+          role_policy = post('/api/role-policies', {'roleId': role['id'], 'cityId': jn['id'],
+              'systemId': jn_system['id'], 'functionId': jn_function['id'], 'action': 'Execute'}, token)
+          assert check(jn, jn_system, jn_function) == 200
+          denied = post('/api/permission-policies/deny', {'subjectId': user['id'], 'cityId': jn['id'],
+              'systemId': jn_system['id'], 'functionId': jn_function['id'], 'action': 'Execute'}, token)
+          assert check(jn, jn_system, jn_function) == 403
+          post(f'/api/permission-policies/{denied["id"]}/revoke', {}, token)
+          assert check(jn, jn_system, jn_function) == 200
+          post(f'/api/role-policies/{role_policy["id"]}/revoke', {}, token)
+          assert check(jn, jn_system, jn_function) == 403
           def publish_workflow(function, definition=None):
               workflow = post('/api/workflows',
                   {'businessFunctionId': function['id'], 'name': '测试流程', 'description': '权限冒烟测试'}, token)
