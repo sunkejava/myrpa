@@ -357,11 +357,11 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     child.kill('SIGKILL')
     await new Promise<void>(resolve => child.once('exit', () => resolve()))
     const dbResult = spawnSync('python3', ['-c', `import sqlite3,sys
-db=sqlite3.connect('browser-test.db',timeout=10)
-db.execute("UPDATE execution_nodes SET Status=0 WHERE lower(Id)=lower(?)",(sys.argv[1],))
-db.execute("UPDATE NodeLeases SET ExpiresAt='2000-01-01 00:00:00+00:00' WHERE Released=0")
+db=sqlite3.connect(sys.argv[2],timeout=10)
+assert db.execute("UPDATE execution_nodes SET Status='Offline' WHERE lower(Id)=lower(?)",(sys.argv[1],)).rowcount == 1
+assert db.execute("UPDATE NodeLeases SET ExpiresAt='2000-01-01 00:00:00+00:00' WHERE Released=0").rowcount >= 1
 db.commit()
-`, node.nodeId], { cwd: process.cwd(), encoding: 'utf8' })
+`, node.nodeId, resolve(process.cwd(), '../backend/AgentRPA.Api/browser-test.db')], { cwd: process.cwd(), encoding: 'utf8' })
     expect(dbResult.status, dbResult.stderr).toBe(0)
     let crashDetail: { status: string, items: Array<{ retryCount: number, executions: Array<{ id: string, status: string }> }> } | undefined
     for (let attempt = 0; attempt < 35; attempt++) {
