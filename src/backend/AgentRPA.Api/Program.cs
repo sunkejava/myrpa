@@ -54,7 +54,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     };
 });
 builder.Services.AddAuthorization();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options => options.EnableDetailedErrors = builder.Environment.IsDevelopment());
 builder.Services.AddSingleton<NodeAgentConnectionRegistry>();
 builder.Services.AddHostedService<NodeHealthMonitor>();
 builder.Services.AddHostedService<ExecutionQueueWorker>();
