@@ -3,10 +3,12 @@ import { onMounted, ref } from 'vue'
 
 type Checkpoint = { stepId: string; eventType: string }
 type Pending = { executionId: string; taskId: string; name: string; subjectId: string; error: string | null; checkpoints: Checkpoint[] }
+type MockEvidence = { result: 'Submitted' | 'Inconclusive'; receiptFound: boolean; receiptMatches: boolean; currentStateMatches: boolean; evidenceReference: string | null; message: string }
 const props = defineProps<{ token: string }>()
 const rows = ref<Pending[]>([])
 const evidence = ref<Record<string, string>>({})
 const decision = ref<Record<string, 'Submitted' | 'NotSubmitted'>>({})
+const mockEvidence = ref<Record<string, MockEvidence>>({})
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -38,18 +40,39 @@ async function confirm(item: Pending) {
   } catch (e) { error.value = e instanceof Error ? e.message : '核验失败' }
   finally { busy.value = false }
 }
+
+async function inspectMock(item: Pending) {
+  busy.value = true
+  error.value = ''
+  try {
+    const response = await fetch(`/api/task-reconciliations/${item.executionId}/mock-evidence`, {
+      headers: { Authorization: `Bearer ${props.token}` }
+    })
+    if (!response.ok) {
+      const details = await response.json().catch(() => null) as { message?: string } | null
+      throw new Error(details?.message || `查询回执失败 (${response.status})`)
+    }
+    const result = await response.json() as MockEvidence
+    mockEvidence.value[item.executionId] = result
+    if (result.result === 'Submitted' && result.evidenceReference) evidence.value[item.executionId] = result.evidenceReference
+    // 查询只展示证据，不自动选择结论或提交人工复核。
+  } catch (e) { error.value = e instanceof Error ? e.message : '查询回执失败' }
+  finally { busy.value = false }
+}
 onMounted(load)
 </script>
 
 <template>
   <section class="panel">
     <div class="panel-title"><span>高风险执行核验</span><button class="action-btn" @click="load">刷新</button></div>
-    <p class="muted">先在外部系统核对业务状态，记录查询单号或截图编号。确认已提交则结案；确认未提交才允许重新执行。任务发起人不能自行核验。</p>
+    <p class="muted">先在外部系统核对业务状态，记录查询单号或截图编号。青岛 Mock 可查询回执辅助判断；查不到回执不能证明未提交。确认已提交则结案；确认未提交才允许重新执行。任务发起人不能自行核验。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
     <div class="table-wrap"><table><thead><tr><th>任务 / 执行</th><th>失败原因与检查点</th><th>外部凭据</th><th>结论</th><th>操作</th></tr></thead>
       <tbody><tr v-for="item in rows" :key="item.executionId">
         <td>{{ item.name }}<br><small>{{ item.taskId }}</small><br><small>{{ item.executionId }}</small></td>
-        <td><p>{{ item.error || '未记录错误' }}</p><small v-for="checkpoint in item.checkpoints" :key="checkpoint.stepId + checkpoint.eventType">{{ checkpoint.stepId }} · {{ checkpoint.eventType }}<br></small></td>
+        <td><p>{{ item.error || '未记录错误' }}</p><small v-for="checkpoint in item.checkpoints" :key="checkpoint.stepId + checkpoint.eventType">{{ checkpoint.stepId }} · {{ checkpoint.eventType }}<br></small>
+          <button class="action-btn" :disabled="busy" @click="inspectMock(item)">查询 Mock 回执</button>
+          <p v-if="mockEvidence[item.executionId]" role="status">{{ mockEvidence[item.executionId].message }}</p></td>
         <td><input v-model.trim="evidence[item.executionId]" :aria-label="`外部核验凭据 ${item.taskId}`" maxlength="256" placeholder="查询单号或截图编号" /></td>
         <td><select v-model="decision[item.executionId]" :aria-label="`核验结论 ${item.taskId}`"><option value="" disabled>选择结论</option><option value="Submitted">已提交，结案</option><option value="NotSubmitted">未提交，重新执行</option></select></td>
         <td><button class="action-btn primary" :disabled="busy || !evidence[item.executionId] || !decision[item.executionId]" @click="confirm(item)">确认核验</button></td>

@@ -15,6 +15,69 @@ namespace AgentRPA.Api.Controllers;
 [ApiController, Route("api/task-reconciliations"), Authorize(Roles = "Admin")]
 public sealed class TaskReconciliationController(AgentRpaDbContext db) : ControllerBase
 {
+    /// <summary>仅查询开发站点已持久化的回执；没有回执不等于外部业务未提交。</summary>
+    [HttpGet("{executionId:guid}/mock-evidence")]
+    public async Task<IActionResult> MockEvidence(Guid executionId, CancellationToken ct)
+    {
+        if (!CurrentUser.TryGetSubjectId(User, out var reviewerId)) return Unauthorized();
+        var execution = await db.Executions.AsNoTracking().SingleOrDefaultAsync(x => x.Id == executionId, ct);
+        if (execution is null) return NotFound();
+        var item = await db.TaskItems.AsNoTracking().SingleOrDefaultAsync(x => x.Id == execution.TaskItemId, ct);
+        var task = item is null ? null : await db.Tasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == item.TaskId, ct);
+        if (task is null || item is null) return NotFound();
+        if (task.SubjectId == reviewerId) return Forbid();
+        if (execution.Status != ExecutionStatus.Failed || item.Status != TaskItemStatus.Failed ||
+            task.Status != DomainTaskStatus.Failed || execution.DispatchKey != $"{item.Id:N}:{item.RetryCount}")
+            return Conflict(new { message = "只能查询待核验的最新失败执行。" });
+        var definition = await db.WorkflowVersions.AsNoTracking().Where(x => x.Id == execution.WorkflowVersionId)
+            .Select(x => x.DefinitionJson).SingleOrDefaultAsync(ct);
+        if (definition is null || await TaskApprovalGate.GetStatusAsync(db, task.Id, definition, ct) != TaskApprovalStatus.Approved)
+            return Conflict(new { message = "任务没有有效的管理员审批。" });
+
+        string? submissionId;
+        string? name;
+        string? idNumber;
+        string? operation = null;
+        try
+        {
+            using var workflow = JsonDocument.Parse(definition);
+            using var input = JsonDocument.Parse(item.InputJson);
+            var root = workflow.RootElement;
+            if (!root.TryGetProperty("adapter", out var adapter) || adapter.ValueKind != JsonValueKind.String || adapter.GetString() != "qd-social-security" ||
+                !root.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+                return Conflict(new { message = "该执行不是青岛社保 Mock Workflow。" });
+            foreach (var step in steps.EnumerateArray())
+                if (step.ValueKind == JsonValueKind.Object && step.TryGetProperty("config", out var config) && config.ValueKind == JsonValueKind.Object &&
+                    config.TryGetProperty("selector", out var selector) && selector.ValueKind == JsonValueKind.String &&
+                    selector.GetString() == "@employee.operation" && config.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.String)
+                    operation = value.GetString();
+            if (input.RootElement.ValueKind != JsonValueKind.Object || operation is not ("add" or "remove"))
+                return Conflict(new { message = "无法识别社保操作或任务输入。" });
+            var data = input.RootElement;
+            submissionId = data.TryGetProperty("submissionId", out var request) && request.ValueKind == JsonValueKind.String ? request.GetString() : null;
+            name = data.TryGetProperty("employeeName", out var employeeName) && employeeName.ValueKind == JsonValueKind.String ? employeeName.GetString() : null;
+            idNumber = data.TryGetProperty("idNumber", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString()?.Trim().ToUpperInvariant() : null;
+        }
+        catch (JsonException) { return Conflict(new { message = "任务或 Workflow 数据不是有效 JSON。" }); }
+        if (string.IsNullOrWhiteSpace(submissionId) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(idNumber))
+            return Conflict(new { message = "核验参数不完整。" });
+
+        var receipt = await db.MockSocialReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
+        var employee = await db.MockSocialEmployees.AsNoTracking().SingleOrDefaultAsync(x => x.IdNumber == idNumber, ct);
+        var matched = receipt is not null && receipt.Operation == operation && receipt.IdNumber == idNumber && receipt.Name == name;
+        var expectedState = operation == "add" ? employee?.Name == name : employee is null;
+        return Ok(new
+        {
+            result = matched && expectedState ? "Submitted" : "Inconclusive",
+            receiptFound = receipt is not null,
+            receiptMatches = matched,
+            currentStateMatches = expectedState,
+            evidenceReference = matched ? $"mock-receipt:{submissionId}" : (string?)null,
+            message = matched && expectedState ? "回执与当前参保状态一致；仍须管理员确认。" :
+                "缺少匹配回执或当前状态已变化；不能据此判断未提交，须人工核验。"
+        });
+    }
+
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {

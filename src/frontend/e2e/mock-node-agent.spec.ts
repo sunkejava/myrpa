@@ -121,6 +121,11 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const failedExecutionId = failedDetail!.items[0].executions[0].id
     const pendingReconciliations = await (await request.get(`${api}/api/task-reconciliations`, { headers: admin })).json() as Array<{ executionId: string }>
     expect(pendingReconciliations.some(entry => entry.executionId === failedExecutionId)).toBe(true)
+    const unknownEvidence = await request.get(`${api}/api/task-reconciliations/${failedExecutionId}/mock-evidence`, { headers: admin })
+    expect(unknownEvidence.ok()).toBeTruthy()
+    expect(await unknownEvidence.json()).toMatchObject({ result: 'Inconclusive', receiptFound: false })
+    const forbiddenEvidence = await request.get(`${api}/api/task-reconciliations/${failedExecutionId}/mock-evidence`, { headers: operatorHeaders })
+    expect(forbiddenEvidence.status()).toBe(403)
     const selfReconcile = await request.post(`${api}/api/task-reconciliations/${failedExecutionId}/decide`, {
       headers: operatorHeaders, data: { decision: 'Submitted', evidenceReference: 'MOCK-STATUS-001' }
     })
@@ -155,6 +160,42 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const removedStatus = await request.get(employeeStatusUrl)
     expect(removedStatus.ok()).toBeTruthy()
     expect(await removedStatus.json()).toMatchObject({ active: false, employeeName: null })
+
+    // A successful external submission followed by a failing assertion has a matching receipt.
+    // Only the administrator may use it as evidence; the lookup never mutates the task.
+    const assertionFailure = JSON.parse(definition) as { steps: Array<{ id: string, config: { contains?: string } }> }
+    assertionFailure.steps.find(step => step.id === 'result')!.config.contains = '不会出现的结果'
+    const receiptWorkflow = await post('/api/workflows', { businessFunctionId: businessFunction.id, name: '提交后断言失败', description: '只读回执核验' })
+    const receiptVersion = await post(`/api/workflows/${receiptWorkflow.id}/versions`, { definitionJson: JSON.stringify(assertionFailure) })
+    await post(`/api/workflows/${receiptWorkflow.id}/versions/${receiptVersion.version}/publish`, {})
+    const receiptTask = await post('/api/tasks', { workflowId: receiptWorkflow.id, workflowVersion: receiptVersion.version,
+      name: '提交后故障', maxRetries: 0, items: [person()] }, operatorHeaders)
+    const receiptApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
+    const receiptApproval = receiptApprovals.find(entry => entry.taskId === receiptTask.id)
+    expect(receiptApproval).toBeDefined()
+    await post(`/api/task-approvals/${receiptApproval!.id}/decide`, { approved: true })
+    await post(`/api/tasks/${receiptTask.id}/queue`, {}, operatorHeaders)
+    let receiptExecutionId: string | undefined
+    for (let attempt = 0; attempt < 65; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${receiptTask.id}`, { headers: operatorHeaders })).json() as
+        { status: string, items: Array<{ executions: Array<{ id: string }> }> }
+      if (detail.status === 'Failed') { receiptExecutionId = detail.items[0].executions[0].id; break }
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(receiptExecutionId, `NodeAgent 日志:\n${output}`).toBeDefined()
+    const evidenceResponse = await request.get(`${api}/api/task-reconciliations/${receiptExecutionId}/mock-evidence`, { headers: admin })
+    expect(evidenceResponse.ok(), await evidenceResponse.text()).toBeTruthy()
+    const proof = await evidenceResponse.json() as { result: string, evidenceReference: string }
+    expect(proof.result).toBe('Submitted')
+    expect(proof.evidenceReference).toMatch(/^mock-receipt:/)
+    await page.getByRole('button', { name: '刷新' }).click()
+    const receiptRow = page.locator('tr').filter({ hasText: receiptTask.id })
+    await receiptRow.getByRole('button', { name: '查询 Mock 回执' }).click()
+    await expect(receiptRow.getByRole('status')).toContainText('回执与当前参保状态一致')
+    await expect(page.getByLabel(`外部核验凭据 ${receiptTask.id}`)).toHaveValue(proof.evidenceReference)
+    await page.getByLabel(`核验结论 ${receiptTask.id}`).selectOption('Submitted')
+    await receiptRow.getByRole('button', { name: '确认核验' }).click()
+    await expect(page.getByRole('status')).toContainText('核验结论已记录')
 
     // A broken navigation fails before any form is submitted. After checking that this person
     // is absent, the reviewer permits one explicit retry; the same broken definition fails again.
