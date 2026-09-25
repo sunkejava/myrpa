@@ -105,12 +105,15 @@ public sealed class HumanInterventionsController(
             await db.SaveChangesAsync(cancellationToken);
             return BadRequest(new { message = "二维码授权已过期。" });
         }
+        if (intervention.Status != InterventionStatus.Opened)
+            return BadRequest(new { message = "二维码授权令牌无效、已使用或已过期。" });
 
-        // 使用条件更新保证并发请求只能成功消费一次；数据库永远不会保存原始令牌。
+        // 有效期按本次请求捕获的 now 判定；SQLite 无法在 ExecuteUpdate 中翻译
+        // DateTimeOffset 的大小比较。状态、摘要及未消费条件仍在单条 SQL 中原子判定。
         var affected = await db.HumanInterventions
             .Where(x => x.Id == id && x.SubjectId == subjectId && x.Type == InterventionType.QrLogin &&
                         x.Status == InterventionStatus.Opened && x.TokenConsumedAt == null &&
-                        x.ExpiresAt >= now && x.SecureEntryHash == tokenHash)
+                        x.SecureEntryHash == tokenHash)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.TokenConsumedAt, now)
                 .SetProperty(x => x.Status, InterventionStatus.Completed), cancellationToken);

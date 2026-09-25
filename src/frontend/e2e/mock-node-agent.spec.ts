@@ -269,6 +269,10 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await post(`/api/workflows/${handoffWorkflow.id}/disable`, {})
     const consumed = await post(`/api/human-interventions/${handoff.id}/qr/consume`, { token: handoff.qrToken }, operatorHeaders) as { status: string }
     expect(consumed.status).toBe('Completed')
+    const reused = await request.post(`${api}/api/human-interventions/${handoff.id}/qr/consume`, {
+      headers: operatorHeaders, data: { token: handoff.qrToken }
+    })
+    expect(reused.status()).toBe(400)
     let handoffStatus: string | undefined
     for (let attempt = 0; attempt < 25; attempt++) {
       const detail = await (await request.get(`${api}/api/tasks/${handoffTask.id}`, { headers: operatorHeaders })).json() as { status: string }
