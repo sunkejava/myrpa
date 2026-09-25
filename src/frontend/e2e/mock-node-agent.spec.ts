@@ -57,7 +57,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
   const registration = await request.post(`${api}/api/nodes/register`, {
     headers: { 'X-Node-Registration-Key': registrationKey }, data: {
       agentKey, name: 'Browser E2E Node', nodeKind: 'Physical', osPlatform: 'Linux', architecture: 'X64',
-      agentVersion: '0.1.0', networkZone: 'default', capabilities: [{ code: 'Browser:Edge' }], workerSlots: ['worker-01']
+      agentVersion: '0.1.0', networkZone: 'default', capabilities: [{ code: 'Browser:Edge' }, { code: 'Adapter:qd-social-security' }], workerSlots: ['worker-01']
     }
   })
   expect(registration.ok(), await registration.text()).toBeTruthy()

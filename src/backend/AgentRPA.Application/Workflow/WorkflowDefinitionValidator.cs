@@ -17,6 +17,18 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return ["Workflow 根节点必须是 JSON Object。"];
             var errors = new List<string>(parameterSchemaValidator.ValidateDefinition(root));
+            if (root.TryGetProperty("adapter", out var adapter))
+            {
+                var code = adapter.ValueKind == JsonValueKind.String ? adapter.GetString() : null;
+                if (string.IsNullOrWhiteSpace(code) || code.Length > 64 || code.Any(c => !char.IsLetterOrDigit(c) && c != '-'))
+                    errors.Add("adapter 必须是长度不超过 64 的字母、数字或连字符编码。");
+                else if (!string.Equals(code, "direct", StringComparison.OrdinalIgnoreCase) &&
+                    (!root.TryGetProperty("executionRequirement", out var requirement) || requirement.ValueKind != JsonValueKind.Object ||
+                     !requirement.TryGetProperty("requiredCapabilities", out var capabilities) || capabilities.ValueKind != JsonValueKind.Array ||
+                     !capabilities.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String &&
+                         string.Equals(x.GetString(), "Adapter:" + code, StringComparison.OrdinalIgnoreCase))))
+                    errors.Add($"adapter {code} 必须声明 executionRequirement.requiredCapabilities 中的 Adapter:{code}。");
+            }
             if (root.TryGetProperty("requiresApproval", out var rootApproval) && rootApproval.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
                 errors.Add("requiresApproval 必须是布尔值。");
             if (root.TryGetProperty("riskLevel", out var risk) &&

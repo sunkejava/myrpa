@@ -11,6 +11,8 @@ builder.Services.AddHttpClient("AgentRPA.Server", client =>
     client.BaseAddress = new Uri(serverUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddSingleton<IWorkflowSiteAdapter, DirectWorkflowSiteAdapter>();
+builder.Services.AddSingleton<IWorkflowSiteAdapter, QingdaoSocialSecuritySiteAdapter>();
 builder.Services.AddSingleton<IWorkflowRuntime, PlaywrightWorkflowRuntime>();
 builder.Services.AddHostedService<NodeAgentWorker>();
 await builder.Build().RunAsync();

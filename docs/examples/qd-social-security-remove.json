@@ -6,14 +6,14 @@
       "id": "open",
       "type": "Navigate",
       "config": {
-        "url": "{{mockBaseUrl}}/mock/qd-social-security"
+        "url": "mock://login"
       }
     },
     {
       "id": "account",
       "type": "Input",
       "config": {
-        "selector": "[name=username]",
+        "selector": "@login.account",
         "value": "demo"
       }
     },
@@ -21,7 +21,7 @@
       "id": "password",
       "type": "Input",
       "config": {
-        "selector": "[name=password]",
+        "selector": "@login.password",
         "value": "Demo123!"
       }
     },
@@ -29,21 +29,21 @@
       "id": "login",
       "type": "Click",
       "config": {
-        "selector": "button[type=submit]"
+        "selector": "@login.submit"
       }
     },
     {
       "id": "form",
       "type": "WaitForElement",
       "config": {
-        "selector": "[name=operation]"
+        "selector": "@employee.operation"
       }
     },
     {
       "id": "operation",
       "type": "Select",
       "config": {
-        "selector": "[name=operation]",
+        "selector": "@employee.operation",
         "value": "remove"
       }
     },
@@ -51,7 +51,7 @@
       "id": "name",
       "type": "Input",
       "config": {
-        "selector": "[name=employeeName]",
+        "selector": "@employee.name",
         "value": "{{employeeName}}"
       }
     },
@@ -59,7 +59,7 @@
       "id": "id",
       "type": "Input",
       "config": {
-        "selector": "[name=idNumber]",
+        "selector": "@employee.id",
         "value": "{{idNumber}}"
       }
     },
@@ -67,14 +67,14 @@
       "id": "submit",
       "type": "Click",
       "config": {
-        "selector": "button[type=submit]"
+        "selector": "@employee.submit"
       }
     },
     {
       "id": "result",
       "type": "Assert",
       "config": {
-        "selector": "[data-result=success]",
+        "selector": "@employee.success",
         "contains": "减员申报成功"
       }
     }
@@ -99,5 +99,11 @@
       "maxLength": 18,
       "sensitive": true
     }
+  },
+  "adapter": "qd-social-security",
+  "executionRequirement": {
+    "requiredCapabilities": [
+      "Adapter:qd-social-security"
+    ]
   }
 }

@@ -19,7 +19,7 @@ public sealed class NodeAgentOptions
     public string AgentVersion { get; set; } = "0.1.0";
     public string? NetworkZone { get; set; }
     public Guid? NodePoolId { get; set; }
-    public List<NodeCapabilityDto> Capabilities { get; set; } = [new("DesktopUI"), new("Browser:Edge")];
+    public List<NodeCapabilityDto> Capabilities { get; set; } = [new("DesktopUI"), new("Browser:Edge"), new("Adapter:qd-social-security")];
     public List<string> WorkerSlots { get; set; } = ["worker-01"];
 }
 
