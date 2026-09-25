@@ -82,6 +82,8 @@ Provider / Adapter 用于隔离外部服务：
 
 ## 开发启动
 
+部署产物由 GitHub Actions 的 Release Packages 流水线生成，Linux/Windows 的启动和节点浏览器依赖见 [发布包部署说明](docs/deployment.md)。
+
 需要 .NET 10 SDK 与 Node.js 22。首次运行 API 自动执行 EF Core Migration；默认数据库是 API 工作目录下的 SQLite 文件。
 
 ```bash

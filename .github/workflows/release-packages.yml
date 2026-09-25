@@ -1,0 +1,87 @@
+name: Release Packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-packages.yml'
+      - 'docs/deployment.md'
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, win-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build frontend
+        working-directory: src/frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Publish API and NodeAgent
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid='${{ matrix.rid }}'
+          dotnet publish src/backend/AgentRPA.Api/AgentRPA.Api.csproj -c Release -r "$rid" --self-contained true -p:PublishSingleFile=true -o "release/api"
+          dotnet publish src/backend/AgentRPA.NodeAgent/AgentRPA.NodeAgent.csproj -c Release -r "$rid" --self-contained true -p:PublishSingleFile=true -o "release/node-agent"
+          mkdir -p release/frontend
+          cp -R src/frontend/dist/. release/frontend/
+          cp docs/deployment.md release/README.md
+          tar -czf "AgentRPA-${rid}.tar.gz" -C release .
+      - name: Smoke check published Linux API
+        if: matrix.rid == 'linux-x64'
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5075
+          AgentRPA__Bootstrap__AdminPassword: PackageSmokePassword123!
+          ConnectionStrings__AgentRPA: Data Source=package-smoke.db
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release/api && ./AgentRPA.Api > ../package-api.log 2>&1) &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; cat release/package-api.log' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5075/swagger/v1/swagger.json >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5075/swagger/v1/swagger.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["openapi"].startswith("3.")'
+          test -s release/api/package-smoke.db
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgentRPA-${{ matrix.rid }}
+          path: AgentRPA-${{ matrix.rid }}.tar.gz
+          if-no-files-found: error
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: AgentRPA-*
+          merge-multiple: true
+          path: dist
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz --repo "${GITHUB_REPOSITORY}" --generate-notes --verify-tag

@@ -31,7 +31,7 @@
 - [ ] Capability 与 Agent SDK/注册路由；逐 Step Capability/Tool 权限以及跨层级资源继承。当前仅支持 Step 所声明的业务动作和精确范围 Deny。
 - [ ] 高风险操作服务端审批门禁，含任务、步骤和批量审批（任务级持久化审批、不同管理员复核、入队与派发门禁已实现；逐 Step 与批量审批仍待完成）。
 - [x] 青岛 Mock 社保增减员全链路及可替换 Playwright Adapter（开发环境隔离的模拟站点、登录、身份证校验、增减员冲突处理、浏览器测试及增减员 Workflow 的真实 NodeAgent 审批、派发、执行与检查点集成验收；站点定位符可通过 `IWorkflowSiteAdapter` 替换，节点能力过滤避免错误派发）。
-- [ ] 高风险提交幂等、外部状态核验、Checkpoint 恢复与自动恢复测试（Step 事件、盲重试阻断与人工核验后结案/重试已具备；Mock 增减员以任务项 `submissionId` 实现进程内幂等回执，CI 验证同号重放；真实外部系统的持久幂等、自动对账和安全断点续跑尚待完成）。
+- [ ] 高风险提交幂等、外部状态核验、Checkpoint 恢复与自动恢复测试（Step 事件、盲重试阻断与人工核验后结案/重试已具备；Mock 增减员回执与参保记录已持久化，CI 验证 API 重启后同号重放；真实外部系统的幂等、自动对账和安全断点续跑尚待完成）。
 - [ ] 真实浏览器端测试、手机布局验证、100 任务/1000 子任务压力测试。
 - [ ] Docker/PostgreSQL/Redis/MAF、可观测性与生产部署验收。
 
@@ -68,7 +68,7 @@
 ## 其他阶段剩余任务
 
 ### Phase 0
-- [ ] Release/Publish 自动化
+- [x] Release/Publish 自动化：Linux/Windows 自包含 API、NodeAgent 与前端静态产物打包、Linux 发布产物启动冒烟、版本标签生成 GitHub Release；部署与浏览器依赖说明见 `docs/deployment.md`。
 
 ### Phase 1
 - [ ] mTLS / 证书轮换
