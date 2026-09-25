@@ -15,12 +15,13 @@
 - [x] Workflow Step 的 `requiredAction` 可逐步预检；任务创建、入队与派发都会复核，包含嵌套分支。
 - [x] 同一精确资源范围支持显式 Deny，优先于用户/角色 Allow；API 和 UI 支持直接拒绝与恢复授权。
 - [x] 管理员可管理角色的精确资源 Allow/Deny/撤销；CI 冒烟覆盖角色授权与用户拒绝的优先级。
+- [x] Country、Province、City、District 基础实体及父子资源 API；历史 City 的 ProvinceId 保持可空，迁移不阻断现有数据。
 - [x] 前端接入真实登录、自然语言任务规划、任务列表和城市/系统/功能管理。
 - [x] Chromium 浏览器端验证桌面登录 → Planner → 任务提交与手机视口主题/布局（首轮发现并修复 SQLite APPLY 查询错误）。
 
 ## 核心验收缺口
 
-- [ ] Country → Province → City → District 完整 Region 树与租户资源边界。
+- [ ] Country → Province → City → District 树的停用继承、租户边界、权限范围及前端管理（基础实体与 API 已落地）。
 - [ ] Capability 与 Agent SDK/注册路由；逐 Step Capability/Tool 权限以及跨层级资源继承。当前仅支持 Step 所声明的业务动作和精确范围 Deny。
 - [ ] 高风险操作服务端审批门禁，含任务、步骤和批量审批。
 - [ ] 青岛 Mock 社保增减员全链路及可替换 Playwright Adapter。

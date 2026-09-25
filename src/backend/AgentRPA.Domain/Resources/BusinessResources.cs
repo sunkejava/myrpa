@@ -2,16 +2,60 @@ using AgentRPA.Domain.Common;
 
 namespace AgentRPA.Domain.Resources;
 
+/// <summary>国家及省份资源节点；旧城市允许暂不绑定省份以兼容历史数据。</summary>
+public sealed class Country : Entity
+{
+    private Country() { }
+    public Country(string code, string name) { Code = City.Require(code, 32, nameof(code)).ToUpperInvariant(); Name = City.Require(name, 128, nameof(name)); }
+    public string Code { get; private set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty;
+    public bool Enabled { get; private set; } = true;
+    public void SetEnabled(bool enabled) { Enabled = enabled; UpdatedAt = DateTimeOffset.UtcNow; }
+}
+
+public sealed class Province : Entity
+{
+    private Province() { }
+    public Province(Guid countryId, string code, string name)
+    {
+        if (countryId == Guid.Empty) throw new ArgumentException("国家不能为空。", nameof(countryId));
+        CountryId = countryId; Code = City.Require(code, 32, nameof(code)).ToUpperInvariant(); Name = City.Require(name, 128, nameof(name));
+    }
+    public Guid CountryId { get; private set; }
+    public string Code { get; private set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty;
+    public bool Enabled { get; private set; } = true;
+    public void SetEnabled(bool enabled) { Enabled = enabled; UpdatedAt = DateTimeOffset.UtcNow; }
+}
+
+public sealed class District : Entity
+{
+    private District() { }
+    public District(Guid cityId, string code, string name)
+    {
+        if (cityId == Guid.Empty) throw new ArgumentException("城市不能为空。", nameof(cityId));
+        CityId = cityId; Code = City.Require(code, 32, nameof(code)).ToUpperInvariant(); Name = City.Require(name, 128, nameof(name));
+    }
+    public Guid CityId { get; private set; }
+    public string Code { get; private set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty;
+    public bool Enabled { get; private set; } = true;
+    public void SetEnabled(bool enabled) { Enabled = enabled; UpdatedAt = DateTimeOffset.UtcNow; }
+}
+
 /// <summary>城市领域对象。</summary>
 public sealed class City : Entity
 {
     private City() { }
-    public City(string code, string name)
+    public City(string code, string name, Guid? provinceId = null)
     {
+        if (provinceId == Guid.Empty) throw new ArgumentException("省份不能为空。", nameof(provinceId));
+        ProvinceId = provinceId;
         Code = Require(code, 32, nameof(code)).ToUpperInvariant();
         Name = Require(name, 128, nameof(name));
     }
     public string Code { get; private set; } = string.Empty;
+    public Guid? ProvinceId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public bool Enabled { get; private set; } = true;
     public void SetEnabled(bool enabled) { Enabled = enabled; UpdatedAt = DateTimeOffset.UtcNow; }

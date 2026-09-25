@@ -15,6 +15,9 @@ namespace AgentRPA.Infrastructure.Persistence;
 public sealed class AgentRpaDbContext(DbContextOptions<AgentRpaDbContext> options) : DbContext(options)
 {
     public DbSet<City> Cities => Set<City>();
+    public DbSet<Country> Countries => Set<Country>();
+    public DbSet<Province> Provinces => Set<Province>();
+    public DbSet<District> Districts => Set<District>();
     public DbSet<BusinessSystem> BusinessSystems => Set<BusinessSystem>();
     public DbSet<BusinessFunction> BusinessFunctions => Set<BusinessFunction>();
     public DbSet<NodePool> NodePools => Set<NodePool>();
