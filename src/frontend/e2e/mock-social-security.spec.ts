@@ -13,16 +13,20 @@ test('青岛模拟社保登录、增员、重复申报、减员及校验', async
   await page.getByRole('button', { name: '登录' }).click()
   await expect(page.getByRole('heading', { name: '青岛社保增减员' })).toBeVisible()
 
-  const submit = async (operation: string, idNumber = employee.idNumber) => {
+  const submit = async (operation: string, idNumber = employee.idNumber, submissionId = '') => {
     await page.locator('[name=operation]').selectOption(operation)
     await page.locator('[name=employeeName]').fill(employee.employeeName)
     await page.locator('[name=idNumber]').fill(idNumber)
+    await page.locator('[name=submissionId]').fill(submissionId)
     await page.getByRole('button', { name: '提交申报' }).click()
   }
   await submit('add', '110105194912310021')
   await expect(page.locator('[data-result=error]')).toContainText('无效')
   await page.getByRole('link', { name: '返回' }).click()
-  await submit('add')
+  await submit('add', employee.idNumber, 'mock-add-replay-001')
+  await expect(page.locator('[data-result=success]')).toContainText('增员申报成功')
+  await page.getByRole('link', { name: '返回' }).click()
+  await submit('add', employee.idNumber, 'mock-add-replay-001')
   await expect(page.locator('[data-result=success]')).toContainText('增员申报成功')
   await page.getByRole('link', { name: '返回' }).click()
   await submit('add')

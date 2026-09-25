@@ -64,6 +64,14 @@
       }
     },
     {
+      "id": "request",
+      "type": "Input",
+      "config": {
+        "selector": "@employee.request",
+        "value": "{{submissionId}}"
+      }
+    },
+    {
       "id": "submit",
       "type": "Click",
       "config": {
@@ -98,6 +106,12 @@
       "minLength": 18,
       "maxLength": 18,
       "sensitive": true
+    },
+    "submissionId": {
+      "type": "string",
+      "required": true,
+      "minLength": 6,
+      "maxLength": 128
     }
   },
   "adapter": "qd-social-security",

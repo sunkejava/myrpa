@@ -12,6 +12,8 @@ public static class MockSocialSecurity
     private const string SessionCookie = "qd-social-session";
     private static readonly ConcurrentDictionary<string, DateTimeOffset> Sessions = new();
     private static readonly ConcurrentDictionary<string, string> Employees = new();
+    private static readonly Dictionary<string, (string Operation, string Id, string Name, string Message)> Receipts = new();
+    private static readonly object SubmissionGate = new();
 
     public static void MapMockSocialSecurity(this WebApplication app)
     {
@@ -46,6 +48,7 @@ public static class MockSocialSecurity
                   <label>业务类型 <select name="operation"><option value="add">增员</option><option value="remove">减员</option></select></label>
                   <label>姓名 <input name="employeeName" required></label>
                   <label>身份证号 <input name="idNumber" required></label>
+                  <label>业务请求号 <input name="submissionId" placeholder="自动化任务请填写唯一请求号"></label>
                   <button type="submit">提交申报</button>
                 </form>
                 """);
@@ -67,13 +70,23 @@ public static class MockSocialSecurity
             var name = form["employeeName"].ToString().Trim();
             var id = form["idNumber"].ToString().Trim().ToUpperInvariant();
             var operation = form["operation"].ToString();
-            if (name.Length is < 2 or > 40 || !ValidId(id) || operation is not ("add" or "remove"))
+            var submissionId = form["submissionId"].ToString().Trim();
+            if (name.Length is < 2 or > 40 || !ValidId(id) || operation is not ("add" or "remove") ||
+                submissionId.Length > 0 && !Regex.IsMatch(submissionId, @"^[A-Za-z0-9_-]{6,128}$", RegexOptions.CultureInvariant))
                 return Result(context, false, "姓名、身份证号或业务类型无效", 400);
-
-            var success = operation == "add" ? Employees.TryAdd(id, name)
-                : ((ICollection<KeyValuePair<string, string>>)Employees).Remove(new KeyValuePair<string, string>(id, name));
-            if (!success) return Result(context, false, operation == "add" ? "该人员已参保" : "参保记录不存在或姓名不匹配", 409);
-            return Result(context, true, operation == "add" ? "增员申报成功" : "减员申报成功");
+            lock (SubmissionGate)
+            {
+                if (submissionId.Length > 0 && Receipts.TryGetValue(submissionId, out var receipt))
+                    return receipt.Operation == operation && receipt.Id == id && receipt.Name == name
+                        ? Result(context, true, receipt.Message)
+                        : Result(context, false, "业务请求号已用于另一笔申报", 409);
+                var success = operation == "add" ? Employees.TryAdd(id, name)
+                    : ((ICollection<KeyValuePair<string, string>>)Employees).Remove(new KeyValuePair<string, string>(id, name));
+                if (!success) return Result(context, false, operation == "add" ? "该人员已参保" : "参保记录不存在或姓名不匹配", 409);
+                var message = operation == "add" ? "增员申报成功" : "减员申报成功";
+                if (submissionId.Length > 0) Receipts[submissionId] = (operation, id, name, message);
+                return Result(context, true, message);
+            }
         });
     }
 

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 const api = 'http://127.0.0.1:5000'
 
@@ -42,8 +43,9 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     data: { workflowId: workflow.id, workflowVersion: version.version, name: '参数缺失', items: ['{}'] } })
   expect(missingParameters.status()).toBe(400)
   expect(await missingParameters.text()).toContain('mockBaseUrl')
+  const person = () => JSON.stringify({ mockBaseUrl: api, employeeName: '真实节点测试', idNumber: '110105194912310038', submissionId: randomUUID() })
   const task = await post('/api/tasks', { workflowId: workflow.id, workflowVersion: version.version,
-    name: '模拟增员', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '真实节点测试', idNumber: '110105194912310038' })] }, operatorHeaders)
+    name: '模拟增员', maxRetries: 0, items: [person()] }, operatorHeaders)
   expect(task.approvalRequired).toBe(true)
   const approvals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
   const approval = approvals.find(item => item.taskId === task.id)
@@ -103,7 +105,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     // A repeat submission fails in the browser. The independent administrator confirms the
     // existing employee in the mock site and closes it without sending another browser command.
     const repeatedTask = await post('/api/tasks', { workflowId: workflow.id, workflowVersion: version.version,
-      name: '重复增员核验', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '真实节点测试', idNumber: '110105194912310038' })] }, operatorHeaders)
+      name: '重复增员核验', maxRetries: 0, items: [person()] }, operatorHeaders)
     const repeatedApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
     const repeatedApproval = repeatedApprovals.find(item => item.taskId === repeatedTask.id)
     expect(repeatedApproval).toBeDefined()
@@ -142,7 +144,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const reconciledLogs = await (await request.get(`${api}/api/executions/${failedExecutionId}/logs`, { headers: operatorHeaders })).json() as Array<{ eventType: string }>
     expect(reconciledLogs.some(entry => entry.eventType === 'ManualReconciliation')).toBe(true)
     const removeTask = await post('/api/tasks', { workflowId: removeWorkflow.id, workflowVersion: removeVersion.version,
-      name: '模拟减员', maxRetries: 0, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '真实节点测试', idNumber: '110105194912310038' })] }, operatorHeaders)
+      name: '模拟减员', maxRetries: 0, items: [person()] }, operatorHeaders)
     expect(removeTask.approvalRequired).toBe(true)
     const removeApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
     const removeApproval = removeApprovals.find(item => item.taskId === removeTask.id)
@@ -162,7 +164,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const brokenVersion = await post(`/api/workflows/${brokenWorkflow.id}/versions`, { definitionJson: JSON.stringify(brokenDefinition) })
     await post(`/api/workflows/${brokenWorkflow.id}/versions/${brokenVersion.version}/publish`, {})
     const brokenTask = await post('/api/tasks', { workflowId: brokenWorkflow.id, workflowVersion: brokenVersion.version,
-      name: '提交前故障', maxRetries: 1, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '未提交测试', idNumber: '110105194912310046' })] }, operatorHeaders)
+      name: '提交前故障', maxRetries: 1, items: [JSON.stringify({ mockBaseUrl: api, employeeName: '未提交测试', idNumber: '110105194912310046', submissionId: randomUUID() })] }, operatorHeaders)
     const brokenApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
     const brokenApproval = brokenApprovals.find(item => item.taskId === brokenTask.id)
     expect(brokenApproval).toBeDefined()

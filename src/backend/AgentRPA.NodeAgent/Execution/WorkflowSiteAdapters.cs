@@ -27,6 +27,7 @@ public sealed class QingdaoSocialSecuritySiteAdapter : IWorkflowSiteAdapter
         ["@employee.operation"] = "[name=operation]",
         ["@employee.name"] = "[name=employeeName]",
         ["@employee.id"] = "[name=idNumber]",
+        ["@employee.request"] = "[name=submissionId]",
         ["@employee.submit"] = "form[action$='/employees'] button[type=submit]",
         ["@employee.success"] = "[data-result=success]"
     };
