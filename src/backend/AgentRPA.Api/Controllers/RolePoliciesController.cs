@@ -25,7 +25,9 @@ public sealed class RolePoliciesController(AgentRpaDbContext db) : ControllerBas
             request.FunctionId == Guid.Empty || !PermissionScopeRules.IsValidAction(request.Action))
             return BadRequest(new { message = "角色、城市、系统、功能和动作必须完整指定。" });
         if (!await db.Roles.AnyAsync(x => x.Id == request.RoleId && x.Enabled, ct) ||
-            !await db.Cities.AnyAsync(x => x.Id == request.CityId && x.Enabled, ct) ||
+            !await db.Cities.AnyAsync(x => x.Id == request.CityId && x.Enabled &&
+                (!x.ProvinceId.HasValue || db.Provinces.Any(p => p.Id == x.ProvinceId && p.Enabled &&
+                    db.Countries.Any(c => c.Id == p.CountryId && c.Enabled))), ct) ||
             !await db.BusinessSystems.AnyAsync(x => x.Id == request.SystemId && x.CityId == request.CityId && x.Enabled, ct) ||
             !await db.BusinessFunctions.AnyAsync(x => x.Id == request.FunctionId && x.SystemId == request.SystemId, ct))
             return BadRequest(new { message = "角色或城市、系统、功能的资源关系无效。" });

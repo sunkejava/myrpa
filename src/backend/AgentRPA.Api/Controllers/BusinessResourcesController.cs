@@ -55,7 +55,9 @@ public sealed class BusinessResourcesController(AgentRpaDbContext db) : Controll
     [Authorize(Roles = "Admin"), HttpPost("cities/{cityId:guid}/districts")]
     public async Task<IActionResult> CreateDistrict(Guid cityId, CreateRegionRequest request, CancellationToken ct)
     {
-        if (!await db.Cities.AnyAsync(x => x.Id == cityId && x.Enabled, ct)) return NotFound();
+        if (!await db.Cities.AnyAsync(x => x.Id == cityId && x.Enabled &&
+            (!x.ProvinceId.HasValue || db.Provinces.Any(p => p.Id == x.ProvinceId && p.Enabled &&
+                db.Countries.Any(c => c.Id == p.CountryId && c.Enabled))), ct)) return NotFound();
         District district;
         try { district = new District(cityId, request.Code, request.Name); }
         catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
@@ -136,7 +138,9 @@ public sealed class BusinessResourcesController(AgentRpaDbContext db) : Controll
     [Authorize(Roles = "Admin"), HttpPost("systems/{systemId:guid}/functions")]
     public async Task<IActionResult> CreateFunction(Guid systemId, CreateFunctionRequest request, CancellationToken ct)
     {
-        if (!await db.BusinessSystems.AnyAsync(x => x.Id == systemId && x.Enabled && db.Cities.Any(c => c.Id == x.CityId && c.Enabled), ct))
+        if (!await db.BusinessSystems.AnyAsync(x => x.Id == systemId && x.Enabled && db.Cities.Any(c => c.Id == x.CityId && c.Enabled &&
+            (!c.ProvinceId.HasValue || db.Provinces.Any(p => p.Id == c.ProvinceId && p.Enabled &&
+                db.Countries.Any(country => country.Id == p.CountryId && country.Enabled)))), ct))
             return NotFound(new { message = "系统不存在或已停用。" });
         BusinessFunction function;
         try { function = new BusinessFunction(systemId, request.Code, request.Name); }

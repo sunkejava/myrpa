@@ -110,7 +110,23 @@ jobs:
           assert check(qd, qd_system, qd_function) == 200
           post(f'/api/business-resources/provinces/{province["id"]}/enabled', {'enabled': False}, token)
           assert check(qd, qd_system, qd_function) == 403
+          def rejects(path, payload, status=404):
+              try:
+                  post(path, payload, token)
+                  raise AssertionError(f'{path} should reject disabled parent')
+              except urllib.error.HTTPError as error:
+                  assert error.code == status, (path, error.code)
+          rejects(f'/api/business-resources/cities/{qd["id"]}/districts', {'code': 'LAOSHAN', 'name': '崂山区'})
+          rejects(f'/api/business-resources/cities/{qd["id"]}/systems', {'code': 'SECOND', 'name': '第二系统'})
+          rejects(f'/api/business-resources/systems/{qd_system["id"]}/functions', {'code': 'SECOND', 'name': '第二功能'})
+          blocked_role = post('/api/user-management/roles', {'name': 'QingdaoOperator', 'displayName': '青岛社保操作员'}, token)
+          rejects('/api/role-policies', {'roleId': blocked_role['id'], 'cityId': qd['id'],
+              'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, 400)
           post(f'/api/business-resources/provinces/{province["id"]}/enabled', {'enabled': True}, token)
+          assert check(qd, qd_system, qd_function) == 200
+          post(f'/api/business-resources/countries/{country["id"]}/enabled', {'enabled': False}, token)
+          assert check(qd, qd_system, qd_function) == 403
+          post(f'/api/business-resources/countries/{country["id"]}/enabled', {'enabled': True}, token)
           assert check(qd, qd_system, qd_function) == 200
           post('/api/permission-policies/deny', {'subjectId': user['id'], 'cityId': qd['id'],
               'systemId': qd_system['id'], 'functionId': qd_function['id'], 'action': 'Execute'}, token)
