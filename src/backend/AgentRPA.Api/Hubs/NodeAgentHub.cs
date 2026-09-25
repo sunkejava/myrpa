@@ -36,8 +36,18 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (node.Status is not NodeStatus.Online) throw new HubException($"Node 当前状态为 {node.Status}，未获准建立执行会话。");
         connections.Bind(request.NodeId, Context.ConnectionId);
         Context.Items["NodeId"] = request.NodeId;
+        // A disable notification can be lost while the node is disconnected. Replay cancellation
+        // on every Connect before considering any completed human intervention for resumption.
+        var disabledExecutions = await (from execution in db.Executions.AsNoTracking()
+            join version in db.WorkflowVersions.AsNoTracking() on execution.WorkflowVersionId equals version.Id
+            join workflow in db.Workflows.AsNoTracking() on version.WorkflowId equals workflow.Id
+            where execution.NodeId == request.NodeId && workflow.Status == WorkflowStatus.Disabled &&
+                (execution.Status == ExecutionStatus.Dispatched || execution.Status == ExecutionStatus.Running ||
+                 execution.Status == ExecutionStatus.Paused || execution.Status == ExecutionStatus.WaitingForHuman)
+            select execution.Id).ToListAsync(cancellationToken);
+        foreach (var executionId in disabledExecutions) await Clients.Caller.CancelAsync(executionId);
         var resumableExecutionIds = await (from execution in db.Executions join intervention in db.HumanInterventions on execution.Id equals intervention.ExecutionId where execution.NodeId == request.NodeId && execution.Status == ExecutionStatus.WaitingForHuman && intervention.Status == InterventionStatus.Completed select execution.Id).Distinct().ToListAsync(cancellationToken);
-        foreach (var executionId in resumableExecutionIds) await Clients.Caller.ResumeAsync(executionId);
+        foreach (var executionId in resumableExecutionIds.Except(disabledExecutions)) await Clients.Caller.ResumeAsync(executionId);
     }
 
     public async Task<NodeHeartbeatAck> Heartbeat(NodeHeartbeatRequest request)

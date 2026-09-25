@@ -6,6 +6,7 @@ using AgentRPA.Contracts.Interventions;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.HumanIntervention;
 using AgentRPA.Domain.Tasks;
+using AgentRPA.Domain.Workflow;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -158,7 +159,8 @@ public sealed class HumanInterventionsController(
                                where current.Id == executionId && task.SubjectId == subjectId
                                select new { Execution = current, Item = item, Task = task })
             .SingleOrDefaultAsync(ct);
-        if (execution is null || execution.Execution.Status != ExecutionStatus.WaitingForHuman || !execution.Execution.NodeId.HasValue)
+        if (execution is null || execution.Execution.Status != ExecutionStatus.WaitingForHuman || !execution.Execution.NodeId.HasValue ||
+            !await db.Workflows.AsNoTracking().AnyAsync(x => x.Id == execution.Task.WorkflowId && x.Status == WorkflowStatus.Published, ct))
             return;
 
         if (!connections.TryGet(execution.Execution.NodeId.Value, out var connectionId) || string.IsNullOrWhiteSpace(connectionId))

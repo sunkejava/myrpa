@@ -239,6 +239,47 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     expect(stopCheckpoints.some(x => x.stepId === 'submit')).toBe(false)
     expect(await (await request.get(`${api}/mock/qd-social-security/employees/status?idNumber=110105194912310046`)).json()).toMatchObject({ active: false })
 
+    // An already waiting human handoff must not be resumed after the workflow is disabled.
+    const handoffDefinition = JSON.parse(definition) as { steps: Array<{ id: string, type: string, config: Record<string, unknown> }> }
+    handoffDefinition.steps.unshift({ id: 'handoff', type: 'HumanTask', config: {} })
+    const handoffWorkflow = await post('/api/workflows', { businessFunctionId: businessFunction.id, name: '停用人工等待流程', description: '人工恢复门禁验收' })
+    const handoffVersion = await post(`/api/workflows/${handoffWorkflow.id}/versions`, { definitionJson: JSON.stringify(handoffDefinition) })
+    await post(`/api/workflows/${handoffWorkflow.id}/versions/${handoffVersion.version}/publish`, {})
+    const handoffTask = await post('/api/tasks', { workflowId: handoffWorkflow.id, workflowVersion: handoffVersion.version,
+      name: '等待人工接管时停用', maxRetries: 0, items: [person()] }, operatorHeaders)
+    const handoffApprovals = await (await request.get(`${api}/api/task-approvals`, { headers: admin })).json() as Array<{ id: string, taskId: string }>
+    const handoffApproval = handoffApprovals.find(entry => entry.taskId === handoffTask.id)
+    expect(handoffApproval).toBeDefined()
+    await post(`/api/task-approvals/${handoffApproval!.id}/decide`, { approved: true })
+    await post(`/api/tasks/${handoffTask.id}/queue`, {}, operatorHeaders)
+    let handoffExecutionId: string | undefined
+    for (let attempt = 0; attempt < 35; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${handoffTask.id}`, { headers: operatorHeaders })).json() as
+        { status: string, items: Array<{ executions: Array<{ id: string, status: string }> }> }
+      if (detail.items[0].executions[0]?.status === 'WaitingForHuman') {
+        handoffExecutionId = detail.items[0].executions[0].id
+        break
+      }
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(handoffExecutionId, `NodeAgent 日志:\n${output}`).toBeDefined()
+    const handoff = await post('/api/human-interventions', { executionId: handoffExecutionId, type: 'QrLogin',
+      title: '等待人工确认', expiresAt: new Date(Date.now() + 180_000).toISOString() }, operatorHeaders) as { id: string, qrToken: string }
+    expect(handoff.qrToken).toBeTruthy()
+    await post(`/api/workflows/${handoffWorkflow.id}/disable`, {})
+    const consumed = await post(`/api/human-interventions/${handoff.id}/qr/consume`, { token: handoff.qrToken }, operatorHeaders) as { status: string }
+    expect(consumed.status).toBe('Completed')
+    let handoffStatus: string | undefined
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const detail = await (await request.get(`${api}/api/tasks/${handoffTask.id}`, { headers: operatorHeaders })).json() as { status: string }
+      handoffStatus = detail.status
+      if (handoffStatus === 'Failed') break
+      await new Promise(done => setTimeout(done, 1000))
+    }
+    expect(handoffStatus, `NodeAgent 日志:\n${output}`).toBe('Failed')
+    const handoffCheckpoints = await (await request.get(`${api}/api/executions/${handoffExecutionId}/checkpoints`, { headers: operatorHeaders })).json() as Array<{ stepId: string }>
+    expect(handoffCheckpoints.some(x => x.stepId === 'submit')).toBe(false)
+
     // A broken navigation fails before any form is submitted. After checking that this person
     // is absent, the reviewer permits one explicit retry; the same broken definition fails again.
     const brokenDefinition = JSON.parse(definition) as { steps: Array<{ id: string, config: { url?: string } }> }
