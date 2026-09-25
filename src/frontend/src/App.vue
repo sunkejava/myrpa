@@ -1,39 +1,143 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import NodeOverview from './components/node/NodeOverview.vue'
+import { computed, onMounted, ref } from 'vue'
 import TaskOverview from './components/task/TaskOverview.vue'
 
-const dark = ref(true)
-const nav = ref('总览')
-const themeClass = computed(() => dark.value ? 'theme-dark' : 'theme-light')
+type Task = { id: string; name: string; status: string }
+type Plan = { cityId: string; systemId: string; functionId: string; action: string; riskLevel: string; workflowId: string; workflowVersion: number; requiresConfirmation: boolean }
+type PlanResponse = { success: boolean; summary: string; ambiguities: string[]; plan: Plan | null }
 
-const nodes = [
-  { name: 'Win-北京-01', kind: 'Physical', os: 'Windows', pool: '北京政务网', slots: '3 / 4', status: 'Online' },
-  { name: 'Win-北京-VM02', kind: 'VirtualMachine', os: 'Windows', pool: '北京政务网', slots: '1 / 4', status: 'Online' },
-  { name: 'Linux-Worker03', kind: 'Container', os: 'Linux', pool: '普通互联网', slots: '0 / 8', status: 'Offline' }
-]
-const tasks = [
-  { id: 'T-20260915-001', name: '北京社保在职状态核验', progress: 72, status: 'Running', success: 68, failed: 4 },
-  { id: 'T-20260915-002', name: '上海人员目录同步', progress: 100, status: 'Succeeded', success: 120, failed: 0 }
-]
+const dark = ref(localStorage.getItem('agentrpa-theme') !== 'light')
+const token = ref(sessionStorage.getItem('agentrpa-token') || '')
+const userName = ref(sessionStorage.getItem('agentrpa-user') || '')
+const password = ref('')
+const instruction = ref('')
+const plan = ref<PlanResponse | null>(null)
+const tasks = ref<Task[]>([])
+const error = ref('')
+const busy = ref(false)
+const nav = ref('AI 工作台')
+const themeClass = computed(() => dark.value ? 'theme-dark' : 'theme-light')
+const taskRows = computed(() => tasks.value.map(task => ({ id: task.id, name: task.name, status: task.status })))
+
+function toggleTheme() {
+  dark.value = !dark.value
+  localStorage.setItem('agentrpa-theme', dark.value ? 'dark' : 'light')
+}
+
+async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}), ...options.headers }
+  })
+  if (response.status === 401 && token.value) logout()
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null)
+    const message = body && typeof body === 'object' && 'message' in body ? String(body.message) : `请求失败 (${response.status})`
+    throw new Error(message)
+  }
+  return await response.json() as T
+}
+
+async function login() {
+  busy.value = true
+  error.value = ''
+  try {
+    const result = await api<{ accessToken: string; userName: string }>('/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ userName: userName.value, password: password.value })
+    })
+    token.value = result.accessToken
+    userName.value = result.userName
+    sessionStorage.setItem('agentrpa-token', token.value)
+    sessionStorage.setItem('agentrpa-user', userName.value)
+    password.value = ''
+    await loadTasks()
+  } catch (e) { error.value = e instanceof Error ? e.message : '登录失败' }
+  finally { busy.value = false }
+}
+
+function logout() {
+  token.value = ''
+  plan.value = null
+  tasks.value = []
+  sessionStorage.removeItem('agentrpa-token')
+  sessionStorage.removeItem('agentrpa-user')
+}
+
+async function loadTasks() {
+  try { tasks.value = await api<Task[]>('/api/tasks') }
+  catch (e) { error.value = e instanceof Error ? e.message : '任务列表加载失败' }
+}
+
+async function makePlan() {
+  busy.value = true
+  error.value = ''
+  plan.value = null
+  try {
+    plan.value = await api<PlanResponse>('/api/agent/plan', { method: 'POST', body: JSON.stringify({ instruction: instruction.value }) })
+  } catch (e) { error.value = e instanceof Error ? e.message : '任务规划失败' }
+  finally { busy.value = false }
+}
+
+async function execute() {
+  if (!plan.value?.plan) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api<{ id: string }>('/api/agent/execute', { method: 'POST', body: JSON.stringify({ instruction: instruction.value, confirmed: true }) })
+    plan.value = null
+    instruction.value = ''
+    nav.value = '任务中心'
+    await loadTasks()
+  } catch (e) { error.value = e instanceof Error ? e.message : '任务提交失败' }
+  finally { busy.value = false }
+}
+
+onMounted(() => { if (token.value) void loadTasks() })
 </script>
 
 <template>
   <main :class="themeClass" class="app-shell">
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">AR</span><div><b>AgentRPA</b><small>Automation Control Plane</small></div></div>
-      <nav>
-        <button v-for="item in ['总览', '任务中心', 'Workflow', '执行节点', '人工介入', '审计与统计']" :key="item" :class="{ active: nav === item }" @click="nav = item">{{ item }}</button>
+      <nav v-if="token">
+        <button v-for="item in ['AI 工作台', '任务中心']" :key="item" :class="{ active: nav === item }" @click="nav = item; if (item === '任务中心') loadTasks()">{{ item }}</button>
       </nav>
-      <div class="sidebar-foot"><span class="online-dot"></span> Server Online</div>
+      <div class="sidebar-foot">{{ token ? `已登录：${userName}` : '请登录后继续' }}</div>
     </aside>
     <section class="workspace">
-      <header class="topbar"><div><span class="eyebrow">CONTROL CENTER</span><h1>{{ nav }}</h1></div><div class="actions"><button class="icon-btn" @click="dark = !dark">{{ dark ? '☼' : '☾' }}</button><button class="avatar">A</button></div></header>
+      <header class="topbar"><div><span class="eyebrow">CONTROL CENTER</span><h1>{{ token ? nav : '登录' }}</h1></div><div class="actions"><button class="icon-btn" aria-label="切换主题" @click="toggleTheme">{{ dark ? '☼' : '☾' }}</button><button v-if="token" class="action-btn" @click="logout">退出登录</button></div></header>
       <div class="content">
-        <div class="hero"><div><span class="eyebrow">AUTOMATION FABRIC</span><h2>把自然语言变成可审计的自动化执行</h2><p>Agent 负责理解与规划，Workflow 负责确定性执行，NodeAgent 负责本地浏览器、桌面与硬件能力。</p></div><div class="hero-metric"><strong>4</strong><span>Active Workers</span></div></div>
-        <div class="metric-grid"><article><small>待执行任务</small><strong>12</strong><span>队列稳定</span></article><article><small>在线节点</small><strong>8</strong><span>100% 心跳正常</span></article><article><small>今日成功率</small><strong>98.7%</strong><span>+1.8% vs yesterday</span></article><article><small>人工介入</small><strong>3</strong><span>需要处理</span></article></div>
-        <NodeOverview :nodes="nodes" />
-        <TaskOverview :tasks="tasks" />
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <section v-if="!token" class="panel form-panel">
+          <h2>登录 AgentRPA</h2>
+          <form @submit.prevent="login">
+            <label>用户名<input v-model.trim="userName" required autocomplete="username" /></label>
+            <label>密码<input v-model="password" type="password" required autocomplete="current-password" /></label>
+            <button class="action-btn primary" :disabled="busy">{{ busy ? '登录中…' : '登录' }}</button>
+          </form>
+        </section>
+        <template v-else>
+          <section v-if="nav === 'AI 工作台'" class="panel form-panel">
+            <span class="eyebrow">AGENT PLANNER</span>
+            <h2>今天需要帮你处理什么？</h2>
+            <p class="muted">请明确城市、业务系统和业务功能。提交前可查看规划结果及风险。</p>
+            <form @submit.prevent="makePlan">
+              <label>任务描述<textarea v-model.trim="instruction" required rows="5" placeholder="例如：查询青岛社保人员状态"></textarea></label>
+              <button class="action-btn primary" :disabled="busy">{{ busy ? '正在处理…' : '生成计划' }}</button>
+            </form>
+            <div v-if="plan" class="plan-result">
+              <h3>规划结果</h3><p>{{ plan.summary }}</p>
+              <ul v-if="plan.ambiguities.length"><li v-for="reason in plan.ambiguities" :key="reason">{{ reason }}</li></ul>
+              <dl v-if="plan.plan"><dt>城市 ID</dt><dd>{{ plan.plan.cityId }}</dd><dt>系统 ID</dt><dd>{{ plan.plan.systemId }}</dd><dt>功能 ID</dt><dd>{{ plan.plan.functionId }}</dd><dt>动作 / 风险</dt><dd>{{ plan.plan.action }} / {{ plan.plan.riskLevel }}</dd><dt>Workflow</dt><dd>{{ plan.plan.workflowId }} v{{ plan.plan.workflowVersion }}</dd></dl>
+              <button v-if="plan.plan" class="action-btn primary" :disabled="busy" @click="execute">{{ plan.plan.requiresConfirmation ? '确认并提交任务' : '提交任务' }}</button>
+            </div>
+          </section>
+          <div v-else>
+            <div class="panel-title"><span>我的任务</span><button class="action-btn" @click="loadTasks">刷新</button></div>
+            <TaskOverview :tasks="taskRows" />
+            <p v-if="tasks.length === 0" class="muted empty">暂无任务。可以从 AI 工作台创建任务。</p>
+          </div>
+        </template>
       </div>
     </section>
   </main>

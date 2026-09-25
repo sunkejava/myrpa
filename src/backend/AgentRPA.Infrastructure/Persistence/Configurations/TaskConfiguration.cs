@@ -1,5 +1,5 @@
 using AgentRPA.Domain.Tasks;
-using DomainExecution = AgentRPA.Domain.Execution.Execution;
+using DomainExecution = AgentRPA.Domain.Tasks.Execution;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
