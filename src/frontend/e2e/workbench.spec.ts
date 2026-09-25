@@ -42,7 +42,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('编码').fill('CN')
   await page.getByLabel('名称').fill('中国')
   await page.getByRole('button', { name: '创建', exact: true }).click()
-  await page.getByLabel('国家').selectOption({ label: '中国 (CN)' })
+  await page.locator('.resource-grid select').first().selectOption({ label: '中国 (CN)' })
   await page.getByLabel('资源类型').selectOption('province')
   await page.getByLabel('编码').fill('SD')
   await page.getByLabel('名称').fill('山东省')
