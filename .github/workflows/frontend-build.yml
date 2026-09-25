@@ -23,7 +23,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
       - name: Install
         run: npm install
       - name: Build
         run: npm run build
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser integration tests
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5000
+          AgentRPA__Bootstrap__AdminPassword: BrowserTestPassword123!
+          ConnectionStrings__AgentRPA: Data Source=browser-test.db
+          VITE_API_PROXY_TARGET: http://127.0.0.1:5000
+        run: |
+          set -euo pipefail
+          dotnet run --project ../backend/AgentRPA.Api/AgentRPA.Api.csproj > api-browser.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; cat api-browser.log' EXIT
+          for attempt in $(seq 1 80); do
+            if curl -fsS http://127.0.0.1:5000/swagger/v1/swagger.json >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then exit 1; fi
+            sleep 1
+          done
+          npm run test:e2e
+      - name: Upload browser traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: src/frontend/test-results/
+          if-no-files-found: ignore

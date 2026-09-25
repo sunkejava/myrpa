@@ -5,3 +5,5 @@ Existing SDK-style .NET 10 xUnit project: tests/AgentRPA.Tests. Existing suites 
 Acceptance checklist for this development slice: normalized resource codes and correct parent linkage; invalid resource input rejected; disabled resources marked inactive; permission service rejects invalid or disabled scopes. Wider project acceptance (multi-tenant scopes, per-step authorization, workflows, browser execution) remains outstanding.
 
 Workflow permission slice: a published Workflow can contain nested `steps`, `then`, and `else` arrays and each Step can declare `requiredAction`. Creation, enqueue and dispatch use the same permission service; a nested write action must fail before any Step runs.
+
+Browser scope: the Vue app now has real login, planning, task list and administrator resource/permission views. GitHub Actions can run a fresh SQLite API and Vite dev server in one job. E2E browser tests use Chromium on desktop and Pixel 7 to exercise rendered flows and mobile overflow.

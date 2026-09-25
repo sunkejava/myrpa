@@ -128,3 +128,13 @@ Audit
 ```
 
 可要求二次确认、审批或双人复核。
+
+## Workflow Step 业务动作预检
+
+Workflow 的每个 Step 默认需要当前城市、业务系统与功能范围内的 `Execute` 权限。管理员可以在 Step 顶层增加 `requiredAction`（例如 `Approve`）；执行该 Step 时同时需要 `Execute` 和 `Approve`。`Condition.config.then/else`、`Loop.config.steps` 和 `SubWorkflow.config.steps` 都会在任务正式执行前遍历，即使某个运行时分支最后未命中也会预检。未识别的动作与畸形嵌套结构直接拒绝。
+
+```json
+{"steps":[{"type":"Click","requiredAction":"Approve","config":{"selector":"#approve"}}]}
+```
+
+任务创建、导入、入队、重试、Agent 提交、手工派发和后台自动派发均复核权限。管理员撤销权限后，未派发的任务不会继续派发；已派发并正在外部网站运行的 Step 尚不能中途撤销，后续需要执行节点的实时授权协议。此机制只覆盖业务动作：Capability、Agent、Tool、租户范围以及显式 Deny 尚需独立建模，不能据此视作完整权限链。

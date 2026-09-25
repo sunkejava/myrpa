@@ -9,3 +9,7 @@
 - WorkflowPermissionPreflightTests.Nested_step_with_additional_action_requires_both_execute_and_approve: nested branch + required action denied.
 - WorkflowPermissionPreflightTests.Every_step_is_allowed_when_all_actions_are_granted: all declared actions granted.
 - WorkflowPermissionPreflightTests.Invalid_step_permission_declarations_fail_closed: invalid action and malformed nested branch rejected without repository policy lookups.
+
+- e2e/workbench.spec.ts login/resource/plan/task: launch .NET API with an empty SQLite DB, create scoped business resources and a published Workflow through authenticated API, grant Execute, then drive the visible workbench and assert task listing.
+- e2e/workbench.spec.ts theme/mobile: verify theme persistence after reload and no root horizontal overflow on Pixel 7 viewport.
+- CI: install Chromium, run tests after frontend build, upload failed traces.
