@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import TaskOverview from './components/task/TaskOverview.vue'
 import BusinessResources from './components/resources/BusinessResources.vue'
 
-type Task = { id: string; name: string; status: string }
+type Task = { id: string; name: string; status: string; total: number; succeeded: number; failed: number }
 type Plan = { cityId: string; systemId: string; functionId: string; action: string; riskLevel: string; workflowId: string; workflowVersion: number; requiresConfirmation: boolean }
 type PlanResponse = { success: boolean; summary: string; ambiguities: string[]; plan: Plan | null }
 
@@ -19,7 +19,7 @@ const error = ref('')
 const busy = ref(false)
 const nav = ref('AI 工作台')
 const themeClass = computed(() => dark.value ? 'theme-dark' : 'theme-light')
-const taskRows = computed(() => tasks.value.map(task => ({ id: task.id, name: task.name, status: task.status })))
+const taskRows = computed(() => tasks.value.map(task => ({ ...task, progress: task.total ? Math.round(100 * (task.succeeded + task.failed) / task.total) : 0 })))
 
 function toggleTheme() {
   dark.value = !dark.value

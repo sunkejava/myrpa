@@ -19,7 +19,15 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
     public async Task<IActionResult> List(CancellationToken ct)
     {
         if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
-        return Ok(await db.Tasks.AsNoTracking().Where(x => x.SubjectId == subjectId).OrderByDescending(x => x.Id).Select(x => new { x.Id, x.Name, x.WorkflowId, x.WorkflowVersion, x.MaxRetries, Status = x.Status.ToString() }).ToListAsync(ct));
+        return Ok(await db.Tasks.AsNoTracking().Where(x => x.SubjectId == subjectId).OrderByDescending(x => x.Id)
+            .Select(x => new
+            {
+                x.Id, x.Name, x.WorkflowId, x.WorkflowVersion, x.MaxRetries,
+                Status = x.Status.ToString(),
+                Total = db.TaskItems.Count(item => item.TaskId == x.Id),
+                Succeeded = db.TaskItems.Count(item => item.TaskId == x.Id && item.Status == TaskItemStatus.Succeeded),
+                Failed = db.TaskItems.Count(item => item.TaskId == x.Id && item.Status == TaskItemStatus.Failed)
+            }).ToListAsync(ct));
     }
 
     [HttpGet("{id:guid}")]

@@ -55,6 +55,8 @@ jobs:
               token = json.load(response)['accessToken']
           with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/me', headers={'Authorization': 'Bearer ' + token})) as response:
               assert json.load(response)['userName'] == 'admin'
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/tasks', headers={'Authorization': 'Bearer ' + token})) as response:
+              assert isinstance(json.load(response), list)
           for path in ('/api/tasks', '/api/workflows', '/api/audit', '/api/node-management/nodes'):
               try:
                   urllib.request.urlopen(base + path)
