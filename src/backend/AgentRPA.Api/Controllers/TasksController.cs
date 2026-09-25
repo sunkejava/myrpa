@@ -44,11 +44,13 @@ public sealed class TasksController(AgentRpaDbContext db, ISpreadsheetImportServ
         var items = await db.TaskItems.AsNoTracking().Where(x => x.TaskId == id).OrderBy(x => x.Sequence).Select(x => new { x.Id, x.Sequence, x.Status, x.RetryCount, x.ResultJson }).ToListAsync(ct);
         var itemIds = items.Select(x => x.Id).ToArray();
         var executions = await db.Executions.AsNoTracking().Where(x => itemIds.Contains(x.TaskItemId))
-            .OrderByDescending(x => x.Id).Select(x => new { x.Id, x.TaskItemId, Status = x.Status.ToString(), x.Error }).ToListAsync(ct);
+            .Select(x => new { x.Id, x.TaskItemId, x.DispatchKey, Status = x.Status.ToString(), x.Error }).ToListAsync(ct);
         var approval = await db.TaskApprovals.AsNoTracking().Where(x => x.TaskId == id).Select(x => (TaskApprovalStatus?)x.Status).SingleOrDefaultAsync(ct);
         return Ok(new { task.Id, task.Name, task.WorkflowId, task.WorkflowVersion, task.MaxRetries, Status = task.Status.ToString(), ApprovalStatus = approval?.ToString(),
             Items = items.Select(x => new { x.Id, x.Sequence, Status = x.Status.ToString(), x.RetryCount, x.ResultJson,
-                Executions = executions.Where(e => e.TaskItemId == x.Id).ToArray() }) });
+                Executions = executions.Where(e => e.TaskItemId == x.Id)
+                    .OrderByDescending(e => int.TryParse(e.DispatchKey[(e.DispatchKey.LastIndexOf(':') + 1)..], out var retry) ? retry : -1)
+                    .Select(e => new { e.Id, e.TaskItemId, e.Status, e.Error }).ToArray() }) });
     }
 
     [HttpPost]

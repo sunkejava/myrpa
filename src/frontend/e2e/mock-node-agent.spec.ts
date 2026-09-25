@@ -170,24 +170,29 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     expect(brokenApproval).toBeDefined()
     await post(`/api/task-approvals/${brokenApproval!.id}/decide`, { approved: true })
     await post(`/api/tasks/${brokenTask.id}/queue`, {}, operatorHeaders)
-    const waitForFailure = async (retryCount: number) => {
-      let detail: { status: string, items: Array<{ retryCount: number, executions: Array<{ id: string }> }> } | undefined
+    const waitForFailure = async (retryCount: number, previousExecutionId?: string) => {
+      let detail: { status: string, items: Array<{ retryCount: number, executions: Array<{ id: string, status: string }> }> } | undefined
       for (let attempt = 0; attempt < 35; attempt++) {
         detail = await (await request.get(`${api}/api/tasks/${brokenTask.id}`, { headers: operatorHeaders })).json()
-        if (detail?.status === 'Failed' && detail.items[0].retryCount === retryCount) break
+        if (detail?.status === 'Failed' && detail.items[0].retryCount === retryCount &&
+            detail.items[0].executions.some(execution => execution.status === 'Failed' && execution.id !== previousExecutionId)) break
         await new Promise(done => setTimeout(done, 1000))
       }
       expect(detail?.status, `NodeAgent 日志:\n${output}`).toBe('Failed')
       expect(detail!.items[0].retryCount).toBe(retryCount)
-      return detail!.items[0].executions[0].id
+      const failedExecution = detail!.items[0].executions.find(execution => execution.status === 'Failed' && execution.id !== previousExecutionId)
+      expect(failedExecution).toBeDefined()
+      return failedExecution!.id
     }
     const firstFailureId = await waitForFailure(0)
     const absent = await (await request.get(`${api}/mock/qd-social-security/employees/status?idNumber=110105194912310046`)).json() as { active: boolean }
     expect(absent.active).toBe(false)
     const retryDecision = await post(`/api/task-reconciliations/${firstFailureId}/decide`, { decision: 'NotSubmitted', evidenceReference: 'MOCK-STATUS-ABSENT' })
     expect(retryDecision.itemStatus).toBe('Pending')
-    const secondFailureId = await waitForFailure(1)
+    const secondFailureId = await waitForFailure(1, firstFailureId)
     expect(secondFailureId).not.toBe(firstFailureId)
+    const history = await (await request.get(`${api}/api/tasks/${brokenTask.id}`, { headers: operatorHeaders })).json() as { items: Array<{ executions: Array<{ id: string }> }> }
+    expect(history.items[0].executions[0].id).toBe(secondFailureId)
     const exhausted = await request.post(`${api}/api/task-reconciliations/${secondFailureId}/decide`, {
       headers: admin, data: { decision: 'NotSubmitted', evidenceReference: 'MOCK-STATUS-ABSENT' }
     })
