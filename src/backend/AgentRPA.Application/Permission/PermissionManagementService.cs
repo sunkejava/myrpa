@@ -8,10 +8,12 @@ public sealed class PermissionManagementService(IAccessPolicyRepository reposito
     public Task<IReadOnlyList<AccessPolicy>> ListAsync(Guid? subjectId, CancellationToken cancellationToken)
         => repository.ListAsync(subjectId, cancellationToken);
 
-    public Task<AccessPolicy> GrantAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
+    public async Task<AccessPolicy> GrantAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken)
     {
         Validate(subjectId, cityId, systemId, functionId, action);
-        return repository.GrantAsync(new AccessPolicy(subjectId, cityId, systemId, functionId, action.Trim()), cancellationToken);
+        if (!await repository.IsValidScopeAsync(subjectId, cityId, systemId, functionId, cancellationToken))
+            throw new ArgumentException("用户或城市、系统、功能之间的资源关系无效。");
+        return await repository.GrantAsync(new AccessPolicy(subjectId, cityId, systemId, functionId, action.Trim()), cancellationToken);
     }
 
     public Task<bool> RevokeAsync(Guid policyId, CancellationToken cancellationToken)

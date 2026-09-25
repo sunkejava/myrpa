@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -5,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentRPA.Api.Controllers;
 
 /// <summary>审计查询 API。敏感字段由业务层只记录摘要，不返回凭据明文。</summary>
-[ApiController, Route("api/audit")]
+[ApiController, Route("api/audit"), Authorize(Roles = "Admin")]
 public sealed class AuditController(AgentRpaDbContext db) : ControllerBase
 {
     [HttpGet]

@@ -69,6 +69,7 @@ builder.Services.AddScoped<IAgentWorkflowResolver, EfAgentWorkflowResolver>();
 builder.Services.AddScoped<AgentPlanningService>();
 builder.Services.AddScoped<IAccessPolicyRepository, EfAccessPolicyRepository>();
 builder.Services.AddScoped<PermissionService>();
+builder.Services.AddScoped<PermissionManagementService>();
 builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddScoped<IIdentityService, EfIdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();

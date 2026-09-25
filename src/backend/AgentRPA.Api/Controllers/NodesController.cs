@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using AgentRPA.Application.Nodes;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
@@ -46,7 +47,7 @@ public sealed class NodesController(
     }
 
     /// <summary>管理员审批、禁用或恢复节点。PendingApproval 节点不会进入调度候选。</summary>
-    [HttpPost("{id:guid}/status")]
+    [Authorize(Roles = "Admin"), HttpPost("{id:guid}/status")]
     public async Task<IActionResult> SetStatus(Guid id, SetNodeStatusRequest request, CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<NodeStatus>(request.Status, true, out var status))
@@ -59,7 +60,7 @@ public sealed class NodesController(
         return Ok(new { node.Id, status = node.Status.ToString() });
     }
 
-    [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "Admin"), HttpPost("{id:guid}/approve")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken cancellationToken)
     {
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -69,7 +70,7 @@ public sealed class NodesController(
         return Ok(new { node.Id, status = node.Status.ToString() });
     }
 
-    [HttpPost("{id:guid}/drain")]
+    [Authorize(Roles = "Admin"), HttpPost("{id:guid}/drain")]
     public async Task<IActionResult> Drain(Guid id, CancellationToken cancellationToken)
     {
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);

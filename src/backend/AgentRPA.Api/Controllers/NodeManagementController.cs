@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentRPA.Api.Controllers;
 
 /// <summary>执行资源管理接口：节点、节点池、能力与 WorkerSlot。</summary>
-[ApiController, Route("api/node-management")]
+[ApiController, Route("api/node-management"), Authorize(Roles = "Admin")]
 public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerBase
 {
     [HttpGet("nodes")]

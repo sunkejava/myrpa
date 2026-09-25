@@ -8,6 +8,12 @@ namespace AgentRPA.Infrastructure.Permission;
 /// <summary>EF Core 权限策略查询与管理实现。</summary>
 public sealed class EfAccessPolicyRepository(AgentRpaDbContext db) : IAccessPolicyRepository
 {
+    public async Task<bool> IsValidScopeAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, CancellationToken cancellationToken) =>
+        await db.UserAccounts.AsNoTracking().AnyAsync(x => x.Id == subjectId && x.Enabled, cancellationToken) &&
+        await db.Cities.AsNoTracking().AnyAsync(x => x.Id == cityId && x.Enabled, cancellationToken) &&
+        await db.BusinessSystems.AsNoTracking().AnyAsync(x => x.Id == systemId && x.CityId == cityId && x.Enabled, cancellationToken) &&
+        await db.BusinessFunctions.AsNoTracking().AnyAsync(x => x.Id == functionId && x.SystemId == systemId, cancellationToken);
+
     public Task<bool> ExistsAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, string action, CancellationToken cancellationToken) =>
         db.AccessPolicies.AsNoTracking().AnyAsync(x => x.Enabled && x.SubjectId == subjectId && x.CityId == cityId && x.SystemId == systemId && x.FunctionId == functionId && x.Action == action, cancellationToken);
 

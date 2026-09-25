@@ -53,6 +53,18 @@ public sealed class PermissionServiceTests
     }
 
     [Fact]
+    public async Task Disabled_or_mismatched_resource_scope_denies_even_existing_grant()
+    {
+        var repository = new FakeAccessPolicyRepository { ValidScope = false, DirectResult = true, RoleResult = true };
+        var result = await new PermissionService(repository).CheckAsync(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Execute", CancellationToken.None);
+
+        Assert.False(result.Allowed);
+        Assert.Contains("归属关系无效", result.Reason);
+        Assert.Equal(1, repository.LookupCount);
+    }
+
+    [Fact]
     public async Task Invalid_scope_or_action_is_denied_before_repository_lookup()
     {
         var repository = new FakeAccessPolicyRepository();
@@ -67,6 +79,12 @@ public sealed class PermissionServiceTests
 
     private sealed class FakeAccessPolicyRepository : IAccessPolicyRepository
     {
+        public bool ValidScope { get; init; } = true;
+        public Task<bool> IsValidScopeAsync(Guid subjectId, Guid cityId, Guid systemId, Guid functionId, CancellationToken cancellationToken)
+        {
+            LookupCount++;
+            return Task.FromResult(ValidScope);
+        }
         public bool DirectResult { get; init; }
         public bool RoleResult { get; init; }
         public int LookupCount { get; private set; }
