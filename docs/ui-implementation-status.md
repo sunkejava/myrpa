@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 登录与 Windows 开发 | Vite 默认代理到 `127.0.0.1:5000`，可通过 `VITE_API_PROXY_TARGET` 配置 8666；Development 的 HTTP API 不再跳转 HTTPS 导致跨源预检失败；登录使用统一 API 模块；重载验证 `/auth/me`，失效会话清理；详见 [Windows 调试说明](windows-development.md)；CI 浏览器用例覆盖登录和所有菜单入口。 | 已实现基础链路；用户本机 8666 尚需重启验证 |
 | Light / Dark 与自定义主题 | Design Token、主/辅色、背景、卡片、圆角、阴影、密度、动效、科技强度均支持本地保存；新会话采用浅色 SaaS 默认主题，导航按业务分组；浏览器用例验证持久化。 | 已实现基础配置；业务页面旧样式待逐页清理 |
-| 多语言 | `common/system/task/workflow/permission/audit/usage/theme/resources` 资源按模块分开；登录、工作台、任务列表、资源、权限中心、审计、用量、主题设置及通用表单/表格使用 key；JSON 语言包可导入且存在本地。 | 进行中：其余业务页面仍有硬编码文本，完整英文和自定义语言包覆盖待补 |
+| 多语言 | `common/system/task/workflow/permission/audit/usage/theme/resources` 资源按模块分开；登录、工作台、任务列表、资源、权限中心、Workflow 管理、审计、用量、主题设置及通用表单/表格使用 key；JSON 语言包可导入且存在本地。 | 进行中：其余业务页面仍有硬编码文本，完整英文和自定义语言包覆盖待补 |
 | 页面与 API 组件化 | 外壳布局、会话 Store、认证/审计/用量/任务/规划/资源/权限/Workflow API、主题 composable、查询/表格组件分文件；审计、用量、账户、节点能力、节点池、权限记录和资源地区复用表格，审计和用量复用查询表单。 | 进行中：其他管理页面的 API/表单/表格待迁移 |
 | SearchForm | schema、查询、重置、展开、选择项、loading、响应布局已具备。 | 进行中：字段参数序列化待封装为通用 API 工具，更多页面待接入 |
 | DataTable | schema、客户端分页/排序/筛选、选择、批量事件、列显示、CSV 导出、刷新、空状态和密度已具备。 | 进行中：大型数据需服务端分页/排序，批量操作需业务端接入 |

@@ -24,12 +24,20 @@
 .page-toolbar { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 18px; }
 .page-toolbar h2 { font-size: 17px; margin-bottom: 5px; }
 .page-toolbar .muted { font-size: 12px; }
+.usage-metrics { margin: 16px 0; }
+.usage-metrics article { border-radius: var(--radius); }
+.usage-metrics span, .usage-metrics small { color: var(--muted); font-size: 12px; }
+.usage-metrics strong { color: var(--text); font-size: 24px; }
+.workflow-tools { margin: 16px 0; }
+.workflow-tools > summary { display: inline-flex; width: fit-content; list-style: none; cursor: pointer; }
+.workflow-tools > summary::-webkit-details-marker { display: none; }
 th { font-weight: 600; letter-spacing: .01em; }
 td { line-height: 1.5; }
 @media (max-width: 980px) {
   .sidebar { width: 188px; min-width: 188px; }
   .content { padding: 22px 24px 48px; }
   .topbar { padding: 0 24px; }
+  .usage-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .sidebar { width: 100%; height: auto; max-height: 195px; overflow: auto; position: static; padding: 12px; }
@@ -44,4 +52,6 @@ td { line-height: 1.5; }
   .topbar .action-btn { padding: 8px 10px; white-space: nowrap; }
   .page-toolbar { align-items: flex-start; }
   .content { padding: 16px 16px 40px; }
+  .usage-metrics { gap: 8px; }
+  .usage-metrics article { padding: 12px; }
 }
