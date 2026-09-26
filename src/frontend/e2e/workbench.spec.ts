@@ -141,6 +141,12 @@ test('login, resource setup, natural language planning and task submission', asy
   await expect(page.getByRole('button', { name: '重新启用 Workflow' })).toBeVisible()
   await page.getByRole('button', { name: '重新启用 Workflow' }).click()
   await expect(page.getByRole('button', { name: '停用 Workflow' })).toBeVisible()
+  const workflowSelect = page.getByLabel('已有 Workflow')
+  const createdWorkflowId = await workflowSelect.inputValue()
+  await workflowSelect.selectOption(workflow.id)
+  await expect(page.getByRole('combobox', { name: 'Workflow 风险级别' })).toHaveValue('Low')
+  await workflowSelect.selectOption(createdWorkflowId)
+  await expect(page.getByRole('combobox', { name: 'Workflow 风险级别' })).toHaveValue('High')
 })
 
 test('theme switch and mobile layout', async ({ page, isMobile }) => {

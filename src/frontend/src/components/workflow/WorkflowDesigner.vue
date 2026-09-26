@@ -16,6 +16,7 @@ const cityId = ref('')
 const systemId = ref('')
 const functionId = ref('')
 const workflowId = ref('')
+const selectedVersion = ref<number | null>(null)
 const workflowName = ref('')
 const workflowDescription = ref('')
 const error = ref('')
@@ -48,18 +49,23 @@ async function chooseSystem(id: string) {
   catch (e) { fail(e) }
 }
 async function chooseWorkflow(id: string) {
-  workflowId.value = id; versions.value = []; definitionJson.value = defaultDefinition(); notice.value = ''
+  workflowId.value = id; versions.value = []; selectedVersion.value = null; definitionJson.value = defaultDefinition(); notice.value = ''
   try {
-    versions.value = id ? await call<Version[]>(`workflows/${id}/versions`) : []
-    if (id && versions.value.length) await loadVersion(versions.value[0].version)
+    const fetched = id ? await call<Version[]>(`workflows/${id}/versions`) : []
+    if (workflowId.value !== id) return
+    versions.value = fetched
+    if (id && fetched.length) await loadVersion(fetched[0].version)
   }
   catch (e) { fail(e) }
 }
 async function loadVersion(version: number) {
   if (!version || !workflowId.value) return
+  const requestedWorkflowId = workflowId.value
   try {
-    const result = await call<{ definitionJson: string }>(`workflows/${workflowId.value}/versions/${version}`)
+    const result = await call<{ definitionJson: string }>(`workflows/${requestedWorkflowId}/versions/${version}`)
+    if (workflowId.value !== requestedWorkflowId) return
     definitionJson.value = JSON.stringify(JSON.parse(result.definitionJson), null, 2)
+    selectedVersion.value = version
     notice.value = t('workflow.versionLoaded').replace('{version}', String(version))
   } catch (e) { fail(e) }
 }
@@ -127,7 +133,7 @@ onMounted(async () => {
   <section class="panel form-panel resource-panel">
     <div class="resource-grid">
       <label>{{ t('workflow.existing') }}<select :value="workflowId" @change="chooseWorkflow(($event.target as HTMLSelectElement).value)"><option value="">{{ t('workflow.chooseWorkflow') }}</option><option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }} · {{ workflow.status }}</option></select></label>
-      <label>{{ t('workflow.history') }}<select :disabled="!workflowId" @change="loadVersion(Number(($event.target as HTMLSelectElement).value))"><option value="">{{ t('workflow.chooseVersion') }}</option><option v-for="item in versions" :key="item.id" :value="item.version">v{{ item.version }} · {{ t(item.published ? 'workflow.published' : 'workflow.draft') }}</option></select></label>
+      <label>{{ t('workflow.history') }}<select :value="selectedVersion ?? ''" :disabled="!workflowId" @change="loadVersion(Number(($event.target as HTMLSelectElement).value))"><option value="">{{ t('workflow.chooseVersion') }}</option><option v-for="item in versions" :key="item.id" :value="item.version">v{{ item.version }} · {{ t(item.published ? 'workflow.published' : 'workflow.draft') }}</option></select></label>
     </div>
     <template v-if="workflowId">
       <h3>{{ t('workflow.definition') }}</h3>
