@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import WorkflowCanvas from './WorkflowCanvas.vue'
+import FormDialog from '../common/FormDialog.vue'
+import { workflowRequest, type WorkflowResource as Resource, type WorkflowItem as Workflow, type WorkflowVersion as Version } from '../../api/modules/workflows'
 
-type Resource = { id: string; code: string; name: string; enabled?: boolean }
-type Workflow = { id: string; name: string; businessFunctionId: string; status: string }
-type Version = { id: string; version: number; published: boolean }
 const props = defineProps<{ token: string }>()
 const cities = ref<Resource[]>([])
 const systems = ref<Resource[]>([])
@@ -20,6 +19,7 @@ const workflowDescription = ref('')
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
+const creating = ref(false)
 const definitionJson = ref(JSON.stringify({ version: 1, riskLevel: 'Low', requiresApproval: false, steps: [{ id: 'step-1', type: 'End' }] }, null, 2))
 const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'HumanTask', 'Assert', 'End']
 const currentWorkflow = computed(() => workflows.value.find(x => x.id === workflowId.value))
@@ -31,18 +31,7 @@ const parsedDefinition = computed(() => {
 })
 const steps = computed(() => Array.isArray(parsedDefinition.value?.steps) ? parsedDefinition.value.steps as { id?: string; type?: string; config?: Record<string, unknown> }[] : [])
 
-async function call<T>(path: string, method = 'GET', body?: object): Promise<T> {
-  const response = await fetch(`/api/${path}`, { method,
-    headers: { Authorization: `Bearer ${props.token}`, 'Content-Type': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {}) })
-  if (!response.ok) {
-    const details: unknown = await response.json().catch(() => null)
-    const message = details && typeof details === 'object' && 'message' in details ? String(details.message) : `请求失败 (${response.status})`
-    const validation = details && typeof details === 'object' && 'errors' in details && Array.isArray(details.errors) ? `：${details.errors.join('；')}` : ''
-    throw new Error(message + validation)
-  }
-  return await response.json() as T
-}
+const call = <T,>(path: string, method = 'GET', body?: object) => workflowRequest<T>(props.token, path, method, body)
 function fail(e: unknown) { error.value = e instanceof Error ? e.message : '操作失败' }
 async function loadWorkflows() { workflows.value = await call<Workflow[]>('workflows') }
 async function chooseCity(id: string) {
@@ -74,6 +63,7 @@ async function createWorkflow() {
       businessFunctionId: functionId.value, name: workflowName.value.trim(), description: workflowDescription.value.trim()
     })
     await loadWorkflows(); await chooseWorkflow(result.id)
+    creating.value = false
     notice.value = 'Workflow 已创建。编辑定义后创建并发布版本。'
   } catch (e) { fail(e) }
   finally { busy.value = false }
@@ -116,21 +106,9 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div class="page-toolbar"><div><h2>Workflow 管理</h2><p class="muted">选择已有流程编辑版本与风险，发布后才能创建任务。</p></div><button class="action-btn primary" @click="creating = true">新增 Workflow</button></div>
+  <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
   <section class="panel form-panel resource-panel">
-    <h2>Workflow 管理</h2>
-    <p class="muted">选择业务功能创建 Workflow，编辑确定性步骤与风险标记；发布后才可创建任务。高风险版本会进入服务端审批。</p>
-    <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
-    <div class="resource-grid">
-      <label>城市<select :value="cityId" @change="chooseCity(($event.target as HTMLSelectElement).value)"><option value="">选择城市</option><option v-for="city in cities.filter(x => x.enabled)" :key="city.id" :value="city.id">{{ city.name }}</option></select></label>
-      <label>系统<select :value="systemId" :disabled="!cityId" @change="chooseSystem(($event.target as HTMLSelectElement).value)"><option value="">选择系统</option><option v-for="system in systems.filter(x => x.enabled)" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
-      <label>功能<select v-model="functionId" :disabled="!systemId"><option value="">选择功能</option><option v-for="fn in functions" :key="fn.id" :value="fn.id">{{ fn.name }}</option></select></label>
-    </div>
-    <form @submit.prevent="createWorkflow">
-      <h3>创建 Workflow</h3>
-      <label>名称<input v-model="workflowName" required maxlength="200" /></label>
-      <label>说明<input v-model="workflowDescription" /></label>
-      <button class="action-btn primary" :disabled="busy || !functionId">创建 Workflow</button>
-    </form>
     <div class="resource-grid">
       <label>已有 Workflow<select :value="workflowId" @change="chooseWorkflow(($event.target as HTMLSelectElement).value)"><option value="">选择 Workflow</option><option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }} · {{ workflow.status }}</option></select></label>
       <label>历史版本<select :disabled="!workflowId" @change="loadVersion(Number(($event.target as HTMLSelectElement).value))"><option value="">选择版本查看与编辑</option><option v-for="item in versions" :key="item.id" :value="item.version">v{{ item.version }} {{ item.published ? '· 已发布' : '· 草稿' }}</option></select></label>
@@ -146,6 +124,13 @@ onMounted(async () => {
       <div class="actions"><button type="button" class="action-btn primary" :disabled="busy || !parsedDefinition" @click="publishVersion">创建并发布新版本</button><button v-if="currentWorkflow?.status === 'Published'" type="button" class="action-btn" :disabled="busy" @click="disableWorkflow">停用 Workflow</button></div>
     </template>
   </section>
+  <FormDialog :open="creating" title="创建 Workflow" submit-label="创建 Workflow" :busy="busy || !functionId" @close="creating = false" @submit="createWorkflow">
+    <label>城市<select :value="cityId" @change="chooseCity(($event.target as HTMLSelectElement).value)"><option value="">选择城市</option><option v-for="city in cities.filter(x => x.enabled)" :key="city.id" :value="city.id">{{ city.name }}</option></select></label>
+    <label>系统<select :value="systemId" :disabled="!cityId" @change="chooseSystem(($event.target as HTMLSelectElement).value)"><option value="">选择系统</option><option v-for="system in systems.filter(x => x.enabled)" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
+    <label>功能<select v-model="functionId" :disabled="!systemId"><option value="">选择功能</option><option v-for="fn in functions" :key="fn.id" :value="fn.id">{{ fn.name }}</option></select></label>
+    <label>名称<input v-model="workflowName" required maxlength="200" /></label>
+    <label>说明<input v-model="workflowDescription" /></label>
+  </FormDialog>
 </template>
 
 <style scoped>

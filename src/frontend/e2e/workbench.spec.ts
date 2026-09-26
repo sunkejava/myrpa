@@ -117,8 +117,9 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.locator('tr').filter({ hasText: riskyTask.id }).getByRole('button', { name: '批准' }).click()
   await expect(page.getByRole('alert')).toContainText('不得审批本人')
   await page.getByRole('button', { name: 'Workflow 管理' }).click()
-  await page.locator('.resource-grid select').first().selectOption(city.id)
-  await page.locator('.resource-grid select').nth(1).selectOption(system.id)
+  await page.getByRole('button', { name: '新增 Workflow' }).click()
+  await page.getByRole('dialog').getByLabel('城市').selectOption(city.id)
+  await page.getByRole('dialog').getByLabel('系统').selectOption(system.id)
   await page.getByLabel('功能').selectOption(businessFunction.id)
   await page.getByLabel('名称').fill('可发布流程')
   await page.getByRole('button', { name: '创建 Workflow' }).click()
@@ -130,10 +131,11 @@ test('login, resource setup, natural language planning and task submission', asy
 
 test('theme switch and mobile layout', async ({ page, isMobile }) => {
   await page.goto('/')
+  await expect(page.locator('main.app-shell')).toHaveClass(/theme-light/)
   await page.getByRole('button', { name: '切换主题' }).click()
-  await expect(page.locator('main.app-shell')).toHaveClass(/theme-light/)
+  await expect(page.locator('main.app-shell')).toHaveClass(/theme-dark/)
   await page.reload()
-  await expect(page.locator('main.app-shell')).toHaveClass(/theme-light/)
+  await expect(page.locator('main.app-shell')).toHaveClass(/theme-dark/)
   if (isMobile) {
     const [contentWidth, viewportWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth])
     expect(contentWidth).toBeLessThanOrEqual(viewportWidth + 1)
