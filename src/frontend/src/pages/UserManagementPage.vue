@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import DataTable from '../components/table/DataTable.vue'
 
 type User = { id: string; userName: string; displayName: string; enabled: boolean }
 type Role = { id: string; name: string; displayName: string; enabled: boolean }
@@ -17,6 +18,9 @@ const roleDisplayName = ref('')
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const columns = [{ key: 'userName', label: '账户', sortable: true, filterable: true },
+  { key: 'displayName', label: '名称', sortable: true, filterable: true },
+  { key: 'enabled', label: '状态', format: (value: unknown) => value ? '启用' : '停用' }]
 
 async function call<T>(path: string, method = 'GET', data?: object): Promise<T> {
   const response = await fetch(`/api/user-management/${path}`, { method,
@@ -76,6 +80,6 @@ onMounted(load)
     <form @submit.prevent="createRole"><h3>创建角色</h3><div class="resource-grid"><label>角色标识<input v-model.trim="roleName" required /></label><label>显示名称<input v-model.trim="roleDisplayName" required /></label></div><button class="action-btn" :disabled="busy">创建角色</button></form>
     <form @submit.prevent="assignRole"><h3>分配角色</h3><div class="resource-grid"><label>账户<select aria-label="选择账户" :value="selectedUser" required @change="selectUser(($event.target as HTMLSelectElement).value)"><option value="">选择账户</option><option v-for="user in users" :key="user.id" :value="user.id">{{ user.displayName }} ({{ user.userName }})</option></select></label><label>角色<select aria-label="选择角色" v-model="roleId" required><option value="">选择角色</option><option v-for="role in roles.filter(x => x.enabled && !assignedRoles.some(assigned => assigned.id === x.id))" :key="role.id" :value="role.id">{{ role.displayName }}</option></select></label></div>
       <p v-if="selectedUser" class="muted">已分配：{{ assignedRoles.map(role => role.displayName).join('、') || '无' }}</p><button class="action-btn" :disabled="busy || !selectedUser || !roleId">分配角色</button></form>
-    <div class="table-wrap"><table><thead><tr><th>账户</th><th>名称</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="user in users" :key="user.id"><td>{{ user.userName }}</td><td>{{ user.displayName }}</td><td>{{ user.enabled ? '启用' : '停用' }}</td><td><button class="action-btn" :disabled="busy" @click="setEnabled(user)">{{ user.enabled ? '停用' : '启用' }}</button></td></tr></tbody></table></div>
+    <DataTable :rows="users" :columns="columns" :loading="busy" filename="users.csv" @refresh="load"><template #actions="{ row }"><button class="action-btn" :disabled="busy" @click="setEnabled(row as User)">{{ (row as User).enabled ? '停用' : '启用' }}</button></template></DataTable>
   </section>
 </template>

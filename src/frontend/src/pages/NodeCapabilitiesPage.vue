@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import DataTable from '../components/table/DataTable.vue'
 
 type Node = { id: string; name: string; status: string }
 type Capability = { id: string; code: string; version: string | null; enabled: boolean; metadataJson: string | null }
@@ -10,6 +11,8 @@ const capabilities = ref<Capability[]>([])
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const columns = [{ key: 'code', label: '能力代码', sortable: true, filterable: true },
+  { key: 'version', label: '版本' }, { key: 'enabled', label: '状态', format: (value: unknown) => value ? '启用' : '禁用' }]
 
 async function call<T>(path: string, method = 'GET', body?: object): Promise<T> {
   const response = await fetch(`/api/node-management/${path}`, { method,
@@ -49,6 +52,6 @@ onMounted(loadNodes)
     <p class="muted">能力由 NodeAgent 上报；管理员可禁用不可信能力。禁用设置在 Agent 重连后仍有效，只有管理员明确启用才能再次参与调度。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="muted" role="status">{{ notice }}</p>
     <label>节点<select aria-label="选择执行节点" :value="selected" @change="selectNode(($event.target as HTMLSelectElement).value)"><option value="">选择节点</option><option v-for="node in nodes" :key="node.id" :value="node.id">{{ node.name }} · {{ node.id }}</option></select></label>
-    <div v-if="selected" class="table-wrap"><table><thead><tr><th>能力代码</th><th>版本</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="item in capabilities" :key="item.id"><td>{{ item.code }}</td><td>{{ item.version || '—' }}</td><td>{{ item.enabled ? '启用' : '禁用' }}</td><td><button class="action-btn" :disabled="busy" @click="toggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button></td></tr></tbody></table><p v-if="!capabilities.length" class="muted empty">节点尚未上报能力。</p></div>
+    <DataTable v-if="selected" :rows="capabilities" :columns="columns" :loading="busy" empty-label="节点尚未上报能力。" filename="node-capabilities.csv" @refresh="selectNode(selected)"><template #actions="{ row }"><button class="action-btn" :disabled="busy" @click="toggle(row as Capability)">{{ (row as Capability).enabled ? '禁用' : '启用' }}</button></template></DataTable>
   </section>
 </template>

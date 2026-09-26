@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import SearchForm from '../components/form/SearchForm.vue'
+import DataTable from '../components/table/DataTable.vue'
 
 type Summary = { calls: number; inputTokens: number; outputTokens: number; totalTokens: number }
 type Usage = { id: string; taskId: string | null; model: string; providerId: string; inputTokens: number; outputTokens: number; totalTokens: number; occurredAt: string }
@@ -8,7 +10,13 @@ const summary = ref<Summary | null>(null)
 const rows = ref<Usage[]>([])
 const nextAfterId = ref<string | null>(null)
 const taskId = ref('')
+const filters = ref({ taskId: '' })
 const error = ref('')
+const columns = [{ key: 'occurredAt', label: '时间', sortable: true, format: (value: unknown) => new Date(String(value)).toLocaleString('zh-CN') },
+  { key: 'taskId', label: '任务 ID' }, { key: 'model', label: '模型', filterable: true },
+  { key: 'providerId', label: 'Provider' }, { key: 'inputTokens', label: '输入', sortable: true },
+  { key: 'outputTokens', label: '输出', sortable: true }, { key: 'totalTokens', label: '合计', sortable: true }]
+function search(values: Record<string, string> = filters.value) { taskId.value = values.taskId || ''; load() }
 async function load(afterId?: string) {
   error.value = ''
   try {
@@ -30,13 +38,11 @@ onMounted(() => load())
 </script>
 
 <template>
-  <section class="panel form-panel">
+  <section class="panel form-panel" style="max-width:none">
     <h2>我的 LLM 用量</h2><p v-if="error" class="error" role="alert">{{ error }}</p>
-    <form @submit.prevent="load()"><label>任务 ID（可选）<input v-model.trim="taskId" placeholder="按任务筛选" /></label><button class="action-btn primary">查询</button></form>
+    <SearchForm v-model="filters" :fields="[{ key: 'taskId', label: '任务 ID（可选）', placeholder: '按任务筛选' }]" @search="search" />
     <p v-if="summary" class="muted">调用 {{ summary.calls }} 次 · 输入 {{ summary.inputTokens }} Token · 输出 {{ summary.outputTokens }} Token · 总计 {{ summary.totalTokens }} Token</p>
-    <div class="table-wrap"><table><thead><tr><th>时间</th><th>任务 ID</th><th>模型 / Provider</th><th>输入</th><th>输出</th><th>合计</th></tr></thead><tbody>
-      <tr v-for="row in rows" :key="row.id"><td>{{ new Date(row.occurredAt).toLocaleString('zh-CN') }}</td><td>{{ row.taskId || '—' }}</td><td>{{ row.model }}<small>{{ row.providerId }}</small></td><td>{{ row.inputTokens }}</td><td>{{ row.outputTokens }}</td><td>{{ row.totalTokens }}</td></tr>
-    </tbody></table><p v-if="!rows.length" class="muted empty">暂无 Token 用量。</p></div>
+    <DataTable :rows="rows" :columns="columns" empty-label="暂无 Token 用量。" filename="llm-usage.csv" @refresh="search" />
     <button v-if="nextAfterId" class="action-btn" @click="load(nextAfterId)">加载更多</button>
   </section>
 </template>

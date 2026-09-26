@@ -99,7 +99,7 @@ npm install
 npm run dev
 ```
 
-访问 `http://localhost:5173`，开发环境 `/api` 默认代理到 `http://localhost:5000`，可通过 `VITE_API_PROXY_TARGET` 覆盖。Swagger 在开发环境的 `http://localhost:5000/swagger`。开发环境首次启动会创建管理员 `admin / 123456`；已有数据库的密码不会被重置。执行 `bash scripts/seed-development.sh` 可重复初始化演示城市、业务系统和功能。生产环境必须显式设置 `AgentRPA__Bootstrap__AdminPassword`（至少 10 位）与 JWT 签名密钥；演示脚本只允许在开发环境运行。
+访问 `http://127.0.0.1:5173`，开发环境 `/api` 默认代理到 `http://127.0.0.1:5000`，可通过 `VITE_API_PROXY_TARGET` 覆盖。Swagger 在开发环境的 `http://127.0.0.1:5000/swagger`。开发环境首次启动会创建管理员 `admin / 123456`；已有数据库的密码不会被重置。Windows 安装、调试和登录排查见 [Windows 开发说明](docs/windows-development.md)。执行 `bash scripts/seed-development.sh` 可重复初始化演示城市、业务系统和功能。生产环境必须显式设置 `AgentRPA__Bootstrap__AdminPassword`（至少 10 位）与 JWT 签名密钥；演示脚本只允许在开发环境运行。
 
 前端登录、AI 工作台、任务中心和节点管理分别位于 `src/frontend/src/pages/`，业务管理能力按 `docs/development-plan.md` 逐阶段开发。CI 除编译外验证 API 启动、种子数据幂等、登录和匿名访问控制。
 

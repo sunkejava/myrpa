@@ -1,32 +1,36 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import SearchForm from '../components/form/SearchForm.vue'
+import DataTable from '../components/table/DataTable.vue'
+import { apiRequest } from '../api/http'
 
 type Entry = { id: string; createdAt: string; actor: string; action: string; resource: string; resourceId: string; result: string; summary: string }
 const props = defineProps<{ token: string }>()
 const rows = ref<Entry[]>([])
-const actor = ref('')
-const resource = ref('')
+const filters = ref({ actor: '', resource: '' })
 const error = ref('')
-async function load() {
-  error.value = ''
+const busy = ref(false)
+const fields = [{ key: 'actor', label: '操作者', placeholder: '精确匹配' }, { key: 'resource', label: '资源', placeholder: '精确匹配' }]
+const columns = [{ key: 'createdAt', label: '时间', sortable: true, format: (value: unknown) => new Date(String(value)).toLocaleString('zh-CN') },
+  { key: 'actor', label: '操作者', sortable: true, filterable: true }, { key: 'action', label: '动作', sortable: true },
+  { key: 'resource', label: '资源' }, { key: 'result', label: '结果' }, { key: 'summary', label: '说明' }]
+async function load(values: Record<string, string> = filters.value) {
+  error.value = ''; busy.value = true
   try {
     const query = new URLSearchParams({ limit: '100' })
-    if (actor.value.trim()) query.set('actor', actor.value.trim())
-    if (resource.value.trim()) query.set('resource', resource.value.trim())
-    const response = await fetch(`/api/audit?${query}`, { headers: { Authorization: `Bearer ${props.token}` } })
-    if (!response.ok) throw new Error(`审计查询失败 (${response.status})`)
-    rows.value = await response.json() as Entry[]
+    if (values.actor?.trim()) query.set('actor', values.actor.trim())
+    if (values.resource?.trim()) query.set('resource', values.resource.trim())
+    rows.value = await apiRequest<Entry[]>(`audit?${query}`, props.token)
   } catch (e) { error.value = e instanceof Error ? e.message : '审计查询失败' }
+  finally { busy.value = false }
 }
 onMounted(load)
 </script>
 
 <template>
-  <section class="panel form-panel">
+  <section class="panel form-panel" style="max-width:none">
     <h2>审计记录</h2><p v-if="error" class="error" role="alert">{{ error }}</p>
-    <form @submit.prevent="load"><div class="resource-grid"><label>操作者<input v-model.trim="actor" placeholder="精确匹配" /></label><label>资源<input v-model.trim="resource" placeholder="精确匹配" /></label></div><button class="action-btn primary">查询最近 100 条</button></form>
-    <div class="table-wrap"><table><thead><tr><th>时间</th><th>操作者</th><th>动作 / 资源</th><th>结果</th><th>说明</th></tr></thead><tbody>
-      <tr v-for="row in rows" :key="row.id"><td>{{ new Date(row.createdAt).toLocaleString('zh-CN') }}</td><td>{{ row.actor }}</td><td>{{ row.action }}<small>{{ row.resource }} · {{ row.resourceId }}</small></td><td>{{ row.result }}</td><td>{{ row.summary }}</td></tr>
-    </tbody></table><p v-if="!rows.length" class="muted empty">暂无审计记录。</p></div>
+    <SearchForm v-model="filters" :fields="fields" :loading="busy" @search="load" />
+    <DataTable :rows="rows" :columns="columns" :loading="busy" empty-label="暂无审计记录。" filename="audit.csv" @refresh="load" />
   </section>
 </template>

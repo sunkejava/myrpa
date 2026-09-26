@@ -1,0 +1,7 @@
+:root {
+  --radius: 12px;
+  --shadow: 0 8px 24px rgba(2, 8, 20, .08);
+  --space-unit: 1;
+  --accent: #63a9ff;
+  --accent-secondary: #5ec6b1;
+}
