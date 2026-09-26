@@ -12,7 +12,7 @@ public static class IdentityBootstrapper
     public static async Task SeedAsync(AgentRpaDbContext db, IPasswordHasher hasher, IConfiguration configuration,
         bool development = false, CancellationToken cancellationToken = default)
     {
-        if (await db.UserAccounts.AnyAsync(cancellationToken)) return;
+        if (await db.UserAccounts.AnyAsync(x => x.UserName == "admin", cancellationToken)) return;
         var password = configuration["AgentRPA:Bootstrap:AdminPassword"];
         if (string.IsNullOrEmpty(password)) return;
         if (password.Length < 10 && !(development && password == "123456"))
