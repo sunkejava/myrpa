@@ -165,6 +165,19 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await page.getByLabel('用户名').fill('admin')
     await page.getByLabel('密码').fill('BrowserTestPassword123!')
     await page.getByRole('button', { name: '登录', exact: true }).click()
+    const uiNodeKey = `ui-node-${randomUUID()}`
+    const uiNode = await request.post(`${api}/api/nodes/register`, { headers: { 'X-Node-Registration-Key': registrationKey },
+      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点' } })
+    expect(uiNode.ok()).toBeTruthy()
+    const uiNodeId = (await uiNode.json() as { nodeId: string }).nodeId
+    await page.getByRole('button', { name: '节点管理' }).click()
+    const uiRow = page.locator('tr').filter({ hasText: uiNodeId })
+    await expect(uiRow).toContainText('PendingApproval')
+    await uiRow.getByRole('button', { name: '批准' }).click()
+    await expect(uiRow).toContainText('Online')
+    page.once('dialog', dialog => dialog.accept())
+    await uiRow.getByRole('button', { name: '吊销' }).click()
+    await expect(uiRow).toContainText('Revoked')
     await page.getByRole('button', { name: '核验中心' }).click()
     await expect(page.getByText(repeatedTask.id)).toBeVisible()
     await page.getByLabel(`外部核验凭据 ${repeatedTask.id}`).fill('MOCK-STATUS-001')

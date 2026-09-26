@@ -103,7 +103,7 @@
 - [ ] SMS / Webhook 完整策略
 
 ### Phase 8
-- [ ] Node / NodePool / Capability / WorkerSlot 完整管理 UI
+- [ ] Node / NodePool / Capability / WorkerSlot 完整管理 UI（独立节点管理页已接入节点审核、拒绝、排空、恢复、吊销和 WorkerSlot 启停；节点池编辑、能力配置与详情页待完成）。
 - [ ] 调度监控 / ExecutionDispatch 时间线
 - [ ] 人工介入 / UKey / 通知中心 UI
 - [ ] 执行统计 / 失败分析 / 指标与资源监控

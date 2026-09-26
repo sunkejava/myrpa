@@ -31,6 +31,19 @@ jobs:
         run: dotnet restore AgentRPA.sln
       - name: Build
         run: dotnet build AgentRPA.sln --configuration Release --no-restore
+      - name: Seed development database twice
+        env:
+          ConnectionStrings__AgentRPA: Data Source=seed-ci.db
+        run: |
+          bash scripts/seed-development.sh
+          bash scripts/seed-development.sh
+          python3 - <<'PY'
+          import sqlite3
+          with sqlite3.connect('seed-ci.db') as db:
+              for table, code in [('cities', 'DEMO-QD'), ('business_systems', 'DEMO-SOCIAL'), ('business_functions', 'DEMO-QUERY')]:
+                  assert db.execute(f'SELECT count(*) FROM {table} WHERE Code = ?', (code,)).fetchone()[0] == 1
+              assert db.execute('SELECT count(*) FROM user_accounts WHERE UserName = ?', ('admin',)).fetchone()[0] == 1
+          PY
       - name: Start API and verify login and access control
         env:
           ASPNETCORE_ENVIRONMENT: Development

@@ -87,7 +87,6 @@ Provider / Adapter 用于隔离外部服务：
 需要 .NET 10 SDK 与 Node.js 22。首次运行 API 自动执行 EF Core Migration；默认数据库是 API 工作目录下的 SQLite 文件。
 
 ```bash
-export AgentRPA__Bootstrap__AdminPassword='自行设置至少十位的密码'
 export AgentRPA__Jwt__SigningKey='自行设置至少三十二位的随机签名密钥'
 dotnet run --project src/backend/AgentRPA.Api --urls http://127.0.0.1:5000
 ```
@@ -100,9 +99,9 @@ npm install
 npm run dev
 ```
 
-访问 `http://localhost:5173`，开发环境 `/api` 默认代理到 `http://localhost:5000`，可通过 `VITE_API_PROXY_TARGET` 覆盖。Swagger 在开发环境的 `http://localhost:5000/swagger`。首次启动的管理员账号为 `admin`，密码为配置的 `AgentRPA__Bootstrap__AdminPassword`。生产环境必须显式设置 JWT 签名密钥；不要将密码提交到仓库。
+访问 `http://localhost:5173`，开发环境 `/api` 默认代理到 `http://localhost:5000`，可通过 `VITE_API_PROXY_TARGET` 覆盖。Swagger 在开发环境的 `http://localhost:5000/swagger`。开发环境首次启动会创建管理员 `admin / 123456`；已有数据库的密码不会被重置。执行 `bash scripts/seed-development.sh` 可重复初始化演示城市、业务系统和功能。生产环境必须显式设置 `AgentRPA__Bootstrap__AdminPassword`（至少 10 位）与 JWT 签名密钥；演示脚本只允许在开发环境运行。
 
-当前前端接入登录、本人任务列表、自然语言规划和任务提交；其余导航与业务管理能力仍按 `docs/development-plan.md` 逐阶段开发。CI 除编译外验证 API 启动、登录和匿名访问控制。
+前端登录、AI 工作台、任务中心和节点管理分别位于 `src/frontend/src/pages/`，业务管理能力按 `docs/development-plan.md` 逐阶段开发。CI 除编译外验证 API 启动、种子数据幂等、登录和匿名访问控制。
 
 ```text
 src/backend/
