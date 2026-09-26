@@ -6,10 +6,12 @@ type Item = { id: string; sequence: number; status: string; retryCount: number; 
 type Task = { id: string; name: string; status: string; approvalStatus?: string | null; items: Item[] }
 type Checkpoint = { stepId: string; sequence: number; eventType: string; metadataJson?: string | null }
 type Log = { id: string; sequence: number; level: string; eventType: string; stepId?: string; message: string; sensitive: boolean }
+type Artifact = { id: string; fileName: string; artifactType: string; size: number; sha256?: string | null; expiresAt?: string | null }
 const props = defineProps<{ taskId: string; token: string }>()
 const task = ref<Task | null>(null)
 const checkpoints = ref<Checkpoint[]>([])
 const logs = ref<Log[]>([])
+const artifacts = ref<Artifact[]>([])
 const executionId = ref('')
 const error = ref('')
 const busy = ref(false)
@@ -28,10 +30,23 @@ async function load() {
 async function chooseExecution(id: string) {
   executionId.value = id; error.value = ''
   try {
-    [checkpoints.value, logs.value] = await Promise.all([
-      get<Checkpoint[]>(`executions/${id}/checkpoints`), get<Log[]>(`executions/${id}/logs?limit=200`)
+    [checkpoints.value, logs.value, artifacts.value] = await Promise.all([
+      get<Checkpoint[]>(`executions/${id}/checkpoints`), get<Log[]>(`executions/${id}/logs?limit=200`),
+      get<Artifact[]>(`executions/${id}/artifacts`)
     ])
   } catch (e) { error.value = e instanceof Error ? e.message : '读取执行日志失败' }
+}
+async function download(artifact: Artifact) {
+  error.value = ''
+  try {
+    const response = await fetch(`/api/executions/${executionId.value}/artifacts/${artifact.id}/content`,
+      { headers: { Authorization: `Bearer ${props.token}` } })
+    if (!response.ok) throw new Error(`产物下载失败 (${response.status})`)
+    const url = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a')
+    link.href = url; link.download = artifact.fileName; document.body.append(link); link.click(); link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (e) { error.value = e instanceof Error ? e.message : '产物下载失败' }
 }
 function stepType(json?: string | null): string {
   try { return String((JSON.parse(json || '{}') as { stepType?: string }).stepType || '') }
@@ -54,6 +69,8 @@ onMounted(load)
       <div class="table-wrap"><table><thead><tr><th>序号</th><th>Step ID</th><th>类型</th><th>事件</th></tr></thead><tbody><tr v-for="item in checkpoints" :key="item.sequence"><td>{{ item.sequence }}</td><td>{{ item.stepId }}</td><td>{{ stepType(item.metadataJson) }}</td><td>{{ item.eventType === 'StepStarted' ? '开始' : '完成' }}</td></tr></tbody></table><p v-if="!checkpoints.length" class="muted empty">暂无 Step 检查点。</p></div>
       <h3>执行日志</h3>
       <div class="table-wrap"><table><thead><tr><th>序号</th><th>级别</th><th>步骤</th><th>内容</th></tr></thead><tbody><tr v-for="entry in logs" :key="entry.id"><td>{{ entry.sequence }}</td><td>{{ entry.level }}</td><td>{{ entry.stepId || '—' }}</td><td>{{ entry.sensitive ? '敏感信息已隐藏' : entry.message }}</td></tr></tbody></table><p v-if="!logs.length" class="muted empty">暂无执行日志。</p></div>
+      <h3>执行产物</h3>
+      <div class="table-wrap"><table><thead><tr><th>文件</th><th>类型</th><th>大小</th><th>有效期</th><th>操作</th></tr></thead><tbody><tr v-for="artifact in artifacts" :key="artifact.id"><td>{{ artifact.fileName }}<small v-if="artifact.sha256">SHA256：{{ artifact.sha256 }}</small></td><td>{{ artifact.artifactType }}</td><td>{{ artifact.size }} B</td><td>{{ artifact.expiresAt ? new Date(artifact.expiresAt).toLocaleString('zh-CN') : '长期' }}</td><td><button class="action-btn" @click="download(artifact)">下载</button></td></tr></tbody></table><p v-if="!artifacts.length" class="muted empty">暂无执行产物。</p></div>
     </template>
   </section>
 </template>

@@ -15,6 +15,15 @@ public sealed class UserManagementController(AgentRpaDbContext db, IIdentityServ
     public async Task<IActionResult> Users(CancellationToken ct) => Ok(await db.UserAccounts.AsNoTracking()
         .OrderBy(x => x.UserName).Select(x => new { x.Id, x.UserName, x.DisplayName, x.Enabled }).ToListAsync(ct));
 
+    [HttpGet("users/{id:guid}/roles")]
+    public async Task<IActionResult> UserRoles(Guid id, CancellationToken ct)
+    {
+        if (!await db.UserAccounts.AnyAsync(x => x.Id == id, ct)) return NotFound();
+        return Ok(await db.UserAccounts.AsNoTracking().Where(x => x.Id == id)
+            .SelectMany(x => x.Roles).Join(db.Roles.AsNoTracking(), membership => membership.RoleId, role => role.Id,
+                (_, role) => new { role.Id, role.Name, role.DisplayName }).ToListAsync(ct));
+    }
+
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser(CreateUserRequest request, CancellationToken ct)
     {

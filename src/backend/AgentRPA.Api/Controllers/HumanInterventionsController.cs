@@ -79,6 +79,7 @@ public sealed class HumanInterventionsController(
             qrToken = CreateQrToken();
             intervention.Open(HashToken(qrToken));
         }
+        else intervention.Open(null);
 
         db.HumanInterventions.Add(intervention);
         await db.SaveChangesAsync(cancellationToken);

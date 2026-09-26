@@ -351,7 +351,12 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     const handoff = await post('/api/human-interventions', { executionId: handoffExecutionId, type: 'QrLogin',
       title: '等待人工确认', expiresAt: new Date(Date.now() + 180_000).toISOString() }, operatorHeaders) as { id: string, qrToken: string }
     expect(handoff.qrToken).toBeTruthy()
+    const manual = await post('/api/human-interventions', { executionId: handoffExecutionId, type: 'ManualApproval',
+      title: '人工复核记录', expiresAt: new Date(Date.now() + 180_000).toISOString() }, operatorHeaders) as { id: string, status: string }
+    expect(manual.status).toBe('Opened')
     await post(`/api/workflows/${handoffWorkflow.id}/disable`, {})
+    const manualResult = await post(`/api/human-interventions/${manual.id}/complete`, {}, operatorHeaders) as { status: string }
+    expect(manualResult.status).toBe('Completed')
     const consumed = await post(`/api/human-interventions/${handoff.id}/qr/consume`, { token: handoff.qrToken }, operatorHeaders) as { status: string }
     expect(consumed.status).toBe('Completed')
     const reused = await request.post(`${api}/api/human-interventions/${handoff.id}/qr/consume`, {

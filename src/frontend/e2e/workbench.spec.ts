@@ -11,6 +11,14 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('密码').fill(password)
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('heading', { name: '今天需要帮你处理什么？' })).toBeVisible()
+  await page.getByRole('button', { name: 'LLM 用量' }).click()
+  await expect(page.getByRole('heading', { name: '我的 LLM 用量' })).toBeVisible()
+  await expect(page.getByText('Token · 总计')).toBeVisible()
+  await page.getByRole('button', { name: '人工介入' }).click()
+  await expect(page.getByRole('button', { name: '创建人工介入' })).toBeVisible()
+  await page.getByRole('button', { name: '审计记录' }).click()
+  await expect(page.getByRole('heading', { name: '审计记录' })).toBeVisible()
+  await page.getByRole('button', { name: 'AI 工作台' }).click()
   const token = (await (await request.post(`${api}/api/auth/login`, {
     data: { userName: 'admin', password }
   })).json()).accessToken as string
@@ -51,6 +59,17 @@ test('login, resource setup, natural language planning and task submission', asy
   const role = await (await request.post(`${api}/api/user-management/roles`, {
     headers, data: { name: 'Runner', displayName: '执行员' }
   })).json() as { id: string }
+  const uiUserName = `ui-runner-${Date.now()}`
+  await page.getByRole('button', { name: '账户与角色' }).click()
+  await page.getByLabel('登录名').fill(uiUserName)
+  await page.getByLabel('显示名称', { exact: true }).first().fill('页面执行员')
+  await page.getByLabel('初始密码').fill('PageRunnerPassword123!')
+  await page.getByRole('button', { name: '创建账户' }).click()
+  await expect(page.getByRole('status')).toContainText('账户已创建')
+  await page.getByLabel('账户', { exact: true }).selectOption({ label: `页面执行员 (${uiUserName})` })
+  await page.getByLabel('角色', { exact: true }).selectOption(role.id)
+  await page.getByRole('button', { name: '分配角色' }).click()
+  await expect(page.getByText('已分配：执行员')).toBeVisible()
   await page.getByRole('button', { name: '权限中心' }).click()
   await page.getByLabel('授权对象').selectOption('role')
   await page.locator('form select').nth(1).selectOption(role.id)
