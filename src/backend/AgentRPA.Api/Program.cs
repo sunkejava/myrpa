@@ -103,7 +103,9 @@ using (var scope = app.Services.CreateScope())
 }
 if (args.Contains("--seed-only", StringComparer.Ordinal)) return;
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
-app.UseHttpsRedirection();
+// 本地 Vite 代理通常使用 HTTP；重定向到 HTTPS 会使浏览器的登录预检跨源失败。
+// 非开发环境仍强制 HTTPS，开发环境按实际监听协议直接处理请求。
+if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AuditMiddleware>();

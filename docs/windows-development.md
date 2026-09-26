@@ -43,6 +43,15 @@ npm run dev -- --host 127.0.0.1
 
 访问 `http://127.0.0.1:5173/`，输入 `admin` / `123456`。Vite 的 `/api` 代理默认指向 `http://127.0.0.1:5000`。如果 API 端口不同，在**启动 Vite 之前**设置 `$env:VITE_API_PROXY_TARGET = 'http://127.0.0.1:你的端口'`，然后重启 Vite。不要直接打开 `src/frontend/index.html` 或 `dist/index.html`。
 
+例如 API 监听 **HTTP 8666**、前端监听 5173，可在终端 A 设置 `$env:ASPNETCORE_URLS = 'http://127.0.0.1:8666'`，在终端 B 启动 Vite 前设置：
+
+```powershell
+$env:VITE_API_PROXY_TARGET = 'http://127.0.0.1:8666'
+npm run dev -- --host 127.0.0.1
+```
+
+截图中的 `http://127.0.0.1:5173/api/auth/login` 被重定向到 `https://127.0.0.1:8666/api/auth/login`，随后出现 CORS 报错，说明 API 对开发代理的 HTTP 请求执行了 HTTPS 重定向。更新后的 API 在 Development 环境不重定向 HTTP；**重启 API** 后验证 `curl.exe -i http://127.0.0.1:8666/api/auth/me`：预期是 401，响应不能含 `Location: https://...`。若仍为 307/308，请检查实际启动的 API 是否是最新代码、环境是否为 Development，以及其他反向代理是否配置重定向。若你的 8666 本身仅提供 HTTPS，则改用 `https://127.0.0.1:8666` 作为代理目标，并确保 Node.js 信任开发证书；不要把仅支持 HTTPS 的端口写成 `http://`。
+
 在仓库根目录使用 PowerShell 验证后端及代理：
 
 ```powershell
@@ -62,6 +71,7 @@ Invoke-RestMethod http://127.0.0.1:5173/api/auth/me -Headers @{ Authorization = 
 | --- | --- |
 | API 地址无法访问 | 检查终端 A 的监听地址、API 错误和 `Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue`。先让 Swagger 正常。 |
 | 直接访问 API 可登录，通过 Vite 登录显示网络错误或 502 | 浏览器开发者工具 Network 查看 `/api/auth/login` URL，应为 `127.0.0.1:5173`；核对 Vite 控制台代理错误及两个端口。修改 `VITE_API_PROXY_TARGET` 后必须重启 Vite。 |
+| 登录请求跳到 HTTPS 8666 并报 CORS | 检查 `curl.exe -i http://127.0.0.1:8666/api/auth/me` 是否返回 307/308 及 `Location`。切到最新 API、确保 Development 环境，重启 API；若 8666 只监听 HTTPS，代理目标也必须是 HTTPS 并信任证书。 |
 | 登录返回 401 | 确认 API 环境是 Development，核对实际 SQLite 文件位置。已有 admin 不会被初始脚本覆盖；可换新的**开发专用数据库路径**验证预置密码，不要删除有业务数据的旧库。CI 测试库可能使用不同密码。 |
 | 登录返回 500 | 查看终端 A 的异常堆栈、数据库可写性和迁移；运行 `dotnet build .\AgentRPA.sln -c Debug`。 |
 | 登录后刷新回到登录页 | `sessionStorage` 令牌仅在当前标签页保存，重载会查询 `/api/auth/me`。检查它是否 401。开发环境若未配置固定 JWT 签名密钥，API 每次重启会生成新密钥，旧令牌随之失效，应重新登录。 |
