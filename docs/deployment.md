@@ -13,3 +13,6 @@ GitHub Actions 的 **Release Packages** 工作流先运行后端测试，再为 
 ## 托管前端
 
 将 `frontend/` 作为静态网站目录，保留 Vue 路由的回退规则（未知前端路径返回 `index.html`）。在同一站点反向代理 `/api/` 与 `/hubs/node-agent` 到 API；WebSocket 代理需要允许 Upgrade。前端使用相对 API 地址，静态网站不包含任何密钥。发布包仅提供产物，TLS、反向代理、服务管理、数据库备份及外部系统凭据仍由部署环境配置。
+## 远程执行产物网关
+
+API 默认使用本地 `AgentRPA:Artifacts:Root` 存储；多实例部署可将 `AgentRPA__Artifacts__Provider=RemoteHttp`，并通过环境变量配置 `AgentRPA__Artifacts__Remote__Endpoint=https://<受控网关>/artifacts/` 与 `AgentRPA__Artifacts__Remote__BearerToken=<独立服务密钥>`。密钥不得写入仓库或工作流。网关需要以同一键提供 `PUT` 上传、`HEAD` 存在检查、`GET` 下载、`DELETE` 删除，成功返回 2xx、不存在返回 404，并自行持久化文件及限制服务端 Bearer 凭据访问。API 只请求配置的 HTTPS 地址、拒绝重定向和非法 StorageKey；上传在 API 内校验 SHA256 和长度后才登记。切换存储后既有本地产物不会自动搬迁，切换前应规划迁移或保留旧存储。此配置接入的是上述 HTTP 网关协议，不直接实现 S3/OSS API。

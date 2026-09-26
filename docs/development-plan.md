@@ -63,7 +63,7 @@
 - [x] 当前用户执行日志/产物元数据隔离查询 API
 - [x] NodeAgent Runtime 自动上报运行时 Artifact 元数据
 - [x] Screenshot / Download / Upload 等运行时 Artifact 自动登记
-- [ ] Artifact Storage Provider（本地文件、对象存储）
+- [ ] Artifact Storage Provider（本地文件与受控 HTTPS 远程网关可切换；网关协议及 Bearer 身份校验已实现，直接对接 S3/OSS、存量产物迁移与生产存储验收仍待完成）
 
 ## 其他阶段剩余任务
 

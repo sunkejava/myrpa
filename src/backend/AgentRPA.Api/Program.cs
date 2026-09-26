@@ -100,7 +100,16 @@ builder.Services.Configure<LlmProviderOptions>(builder.Configuration.GetSection(
 builder.Services.AddHttpClient("llm", (sp, client) => client.Timeout = sp.GetRequiredService<IOptions<LlmProviderOptions>>().Value.Timeout);
 builder.Services.AddScoped<ILlmProvider, OpenAiCompatibleLlmProvider>();
 builder.Services.AddScoped<ILlmUsageRecorder, EfLlmUsageRecorder>();
-builder.Services.AddSingleton<IArtifactStorage, LocalArtifactStorage>();
+builder.Services.AddHttpClient("artifact-gateway", client => client.Timeout = TimeSpan.FromMinutes(5))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<IArtifactStorage>(services =>
+    (builder.Configuration["AgentRPA:Artifacts:Provider"] ?? "Local").ToLowerInvariant() switch
+    {
+        "local" => ActivatorUtilities.CreateInstance<LocalArtifactStorage>(services),
+        "remotehttp" => new RemoteHttpArtifactStorage(services.GetRequiredService<IHttpClientFactory>().CreateClient("artifact-gateway"),
+            services.GetRequiredService<IConfiguration>()),
+        _ => throw new InvalidOperationException("AgentRPA:Artifacts:Provider 仅支持 Local 或 RemoteHttp。")
+    });
 var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
