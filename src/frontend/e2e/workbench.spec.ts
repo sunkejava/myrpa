@@ -50,7 +50,7 @@ test('login, resource setup, natural language planning and task submission', asy
   })).ok()).toBeTruthy()
 
   await page.getByRole('button', { name: '城市与系统' }).click()
-  await expect(page.getByRole('option', { name: /青岛市/ }).first()).toBeAttached()
+  await expect(page.getByRole('option', { name: /北京市/ }).first()).toBeAttached()
   await page.getByRole('button', { name: '新增资源' }).click()
   await page.getByLabel('资源类型').selectOption('country')
   await page.getByLabel('编码').fill('TST-CN')
