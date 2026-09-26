@@ -85,7 +85,8 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
             node.Id, node.Name, node.OsPlatform.ToString(), node.NodeKind.ToString(), node.Architecture, node.Status.ToString(), node.NodePoolId,
             node.NetworkZone, capabilities.Where(x => x.NodeId == node.Id).Select(x => x.Code).ToHashSet(StringComparer.OrdinalIgnoreCase),
             capabilities.Where(x => x.NodeId == node.Id && x.Code.StartsWith("UKey:", StringComparison.OrdinalIgnoreCase)).Select(x => x.Code[5..]).ToHashSet(StringComparer.OrdinalIgnoreCase),
-            slots.Count(x => x.NodeId == node.Id && (x.ExecutionId is null || x.LeaseExpiresAt <= now)), 0d)).ToList();
+            slots.Count(x => x.NodeId == node.Id && (x.ExecutionId is null || x.LeaseExpiresAt <= now)),
+            Math.Clamp(node.CpuUsage.GetValueOrDefault() / 100d, 0d, 1d))).ToList();
     }
 
     private async Task ReplaceCapabilitiesInternalAsync(Guid nodeId, IEnumerable<NodeCapabilityInput> inputs, CancellationToken cancellationToken)
