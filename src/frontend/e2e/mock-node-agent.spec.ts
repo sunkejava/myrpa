@@ -78,6 +78,8 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
   expect((await applicationAgain.json() as { status: string })).toMatchObject({ status: 'PendingApproval' })
   expect(await post(`/api/nodes/${applicantId}/approve`, {})).toMatchObject({ status: 'Online' })
   expect(await post(`/api/nodes/${applicantId}/revoke`, {})).toMatchObject({ status: 'Revoked' })
+  const revokedDrain = await request.post(`${api}/api/nodes/${applicantId}/drain`, { headers: admin, data: {} })
+  expect(revokedDrain.status()).toBe(409)
   const revokedRegistration = await request.post(`${api}/api/nodes/register`, applicantRequest)
   expect(revokedRegistration.status()).toBe(403)
   const revokedHeartbeat = await request.post(`${api}/api/nodes/heartbeat`, { headers: { 'X-Agent-Key': applicantKey },

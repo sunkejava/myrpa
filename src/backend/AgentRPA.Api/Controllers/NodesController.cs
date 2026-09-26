@@ -109,6 +109,8 @@ public sealed class NodesController(
     {
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (node is null) return NotFound();
+        if (node.Status is NodeStatus.PendingApproval or NodeStatus.Rejected or NodeStatus.Revoked)
+            return Conflict(new { message = "节点尚未获准执行或身份已失效。" });
         node.SetStatus(NodeStatus.Draining);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { node.Id, status = node.Status.ToString() });
