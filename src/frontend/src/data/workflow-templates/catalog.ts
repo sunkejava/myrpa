@@ -12,6 +12,7 @@ const personQuery = {
     { id: 'person-id', type: 'Input', config: { selector: '[data-testid=replace-person-id]', value: '{{personId}}' } },
     { id: 'query', type: 'Click', config: { selector: '[data-testid=replace-query]' } },
     { id: 'result', type: 'WaitForElement', config: { selector: '[data-testid=replace-result]' } },
+    { id: 'extract-person-name', type: 'Extract', config: { selector: '[data-testid=replace-person-name]', output: 'personName' } },
     { id: 'download', type: 'Download', config: { selector: '[data-testid=replace-export]', path: 'artifacts/result.xlsx' } },
     { id: 'end', type: 'End' }
   ]

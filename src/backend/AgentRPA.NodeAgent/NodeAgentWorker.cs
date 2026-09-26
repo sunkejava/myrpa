@@ -157,6 +157,7 @@ public sealed class NodeAgentWorker(
         request.Content.Headers.ContentLength = file.Length;
         request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(artifact.ContentType ?? "application/octet-stream");
         request.Headers.Add("X-Agent-Key", options.Value.AgentKey);
+        request.Headers.Add("X-Node-Registration-Key", options.Value.RegistrationKey);
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
     }

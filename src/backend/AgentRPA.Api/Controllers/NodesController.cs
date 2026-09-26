@@ -26,7 +26,7 @@ public sealed class NodesController(
         [FromQuery] Guid workerSlotId, [FromQuery] string artifactType, [FromQuery] string fileName,
         [FromQuery] string sha256, CancellationToken cancellationToken)
     {
-        if (!await ValidateAgentKeyAsync(nodeId, cancellationToken)) return Unauthorized();
+        if (!ValidateBootstrapKey() || !await ValidateAgentKeyAsync(nodeId, cancellationToken)) return Unauthorized();
         if (!await db.ExecutionNodes.AnyAsync(x => x.Id == nodeId &&
             (x.Status == NodeStatus.Online || x.Status == NodeStatus.Draining), cancellationToken)) return StatusCode(403);
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == executionId && x.NodeId == nodeId && x.WorkerSlotId == workerSlotId, cancellationToken);
