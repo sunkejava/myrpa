@@ -24,6 +24,11 @@ public sealed class ExecutionNode : Entity
     public string? NetworkZone { get; private set; }
     public string? AgentVersion { get; private set; }
     public DateTimeOffset? LastHeartbeatAt { get; private set; }
+    /// <summary>最近一次心跳的 Agent 进程 CPU 百分比，首次采样为 0。</summary>
+    public double? CpuUsage { get; private set; }
+    /// <summary>最近一次心跳的 Agent 进程常驻内存，单位 MiB。</summary>
+    public double? MemoryUsage { get; private set; }
+    public int? ReportedAvailableSlots { get; private set; }
     public IReadOnlyCollection<NodeCapability> Capabilities => _capabilities;
     public void RegisterHeartbeat(string agentVersion, DateTimeOffset heartbeatAt)
     {
@@ -31,6 +36,16 @@ public sealed class ExecutionNode : Entity
         LastHeartbeatAt = heartbeatAt;
         if (Status is NodeStatus.PendingApproval or NodeStatus.Draining or NodeStatus.Disabled or NodeStatus.Rejected or NodeStatus.Revoked) return;
         Status = NodeStatus.Online;
+    }
+    public void ReportRuntimeMetrics(double cpuUsage, double memoryUsage, int availableSlots)
+    {
+        if (!double.IsFinite(cpuUsage) || cpuUsage < 0 || cpuUsage > 100 ||
+            !double.IsFinite(memoryUsage) || memoryUsage < 0 || memoryUsage > 1_000_000 ||
+            availableSlots < 0 || availableSlots > 100_000)
+            throw new ArgumentOutOfRangeException(nameof(cpuUsage), "心跳运行指标超出有效范围。");
+        CpuUsage = cpuUsage;
+        MemoryUsage = memoryUsage;
+        ReportedAvailableSlots = availableSlots;
     }
     public void Approve() => Status = NodeStatus.Online;
     public void SetStatus(NodeStatus status) => Status = status;

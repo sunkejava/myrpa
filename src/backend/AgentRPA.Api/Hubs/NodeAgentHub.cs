@@ -56,7 +56,10 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
     {
         var cancellationToken = Context.ConnectionAborted;
         if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != request.NodeId) throw new HubException("Node 身份校验失败。");
-        if (!await nodeRegistry.HeartbeatAsync(request.NodeId, request.AgentVersion, DateTimeOffset.UtcNow, cancellationToken)) throw new HubException("Node 不存在或已被禁用。");
+        if (!double.IsFinite(request.CpuUsage) || request.CpuUsage is < 0 or > 100 ||
+            !double.IsFinite(request.MemoryUsage) || request.MemoryUsage is < 0 or > 1_000_000 ||
+            request.AvailableSlots is < 0 or > 100_000) throw new HubException("运行指标无效。");
+        if (!await nodeRegistry.HeartbeatAsync(request, DateTimeOffset.UtcNow, cancellationToken)) throw new HubException("Node 不存在、已被禁用或运行指标无效。");
         return new NodeHeartbeatAck(request.NodeId, DateTimeOffset.UtcNow, request.Status);
     }
 

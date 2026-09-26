@@ -19,6 +19,9 @@ public sealed class ExecutionNodeConfiguration : IEntityTypeConfiguration<Execut
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
         builder.Property(x => x.NetworkZone).HasMaxLength(128);
         builder.Property(x => x.AgentVersion).HasMaxLength(64);
+        builder.Property(x => x.CpuUsage);
+        builder.Property(x => x.MemoryUsage);
+        builder.Property(x => x.ReportedAvailableSlots);
         builder.HasIndex(x => x.AgentKey).IsUnique();
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.NodePoolId);

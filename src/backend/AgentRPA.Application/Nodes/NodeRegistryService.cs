@@ -1,5 +1,6 @@
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Domain.Execution;
+using AgentRPA.Contracts.Nodes;
 
 namespace AgentRPA.Application.Nodes;
 
@@ -7,7 +8,7 @@ namespace AgentRPA.Application.Nodes;
 public interface INodeRegistryService : IExecutionNodeRegistry
 {
     Task<ExecutionNode> RegisterAsync(NodeRegistration registration, CancellationToken cancellationToken);
-    Task<bool> HeartbeatAsync(Guid nodeId, string agentVersion, DateTimeOffset heartbeatAt, CancellationToken cancellationToken);
+    Task<bool> HeartbeatAsync(NodeHeartbeatRequest request, DateTimeOffset receivedAt, CancellationToken cancellationToken);
     Task RefreshCapabilitiesAsync(Guid nodeId, IReadOnlyCollection<NodeCapabilityInput> capabilities, CancellationToken cancellationToken);
     Task RefreshWorkerSlotsAsync(Guid nodeId, IReadOnlyCollection<string> slotNames, CancellationToken cancellationToken);
     Task<int> MarkOfflineNodesAsync(TimeSpan heartbeatTimeout, CancellationToken cancellationToken);

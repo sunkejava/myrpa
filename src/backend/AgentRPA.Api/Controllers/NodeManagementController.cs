@@ -12,7 +12,7 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
 {
     [HttpGet("nodes")]
     public async Task<IActionResult> Nodes(CancellationToken ct) => Ok(await db.ExecutionNodes.AsNoTracking()
-        .Select(x => new { x.Id, x.Name, x.AgentKey, NodeKind = x.NodeKind.ToString(), OsPlatform = x.OsPlatform.ToString(), Status = x.Status.ToString(), x.NodePoolId, x.NetworkZone, x.AgentVersion, x.LastHeartbeatAt,
+        .Select(x => new { x.Id, x.Name, NodeKind = x.NodeKind.ToString(), OsPlatform = x.OsPlatform.ToString(), Status = x.Status.ToString(), x.NodePoolId, x.NetworkZone, x.AgentVersion, x.LastHeartbeatAt, x.CpuUsage, x.MemoryUsage, x.ReportedAvailableSlots,
             Capabilities = x.Capabilities.Where(c => c.Enabled).Select(c => new { c.Code, c.Version, c.MetadataJson }) })
         .ToListAsync(ct));
 
@@ -29,7 +29,7 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
         var recentExecutions = await db.Executions.FromSqlInterpolated(
             $"SELECT * FROM \"Executions\" WHERE \"NodeId\" = {id} ORDER BY \"CreatedAt\" DESC LIMIT 20")
             .AsNoTracking().ToListAsync(ct);
-        return Ok(new { node.Id, node.Name, NodeKind = node.NodeKind.ToString(), OsPlatform = node.OsPlatform.ToString(), Status = node.Status.ToString(), node.Architecture, node.NodePoolId, node.NetworkZone, node.AgentVersion, node.LastHeartbeatAt,
+        return Ok(new { node.Id, node.Name, NodeKind = node.NodeKind.ToString(), OsPlatform = node.OsPlatform.ToString(), Status = node.Status.ToString(), node.Architecture, node.NodePoolId, node.NetworkZone, node.AgentVersion, node.LastHeartbeatAt, node.CpuUsage, node.MemoryUsage, node.ReportedAvailableSlots,
             capabilities, slots, executionCounts = executionCounts.Select(x => new { status = x.Status.ToString(), x.Count }),
             recentExecutions = recentExecutions.Select(x => new { x.Id, x.TaskItemId, status = x.Status.ToString(), x.CreatedAt, x.Error }) });
     }

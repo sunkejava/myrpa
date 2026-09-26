@@ -4,7 +4,7 @@ import StatusBadge from '../components/common/StatusBadge.vue'
 import NodeDetailPage from './NodeDetailPage.vue'
 
 type Node = { id: string; name: string; nodeKind: string; osPlatform: string; status: string; networkZone: string | null;
-  lastHeartbeatAt: string | null; capabilities: Array<{ code: string }> }
+  lastHeartbeatAt: string | null; cpuUsage: number | null; memoryUsage: number | null; reportedAvailableSlots: number | null; capabilities: Array<{ code: string }> }
 type Slot = { id: string; nodeId: string; slotName: string; enabled: boolean; executionId: string | null }
 const props = defineProps<{ token: string }>()
 const nodes = ref<Node[]>([])
@@ -59,7 +59,7 @@ onMounted(load)
     <div class="table-wrap"><table><thead><tr><th>节点</th><th>环境与能力</th><th>Worker 槽位</th><th>状态</th><th>操作</th></tr></thead>
       <tbody><tr v-for="node in nodes" :key="node.id">
         <td><button class="action-btn" @click="selectedNodeId = node.id">{{ node.name }} · 查看详情</button><small>{{ node.id }}</small><small>最后心跳：{{ node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</small></td>
-        <td>{{ node.nodeKind }} · {{ node.osPlatform }}<small>{{ node.networkZone || '默认网络区' }} / {{ node.capabilities.map(c => c.code).join('、') || '无能力' }}</small></td>
+        <td>{{ node.nodeKind }} · {{ node.osPlatform }}<small>{{ node.networkZone || '默认网络区' }} / {{ node.capabilities.map(c => c.code).join('、') || '无能力' }}</small><small>Agent CPU：{{ node.cpuUsage === null ? '未上报' : `${node.cpuUsage}%` }} · 进程内存：{{ node.memoryUsage === null ? '未上报' : `${node.memoryUsage} MiB` }} · 上报可用槽位：{{ node.reportedAvailableSlots ?? '未上报' }}</small></td>
         <td><div v-for="slot in slots.filter(x => x.nodeId === node.id)" :key="slot.id">{{ slot.slotName }} · {{ slot.executionId ? '执行中' : slot.enabled ? '空闲' : '禁用' }}
           <button class="action-btn" :disabled="busy || !!slot.executionId" @click="setSlot(slot)">{{ slot.enabled ? '禁用' : '启用' }}</button></div></td>
         <td><StatusBadge :label="node.status" :tone="node.status === 'Online' ? 'success' : 'warning'" /></td>

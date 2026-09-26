@@ -151,12 +151,21 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     ]))
     const nodeDetailResponse = await request.get(`${api}/api/node-management/nodes/${node.nodeId}`, { headers: admin })
     expect(nodeDetailResponse.ok()).toBeTruthy()
-    const nodeDetail = await nodeDetailResponse.json() as { executionCounts: Array<{ status: string; count: number }>; recentExecutions: Array<{ id: string; status: string }> }
+    const nodeDetail = await nodeDetailResponse.json() as { cpuUsage: number; memoryUsage: number; reportedAvailableSlots: number; executionCounts: Array<{ status: string; count: number }>; recentExecutions: Array<{ id: string; status: string }> }
+    expect(nodeDetail.cpuUsage).toBeGreaterThanOrEqual(0)
+    expect(nodeDetail.cpuUsage).toBeLessThanOrEqual(100)
+    expect(nodeDetail.memoryUsage).toBeGreaterThan(0)
+    expect(nodeDetail.reportedAvailableSlots).toBeGreaterThanOrEqual(0)
     expect(nodeDetail.executionCounts.find(x => x.status === 'Succeeded')?.count).toBeGreaterThanOrEqual(1)
     expect(nodeDetail.recentExecutions).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: completed.items[0].executions[0].id, status: 'Succeeded' })
     ]))
     expect((await request.get(`${api}/api/node-management/nodes/${node.nodeId}`, { headers: operatorHeaders })).status()).toBe(403)
+    const invalidMetrics = await request.post(`${api}/api/nodes/heartbeat`, { headers: { 'X-Agent-Key': agentKey }, data: {
+      nodeId: node.nodeId, agentVersion: '0.1.0', status: 'Online', cpuUsage: -1, memoryUsage: 1,
+      availableSlots: 1, sentAt: new Date().toISOString()
+    } })
+    expect(invalidMetrics.status()).toBe(400)
     const mockSession = await request.post(`${api}/mock/qd-social-security/login`, { form: { username: 'demo', password: 'Demo123!' } })
     expect(mockSession.ok()).toBeTruthy()
     const employeeStatusUrl = `${api}/mock/qd-social-security/employees/status?idNumber=110105194912310038`

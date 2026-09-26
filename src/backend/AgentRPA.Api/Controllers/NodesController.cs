@@ -44,7 +44,11 @@ public sealed class NodesController(
     public async Task<IActionResult> Heartbeat(NodeHeartbeatRequest request, CancellationToken cancellationToken)
     {
         if (!await ValidateAgentKeyAsync(request.NodeId, cancellationToken)) return Unauthorized(new { message = "节点身份认证失败。" });
-        var accepted = await nodeRegistry.HeartbeatAsync(request.NodeId, request.AgentVersion, request.SentAt, cancellationToken);
+        if (!double.IsFinite(request.CpuUsage) || request.CpuUsage is < 0 or > 100 ||
+            !double.IsFinite(request.MemoryUsage) || request.MemoryUsage is < 0 or > 1_000_000 ||
+            request.AvailableSlots is < 0 or > 100_000)
+            return BadRequest(new { message = "运行指标无效。" });
+        var accepted = await nodeRegistry.HeartbeatAsync(request, DateTimeOffset.UtcNow, cancellationToken);
         return accepted ? Ok(new NodeHeartbeatAck(request.NodeId, DateTimeOffset.UtcNow, "Accepted")) : NotFound();
     }
 

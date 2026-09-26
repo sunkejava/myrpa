@@ -1,4 +1,5 @@
 using AgentRPA.Application.Nodes;
+using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -30,11 +31,12 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
         return node;
     }
 
-    public async Task<bool> HeartbeatAsync(Guid nodeId, string agentVersion, DateTimeOffset heartbeatAt, CancellationToken cancellationToken)
+    public async Task<bool> HeartbeatAsync(NodeHeartbeatRequest request, DateTimeOffset receivedAt, CancellationToken cancellationToken)
     {
-        var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == nodeId, cancellationToken);
+        var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == request.NodeId, cancellationToken);
         if (node is null || node.Status is NodeStatus.PendingApproval or NodeStatus.Rejected or NodeStatus.Revoked or NodeStatus.Disabled) return false;
-        node.RegisterHeartbeat(agentVersion, heartbeatAt);
+        node.ReportRuntimeMetrics(request.CpuUsage, request.MemoryUsage, request.AvailableSlots);
+        node.RegisterHeartbeat(request.AgentVersion, receivedAt);
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }

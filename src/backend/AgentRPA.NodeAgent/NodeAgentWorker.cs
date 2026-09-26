@@ -3,6 +3,7 @@ using AgentRPA.NodeAgent.Execution;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Http.Json;
 
 namespace AgentRPA.NodeAgent;
@@ -32,6 +33,22 @@ public sealed class NodeAgentWorker(
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> executions = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<bool>> humanResumes = new();
+    private TimeSpan? lastCpuTime;
+    private long lastCpuSample;
+
+    /// <summary>以心跳间隔内的进程 CPU 时间计算占用率，内存为进程常驻内存 MiB。</summary>
+    private (double CpuPercent, double MemoryMiB) ReadProcessMetrics()
+    {
+        using var process = Process.GetCurrentProcess();
+        var cpu = process.TotalProcessorTime;
+        var sample = Stopwatch.GetTimestamp();
+        var elapsed = lastCpuSample == 0 ? 0 : Stopwatch.GetElapsedTime(lastCpuSample, sample).TotalSeconds;
+        var percent = lastCpuTime.HasValue && elapsed > 0
+            ? Math.Clamp((cpu - lastCpuTime.Value).TotalSeconds / elapsed / Environment.ProcessorCount * 100, 0, 100) : 0;
+        lastCpuTime = cpu;
+        lastCpuSample = sample;
+        return (Math.Round(percent, 2), Math.Round(process.WorkingSet64 / 1048576d, 2));
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -77,7 +94,8 @@ public sealed class NodeAgentWorker(
                 if (connection.State == HubConnectionState.Connected)
                 {
                     await connection.InvokeAsync("Connect", new NodeAgentConnectRequest(registration.NodeId, config.AgentKey, config.AgentVersion), stoppingToken);
-                    await connection.InvokeAsync<NodeHeartbeatAck>("Heartbeat", new NodeHeartbeatRequest(registration.NodeId, config.AgentVersion, "Online", 0, 0, Math.Max(0, config.WorkerSlots.Count - executions.Count), DateTimeOffset.UtcNow), stoppingToken);
+                    var metrics = ReadProcessMetrics();
+                    await connection.InvokeAsync<NodeHeartbeatAck>("Heartbeat", new NodeHeartbeatRequest(registration.NodeId, config.AgentVersion, "Online", metrics.CpuPercent, metrics.MemoryMiB, Math.Max(0, config.WorkerSlots.Count - executions.Count), DateTimeOffset.UtcNow), stoppingToken);
                 }
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }

@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 
 type Detail = { id: string; name: string; status: string; nodeKind: string; osPlatform: string; architecture: string;
   networkZone?: string | null; agentVersion?: string | null; lastHeartbeatAt?: string | null;
+  cpuUsage: number | null; memoryUsage: number | null; reportedAvailableSlots: number | null;
   capabilities: Array<{ id: string; code: string; version?: string | null; enabled: boolean }>;
   slots: Array<{ id: string; slotName: string; enabled: boolean; executionId?: string | null; leaseExpiresAt?: string | null }>;
   executionCounts: Array<{ status: string; count: number }>;
@@ -31,6 +32,7 @@ onMounted(load)
     <template v-if="detail">
       <p class="muted">{{ detail.status }} · {{ detail.nodeKind }} · {{ detail.osPlatform }} / {{ detail.architecture }} · 网络区：{{ detail.networkZone || '默认' }}</p>
       <p class="muted">Agent 版本：{{ detail.agentVersion || '未上报' }} · 最后心跳：{{ detail.lastHeartbeatAt ? new Date(detail.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</p>
+      <p class="muted">Agent 进程 CPU：{{ detail.cpuUsage === null ? '未上报' : `${detail.cpuUsage}%` }} · 进程常驻内存：{{ detail.memoryUsage === null ? '未上报' : `${detail.memoryUsage} MiB` }} · 心跳可用槽位：{{ detail.reportedAvailableSlots ?? '未上报' }}</p>
       <h3>能力</h3>
       <div class="table-wrap"><table><thead><tr><th>能力</th><th>版本</th><th>状态</th></tr></thead><tbody><tr v-for="capability in detail.capabilities" :key="capability.id"><td>{{ capability.code }}</td><td>{{ capability.version || '—' }}</td><td>{{ capability.enabled ? '启用' : '禁用' }}</td></tr></tbody></table><p v-if="!detail.capabilities.length" class="muted empty">暂无能力。</p></div>
       <h3>WorkerSlot</h3>
