@@ -1,76 +1,79 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import NodeDetailPage from './NodeDetailPage.vue'
 import RobotStatusCard from '../components/robot/RobotStatusCard.vue'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
+import DataTable from '../components/table/DataTable.vue'
+import { nodeRequest, type ManagedNode, type WorkerSlot } from '../api/modules/nodes'
+import { useLocale } from '../locales'
 
-type Node = { id: string; name: string; nodeKind: string; osPlatform: string; status: string; networkZone: string | null;
-  lastHeartbeatAt: string | null; cpuUsage: number | null; memoryUsage: number | null; reportedAvailableSlots: number | null; capabilities: Array<{ code: string }> }
-type Slot = { id: string; nodeId: string; slotName: string; enabled: boolean; executionId: string | null }
 const props = defineProps<{ token: string }>()
-const nodes = ref<Node[]>([])
-const slots = ref<Slot[]>([])
+const { t } = useLocale()
+const tab = ref<'nodes' | 'slots'>('nodes')
+const nodes = ref<ManagedNode[]>([])
+const slots = ref<WorkerSlot[]>([])
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const selectedNodeId = ref('')
-
-async function call<T>(path: string, method = 'GET', data?: object): Promise<T> {
-  const response = await fetch(`/api/${path}`, { method, headers: { Authorization: `Bearer ${props.token}`,
-    ...(data ? { 'Content-Type': 'application/json' } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) })
-  if (!response.ok) {
-    const details: unknown = await response.json().catch(() => null)
-    throw new Error(details && typeof details === 'object' && 'message' in details ? String(details.message) : `请求失败 (${response.status})`)
-  }
-  const content = await response.text()
-  return (content ? JSON.parse(content) : undefined) as T
-}
+const nodeColumns = computed(() => [
+  { key: 'name', label: t('nodes.name'), sortable: true, filterable: true },
+  { key: 'nodeKind', label: t('nodes.environment'), format: (value: unknown, row: object) => `${value} · ${(row as ManagedNode).osPlatform}` },
+  { key: 'status', label: t('nodes.status'), sortable: true, filterable: true },
+  { key: 'reportedAvailableSlots', label: t('nodes.availableSlots'), sortable: true, format: (value: unknown) => value === null ? t('nodes.unreported') : String(value) }
+])
+const slotRows = computed(() => slots.value.map(slot => ({ ...slot, nodeName: nodes.value.find(node => node.id === slot.nodeId)?.name || slot.nodeId,
+  state: slot.executionId ? t('nodes.pending') : slot.enabled ? t('nodes.idle') : t('nodes.disabled') })))
+const slotColumns = computed(() => [
+  { key: 'slotName', label: t('nodes.slots'), sortable: true, filterable: true },
+  { key: 'nodeName', label: t('nodes.name'), sortable: true, filterable: true },
+  { key: 'state', label: t('nodes.status'), sortable: true }
+])
+const call = <T,>(path: string, method = 'GET', body?: object) => nodeRequest<T>(props.token, path, method, body)
 async function load() {
   error.value = ''
-  try { [nodes.value, slots.value] = await Promise.all([call<Node[]>('node-management/nodes'), call<Slot[]>('node-management/slots')]) }
-  catch (e) { error.value = e instanceof Error ? e.message : '节点数据加载失败' }
+  try { [nodes.value, slots.value] = await Promise.all([call<ManagedNode[]>('node-management/nodes'), call<WorkerSlot[]>('node-management/slots')]) }
+  catch (e) { error.value = e instanceof Error ? e.message : t('nodes.loadFailed') }
 }
-async function change(node: Node, action: 'approve' | 'reject' | 'revoke' | 'drain' | 'restore') {
-  if (action === 'revoke' && !window.confirm(`确认吊销节点「${node.name}」？旧 AgentKey 将无法再次注册。`)) return
+async function change(node: ManagedNode, action: 'approve' | 'reject' | 'revoke' | 'drain' | 'restore') {
+  if (action === 'revoke' && !window.confirm(t('nodes.revokeConfirm').replace('{name}', node.name))) return
   busy.value = true; error.value = ''; notice.value = ''
   try {
     await call(`nodes/${node.id}/${action === 'restore' ? 'status' : action}`, 'POST', action === 'restore' ? { status: 'Online' } : undefined)
     await load()
-    notice.value = `节点「${node.name}」操作成功。`
-  } catch (e) { error.value = e instanceof Error ? e.message : '节点操作失败' }
+    notice.value = t('nodes.nodeSuccess').replace('{name}', node.name)
+  } catch (e) { error.value = e instanceof Error ? e.message : t('nodes.nodeFailed') }
   finally { busy.value = false }
 }
-async function setSlot(slot: Slot) {
+async function setSlot(slot: WorkerSlot) {
   busy.value = true; error.value = ''; notice.value = ''
   try {
     await call(`node-management/slots/${slot.id}/enabled`, 'POST', { enabled: !slot.enabled })
     await load()
-    notice.value = `槽位「${slot.slotName}」已${slot.enabled ? '禁用' : '启用'}。`
-  } catch (e) { error.value = e instanceof Error ? e.message : '槽位操作失败' }
+    notice.value = t('nodes.slotSuccess').replace('{name}', slot.slotName).replace('{state}', t(slot.enabled ? 'nodes.disabled' : 'nodes.enabled'))
+  } catch (e) { error.value = e instanceof Error ? e.message : t('nodes.slotFailed') }
   finally { busy.value = false }
 }
 onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
-    <div class="panel-title"><span>节点管理</span><button class="action-btn" @click="load">刷新</button></div>
-    <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="muted" role="status">{{ notice }}</p>
-    <div class="robot-grid"><RobotStatusCard v-for="node in nodes" :key="node.id" :name="node.name" :status="node.status" :network-zone="node.networkZone" :available-slots="node.reportedAvailableSlots" :cpu-usage="node.cpuUsage" :memory-mi-b="node.memoryUsage" /></div>
-    <div class="table-wrap"><table><thead><tr><th>节点</th><th>环境与能力</th><th>Worker 槽位</th><th>状态</th><th>操作</th></tr></thead>
-      <tbody><tr v-for="node in nodes" :key="node.id">
-        <td><button class="action-btn" @click="selectedNodeId = node.id">{{ node.name }} · 查看详情</button><small>{{ node.id }}</small><small>最后心跳：{{ node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</small></td>
-        <td>{{ node.nodeKind }} · {{ node.osPlatform }}<small>{{ node.networkZone || '默认网络区' }} / {{ node.capabilities.map(c => c.code).join('、') || '无能力' }}</small><small>Agent CPU：{{ node.cpuUsage === null ? '未上报' : `${node.cpuUsage}%` }} · 进程内存：{{ node.memoryUsage === null ? '未上报' : `${node.memoryUsage} MiB` }} · 上报可用槽位：{{ node.reportedAvailableSlots ?? '未上报' }}</small></td>
-        <td><div v-for="slot in slots.filter(x => x.nodeId === node.id)" :key="slot.id">{{ slot.slotName }} · {{ slot.executionId ? '执行中' : slot.enabled ? '空闲' : '禁用' }}
-          <button class="action-btn" :disabled="busy || !!slot.executionId" @click="setSlot(slot)">{{ slot.enabled ? '禁用' : '启用' }}</button></div></td>
-        <td><StatusBadge :label="node.status" :tone="node.status === 'Online' ? 'success' : 'warning'" /></td>
-        <td><button v-if="node.status === 'PendingApproval'" class="action-btn" :disabled="busy" @click="change(node, 'approve')">批准</button>
-          <button v-if="node.status === 'PendingApproval'" class="action-btn" :disabled="busy" @click="change(node, 'reject')">拒绝</button>
-          <button v-if="node.status === 'Online'" class="action-btn" :disabled="busy" @click="change(node, 'drain')">排空</button>
-          <button v-if="['Draining', 'Disabled', 'Offline'].includes(node.status)" class="action-btn" :disabled="busy" @click="change(node, 'restore')">恢复</button>
-          <button v-if="node.status !== 'Revoked' && !slots.some(x => x.nodeId === node.id && !!x.executionId)" class="action-btn" :disabled="busy" @click="change(node, 'revoke')">吊销</button></td>
-      </tr></tbody></table><p v-if="nodes.length === 0" class="muted empty">暂无节点，启动 NodeAgent 并等待注册申请。</p></div>
-  </section>
-  <DetailDrawer :open="!!selectedNodeId" title="节点详情" @close="selectedNodeId = ''"><NodeDetailPage v-if="selectedNodeId" :key="selectedNodeId" :token="token" :node-id="selectedNodeId" @back="selectedNodeId = ''" /></DetailDrawer>
+  <div class="page-toolbar"><h2>{{ t('nodes.title') }}</h2><button class="action-btn" @click="load">{{ t('common.refresh') }}</button></div>
+  <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="muted" role="status">{{ notice }}</p>
+  <div class="page-tabs" role="tablist" :aria-label="t('nodes.title')"><button role="tab" class="action-btn" :aria-selected="tab === 'nodes'" @click="tab = 'nodes'">{{ t('nodes.nodes') }}</button><button role="tab" class="action-btn" :aria-selected="tab === 'slots'" @click="tab = 'slots'">{{ t('nodes.slots') }}</button></div>
+  <template v-if="tab === 'nodes'">
+    <section class="panel"><DataTable :rows="nodes" :columns="nodeColumns" :loading="busy" :empty-label="t('nodes.empty')" filename="nodes.csv" @refresh="load">
+      <template #cell-name="{ row }"><button class="action-btn" @click="selectedNodeId = (row as ManagedNode).id">{{ (row as ManagedNode).name }} · {{ t('nodes.details') }}</button><small>{{ (row as ManagedNode).id }}</small><small>{{ t('nodes.lastHeartbeat') }}：{{ (row as ManagedNode).lastHeartbeatAt ? new Date((row as ManagedNode).lastHeartbeatAt!).toLocaleString() : t('nodes.disconnected') }}</small></template>
+      <template #cell-status="{ row }"><StatusBadge :label="(row as ManagedNode).status" :tone="(row as ManagedNode).status === 'Online' ? 'success' : 'warning'" /></template>
+      <template #actions="{ row }"><div class="actions node-actions"><button v-if="(row as ManagedNode).status === 'PendingApproval'" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'approve')">{{ t('nodes.approve') }}</button>
+        <button v-if="(row as ManagedNode).status === 'PendingApproval'" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'reject')">{{ t('nodes.reject') }}</button>
+        <button v-if="(row as ManagedNode).status === 'Online'" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'drain')">{{ t('nodes.drain') }}</button>
+        <button v-if="['Draining', 'Disabled', 'Offline'].includes((row as ManagedNode).status)" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'restore')">{{ t('nodes.restore') }}</button>
+        <button v-if="(row as ManagedNode).status !== 'Revoked' && !slots.some(slot => slot.nodeId === (row as ManagedNode).id && !!slot.executionId)" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'revoke')">{{ t('nodes.revoke') }}</button></div></template>
+    </DataTable></section>
+    <details v-if="nodes.length" class="panel node-status"><summary class="panel-title">{{ t('nodes.live') }}</summary><div class="robot-grid"><RobotStatusCard v-for="node in nodes" :key="node.id" :name="node.name" :status="node.status" :network-zone="node.networkZone" :available-slots="node.reportedAvailableSlots" :cpu-usage="node.cpuUsage" :memory-mi-b="node.memoryUsage" /></div></details>
+  </template>
+  <section v-else class="panel"><DataTable :rows="slotRows" :columns="slotColumns" :loading="busy" :empty-label="t('nodes.emptySlots')" filename="worker-slots.csv" @refresh="load"><template #actions="{ row }"><button class="action-btn" :disabled="busy || !!(row as WorkerSlot).executionId" @click="setSlot(row as WorkerSlot)">{{ (row as WorkerSlot).enabled ? t('nodes.disabled') : t('nodes.enabled') }}</button></template></DataTable></section>
+  <DetailDrawer :open="!!selectedNodeId" :title="t('nodes.details')" @close="selectedNodeId = ''"><NodeDetailPage v-if="selectedNodeId" :key="selectedNodeId" :token="token" :node-id="selectedNodeId" @back="selectedNodeId = ''" /></DetailDrawer>
 </template>

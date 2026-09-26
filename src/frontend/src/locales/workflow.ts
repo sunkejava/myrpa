@@ -7,7 +7,7 @@ export const zh = {
   jsonHelp: '编辑 JSON 可配置 selector、参数、嵌套步骤、timeoutMs 和 retryCount。', jsonEditor: '高级 JSON 编辑', definitionJson: 'Definition JSON',
   publish: '创建并发布新版本', disable: '停用 Workflow', operationFailed: '操作失败', invalidJson: '定义 JSON 无效，请先修正内容。',
   invalidSteps: '请选择 Workflow 并提供有效的 steps JSON。', created: 'Workflow 已创建。编辑定义后创建并发布版本。',
-  disabled: 'Workflow 已停用，新任务和未派发任务不能继续执行。', versionLoaded: '已加载第 {version} 版；修改后保存会创建新版本。', versionPublished: 'Workflow 第 {version} 版已发布。'
+  disabled: 'Workflow 已停用，新任务和未派发任务不能继续执行。', reenable: '重新启用 Workflow', reenabled: 'Workflow 已重新启用。', versionLoaded: '已加载第 {version} 版；修改后保存会创建新版本。', versionPublished: 'Workflow 第 {version} 版已发布。'
 }
 export const en = {
   title: 'Workflow management', help: 'Edit existing workflows and risk rules. Publish a version before creating tasks.', add: 'Add workflow', create: 'Create workflow',
@@ -18,5 +18,5 @@ export const en = {
   jsonHelp: 'Edit JSON to configure selectors, inputs, nested steps, timeoutMs and retryCount.', jsonEditor: 'Advanced JSON editor', definitionJson: 'Definition JSON',
   publish: 'Create and publish version', disable: 'Disable workflow', operationFailed: 'Operation failed', invalidJson: 'Invalid definition JSON. Fix the content first.',
   invalidSteps: 'Select a workflow and provide valid steps JSON.', created: 'Workflow created. Edit its definition and publish a version.',
-  disabled: 'Workflow disabled. New and undispatched tasks cannot run.', versionLoaded: 'Loaded version {version}; saving changes creates a new version.', versionPublished: 'Published workflow version {version}.'
+  disabled: 'Workflow disabled. New and undispatched tasks cannot run.', reenable: 'Re-enable workflow', reenabled: 'Workflow re-enabled.', versionLoaded: 'Loaded version {version}; saving changes creates a new version.', versionPublished: 'Published workflow version {version}.'
 }

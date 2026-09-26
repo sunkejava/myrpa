@@ -23,14 +23,20 @@ const newName = ref('')
 const error = ref('')
 const busy = ref(false)
 const creating = ref(false)
-type RegionRow = Region & { kind: string; scope: 'countries' | 'provinces' }
+type RegionRow = Region & { kind: string; scope: 'countries' | 'provinces' | 'cities' }
 const regionRows = computed<RegionRow[]>(() => [
   ...countries.value.map(item => ({ ...item, kind: t('resources.country'), scope: 'countries' as const })),
-  ...provinces.value.map(item => ({ ...item, kind: t('resources.province'), scope: 'provinces' as const }))
+  ...provinces.value.map(item => ({ ...item, kind: t('resources.province'), scope: 'provinces' as const })),
+  ...cities.value.map(item => ({ ...item, kind: t('resources.city'), scope: 'cities' as const }))
 ])
 const regionColumns = computed(() => [{ key: 'name', label: t('resources.region'), sortable: true, filterable: true },
   { key: 'kind', label: t('resources.type'), sortable: true },
   { key: 'enabled', label: t('resources.status'), format: (value: unknown) => t(value ? 'resources.enabled' : 'resources.disabled') }])
+const itemColumns = computed(() => [{ key: 'code', label: t('resources.code'), sortable: true, filterable: true },
+  { key: 'name', label: t('resources.name'), sortable: true, filterable: true },
+  { key: 'enabled', label: t('resources.status'), format: (value: unknown) => t(value ? 'resources.enabled' : 'resources.disabled') }])
+const functionColumns = computed(() => [{ key: 'code', label: t('resources.functionCode'), sortable: true, filterable: true },
+  { key: 'name', label: t('resources.functionName'), sortable: true, filterable: true }])
 
 const request = <T,>(path: string, body?: object) => resourceRequest<T>(props.token, path, body)
 async function loadCities() {
@@ -95,7 +101,11 @@ async function setEnabled(path: string, enabled: boolean) {
     countries.value = await request<Region[]>('countries')
     await loadCities()
     if (countryId.value) provinces.value = await request<Region[]>(`countries/${countryId.value}/provinces`)
-    if (cityId.value) await chooseCity(cityId.value)
+    if (cityId.value) {
+      const previousSystemId = systemId.value
+      await chooseCity(cityId.value)
+      if (previousSystemId && systems.value.some(item => item.id === previousSystemId)) await chooseSystem(previousSystemId)
+    }
   } catch (e) { error.value = e instanceof Error ? e.message : t('resources.updateFailed') }
   finally { busy.value = false }
 }
@@ -146,9 +156,10 @@ onMounted(refreshRegions)
       <label>{{ t('resources.city') }}<select :value="cityId" @change="chooseCity(($event.target as HTMLSelectElement).value)"><option value="">{{ t('resources.chooseCity') }}</option><option v-for="city in cities.filter(x => !provinceId || x.provinceId === provinceId)" :key="city.id" :value="city.id">{{ city.name }} ({{ city.code }}){{ city.enabled ? '' : t('resources.disabledSuffix') }}</option></select></label>
       <label>{{ t('resources.system') }}<select :value="systemId" :disabled="!cityId" @change="chooseSystem(($event.target as HTMLSelectElement).value)"><option value="">{{ t('resources.chooseSystem') }}</option><option v-for="system in systems" :key="system.id" :value="system.id">{{ system.name }} ({{ system.code }}){{ system.enabled ? '' : t('resources.disabledSuffix') }}</option></select></label>
     </div>
-    <div v-if="cityId" class="table-wrap"><h3>{{ t('resources.district') }}</h3><table><thead><tr><th>{{ t('resources.code') }}</th><th>{{ t('resources.name') }}</th><th>{{ t('resources.status') }}</th><th v-if="admin">{{ t('resources.actions') }}</th></tr></thead><tbody><tr v-for="item in districts" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.enabled ? t('resources.enabled') : t('resources.disabled') }}</td><td v-if="admin"><button type="button" :disabled="busy" @click="setEnabled(`districts/${item.id}/enabled`, !item.enabled)">{{ item.enabled ? t('resources.disabled') : t('resources.enabled') }}</button></td></tr></tbody></table><p v-if="!districts.length" class="muted empty">{{ t('resources.emptyDistricts') }}</p></div>
-    <div v-if="systemId" class="table-wrap"><table><thead><tr><th>{{ t('resources.functionCode') }}</th><th>{{ t('resources.functionName') }}</th></tr></thead><tbody><tr v-for="item in functions" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td></tr></tbody></table><p v-if="!functions.length" class="muted empty">{{ t('resources.emptyFunctions') }}</p></div>
   </section>
+  <section v-if="cityId" class="panel"><div class="panel-title"><h3>{{ t('resources.businessSystem') }}</h3></div><DataTable :rows="systems" :columns="itemColumns" :empty-label="t('resources.emptySystems')" filename="business-systems.csv" @refresh="chooseCity(cityId)"><template #actions="{ row }"><button v-if="admin" type="button" class="action-btn" :disabled="busy" @click="setEnabled(`systems/${(row as System).id}/enabled`, !(row as System).enabled)">{{ (row as System).enabled ? t('resources.disabled') : t('resources.enabled') }}</button></template></DataTable></section>
+  <section v-if="cityId" class="panel"><div class="panel-title"><h3>{{ t('resources.district') }}</h3></div><DataTable :rows="districts" :columns="itemColumns" :empty-label="t('resources.emptyDistricts')" filename="districts.csv" @refresh="chooseCity(cityId)"><template #actions="{ row }"><button v-if="admin" type="button" class="action-btn" :disabled="busy" @click="setEnabled(`districts/${(row as Region).id}/enabled`, !(row as Region).enabled)">{{ (row as Region).enabled ? t('resources.disabled') : t('resources.enabled') }}</button></template></DataTable></section>
+  <section v-if="systemId" class="panel"><div class="panel-title"><h3>{{ t('resources.businessFunction') }}</h3></div><DataTable :rows="functions" :columns="functionColumns" :empty-label="t('resources.emptyFunctions')" filename="business-functions.csv" @refresh="chooseSystem(systemId)" /></section>
   <section v-if="admin" class="panel"><div class="panel-title"><h3>{{ t('resources.regionStatus') }}</h3></div><DataTable :rows="regionRows" :columns="regionColumns" :loading="busy" :empty-label="t('common.empty')" filename="regions.csv" @refresh="refreshRegions"><template #actions="{ row }"><button type="button" class="action-btn" :disabled="busy" @click="setEnabled(`${(row as RegionRow).scope}/${(row as RegionRow).id}/enabled`, !(row as RegionRow).enabled)">{{ (row as RegionRow).enabled ? t('resources.disabled') : t('resources.enabled') }}</button></template></DataTable></section>
   <FormDialog :open="creating" :title="t('resources.createResource')" :submit-label="t('resources.create')" :busy="busy" @close="creating = false" @submit="create">
       <label>{{ t('resources.resourceType') }}<select v-model="target"><option value="country">{{ t('resources.country') }}</option><option value="province">{{ t('resources.province') }}</option><option value="city">{{ t('resources.city') }}</option><option value="district">{{ t('resources.district') }}</option><option value="system">{{ t('resources.businessSystem') }}</option><option value="function">{{ t('resources.businessFunction') }}</option></select></label>

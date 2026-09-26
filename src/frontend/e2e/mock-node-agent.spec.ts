@@ -214,6 +214,9 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await expect(uiRow).toContainText('PendingApproval')
     await uiRow.getByRole('button', { name: '批准' }).click()
     await expect(uiRow).toContainText('Online')
+    await page.getByRole('tab', { name: 'Worker 槽位' }).click()
+    await expect(page.getByRole('heading', { name: '节点管理', level: 1 })).toBeVisible()
+    await page.getByRole('tab', { name: '执行节点' }).click()
     await page.getByRole('button', { name: '节点池', exact: true }).click()
     const poolName = `浏览器节点池-${Date.now()}`
     await page.getByLabel('节点池名称').fill(poolName)

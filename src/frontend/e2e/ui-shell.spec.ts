@@ -73,3 +73,27 @@ test('普通账户只能进入自己的功能页面', async ({ page, request }) 
   await page.getByRole('button', { name: '任务中心' }).click()
   await expect(page.getByRole('heading', { level: 1, name: '任务中心' })).toBeVisible()
 })
+
+test('角色分配、撤销、停用及管理员保护', async ({ request }) => {
+  const login = await request.post('http://127.0.0.1:5000/api/auth/login', { data: { userName: 'admin', password: 'BrowserTestPassword123!' } })
+  expect(login.ok()).toBeTruthy()
+  const headers = { Authorization: `Bearer ${(await login.json() as { accessToken: string }).accessToken}` }
+  const root = 'http://127.0.0.1:5000/api/user-management'
+  const name = `role-${randomUUID().slice(0, 12)}`
+  const role = await request.post(`${root}/roles`, { headers, data: { name, displayName: '验收角色' } })
+  expect(role.status()).toBe(201)
+  const roleId = (await role.json() as { id: string }).id
+  const user = await request.post(`${root}/users`, { headers, data: { userName: `member-${randomUUID().slice(0, 12)}`, displayName: '验收成员', password: 'AcceptancePassword123!' } })
+  expect(user.status()).toBe(201)
+  const userId = (await user.json() as { id: string }).id
+  expect((await request.post(`${root}/users/${userId}/roles/${roleId}`, { headers })).ok()).toBeTruthy()
+  expect((await request.get(`${root}/users/${userId}/roles`, { headers }).then(r => r.json()) as Array<{ id: string }>).some(r => r.id === roleId)).toBeTruthy()
+  expect((await request.delete(`${root}/users/${userId}/roles/${roleId}`, { headers })).status()).toBe(204)
+  expect((await request.get(`${root}/users/${userId}/roles`, { headers }).then(r => r.json()) as Array<{ id: string }>).some(r => r.id === roleId)).toBeFalsy()
+  expect((await request.post(`${root}/roles/${roleId}/enabled`, { headers, data: { enabled: false } })).ok()).toBeTruthy()
+  expect((await request.post(`${root}/users/${userId}/roles/${roleId}`, { headers })).status()).toBe(404)
+  const adminRole = (await request.get(`${root}/roles`, { headers }).then(r => r.json()) as Array<{ id: string; name: string }>).find(r => r.name === 'Admin')!
+  const me = await request.get('http://127.0.0.1:5000/api/auth/me', { headers }).then(r => r.json()) as { userId: string }
+  expect((await request.post(`${root}/roles/${adminRole.id}/enabled`, { headers, data: { enabled: false } })).status()).toBe(409)
+  expect((await request.delete(`${root}/users/${me.userId}/roles/${adminRole.id}`, { headers })).status()).toBe(409)
+})

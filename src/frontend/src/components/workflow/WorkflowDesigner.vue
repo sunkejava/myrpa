@@ -22,7 +22,8 @@ const error = ref('')
 const notice = ref('')
 const busy = ref(false)
 const creating = ref(false)
-const definitionJson = ref(JSON.stringify({ version: 1, riskLevel: 'Low', requiresApproval: false, steps: [{ id: 'step-1', type: 'End' }] }, null, 2))
+const defaultDefinition = () => JSON.stringify({ version: 1, riskLevel: 'Low', requiresApproval: false, steps: [{ id: 'step-1', type: 'End' }] }, null, 2)
+const definitionJson = ref(defaultDefinition())
 const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'HumanTask', 'Assert', 'End']
 const currentWorkflow = computed(() => workflows.value.find(x => x.id === workflowId.value))
 const parsedDefinition = computed(() => {
@@ -47,11 +48,15 @@ async function chooseSystem(id: string) {
   catch (e) { fail(e) }
 }
 async function chooseWorkflow(id: string) {
-  workflowId.value = id; versions.value = []
-  try { versions.value = id ? await call<Version[]>(`workflows/${id}/versions`) : [] }
+  workflowId.value = id; versions.value = []; definitionJson.value = defaultDefinition(); notice.value = ''
+  try {
+    versions.value = id ? await call<Version[]>(`workflows/${id}/versions`) : []
+    if (id && versions.value.length) await loadVersion(versions.value[0].version)
+  }
   catch (e) { fail(e) }
 }
 async function loadVersion(version: number) {
+  if (!version || !workflowId.value) return
   try {
     const result = await call<{ definitionJson: string }>(`workflows/${workflowId.value}/versions/${version}`)
     definitionJson.value = JSON.stringify(JSON.parse(result.definitionJson), null, 2)
@@ -101,6 +106,15 @@ async function disableWorkflow() {
   } catch (e) { fail(e) }
   finally { busy.value = false }
 }
+async function enableWorkflow() {
+  busy.value = true; error.value = ''; notice.value = ''
+  try {
+    await call(`workflows/${workflowId.value}/publish`, 'POST')
+    await loadWorkflows()
+    notice.value = t('workflow.reenabled')
+  } catch (e) { fail(e) }
+  finally { busy.value = false }
+}
 onMounted(async () => {
   try { [cities.value] = await Promise.all([call<Resource[]>('business-resources/cities'), loadWorkflows()]) }
   catch (e) { fail(e) }
@@ -123,7 +137,7 @@ onMounted(async () => {
       <p class="muted">{{ t('workflow.steps') }}：{{ steps.map(step => `${step.id || t('workflow.unnamed')} (${step.type || t('workflow.unknown')})`).join(' → ') || t('workflow.none') }}。{{ t('workflow.jsonHelp') }}</p>
       <WorkflowCanvas :steps="steps" />
       <details class="workflow-tools"><summary class="action-btn">{{ t('workflow.jsonEditor') }}</summary><label>{{ t('workflow.definitionJson') }}<textarea v-model="definitionJson" class="workflow-json" spellcheck="false" /></label></details>
-      <div class="actions"><button type="button" class="action-btn primary" :disabled="busy || !parsedDefinition" @click="publishVersion">{{ t('workflow.publish') }}</button><button v-if="currentWorkflow?.status === 'Published'" type="button" class="action-btn" :disabled="busy" @click="disableWorkflow">{{ t('workflow.disable') }}</button></div>
+      <div class="actions"><button type="button" class="action-btn primary" :disabled="busy || !parsedDefinition" @click="publishVersion">{{ t('workflow.publish') }}</button><button v-if="currentWorkflow?.status === 'Published'" type="button" class="action-btn" :disabled="busy" @click="disableWorkflow">{{ t('workflow.disable') }}</button><button v-if="currentWorkflow?.status === 'Disabled' && versions.some(version => version.published)" type="button" class="action-btn" :disabled="busy" @click="enableWorkflow">{{ t('workflow.reenable') }}</button></div>
     </template>
   </section>
   <FormDialog :open="creating" :title="t('workflow.create')" :submit-label="t('workflow.create')" :busy="busy || !functionId" @close="creating = false" @submit="createWorkflow">
