@@ -141,6 +141,14 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
       expect.objectContaining({ eventType: 'StepCompleted' })
     ]))
     expect((await request.get(timelineUrl, { headers: admin })).status()).toBe(404)
+    expect((await request.get(`${api}/api/dispatch-monitor`, { headers: operatorHeaders })).status()).toBe(403)
+    const dispatchMonitorResponse = await request.get(`${api}/api/dispatch-monitor?limit=10`, { headers: admin })
+    expect(dispatchMonitorResponse.ok()).toBeTruthy()
+    const dispatchMonitor = await dispatchMonitorResponse.json() as { executionCounts: Array<{ status: string; count: number }>; recent: Array<{ id: string; nodeId: string; status: string }> }
+    expect(dispatchMonitor.executionCounts.find(x => x.status === 'Succeeded')?.count).toBeGreaterThanOrEqual(1)
+    expect(dispatchMonitor.recent).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: completed.items[0].executions[0].id, nodeId: node.nodeId, status: 'Succeeded' })
+    ]))
     const mockSession = await request.post(`${api}/mock/qd-social-security/login`, { form: { username: 'demo', password: 'Demo123!' } })
     expect(mockSession.ok()).toBeTruthy()
     const employeeStatusUrl = `${api}/mock/qd-social-security/employees/status?idNumber=110105194912310038`
