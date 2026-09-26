@@ -83,12 +83,20 @@ test('角色分配、撤销、停用及管理员保护', async ({ request }) => 
   const role = await request.post(`${root}/roles`, { headers, data: { name, displayName: '验收角色' } })
   expect(role.status()).toBe(201)
   const roleId = (await role.json() as { id: string }).id
-  const user = await request.post(`${root}/users`, { headers, data: { userName: `member-${randomUUID().slice(0, 12)}`, displayName: '验收成员', password: 'AcceptancePassword123!' } })
+  const memberName = `member-${randomUUID().slice(0, 12)}`
+  const user = await request.post(`${root}/users`, { headers, data: { userName: memberName, displayName: '验收成员', password: 'AcceptancePassword123!' } })
   expect(user.status()).toBe(201)
   const userId = (await user.json() as { id: string }).id
+  const memberLogin = await request.post('http://127.0.0.1:5000/api/auth/login', { data: { userName: memberName, password: 'AcceptancePassword123!' } })
+  expect(memberLogin.ok()).toBeTruthy()
+  const memberHeaders = { Authorization: `Bearer ${(await memberLogin.json() as { accessToken: string }).accessToken}` }
   expect((await request.post(`${root}/users/${userId}/roles/${roleId}`, { headers })).ok()).toBeTruthy()
+  expect((await request.get('http://127.0.0.1:5000/api/auth/me', { headers: memberHeaders })).status()).toBe(401)
+  const assignedLogin = await request.post('http://127.0.0.1:5000/api/auth/login', { data: { userName: memberName, password: 'AcceptancePassword123!' } })
+  const assignedHeaders = { Authorization: `Bearer ${(await assignedLogin.json() as { accessToken: string }).accessToken}` }
   expect((await request.get(`${root}/users/${userId}/roles`, { headers }).then(r => r.json()) as Array<{ id: string }>).some(r => r.id === roleId)).toBeTruthy()
   expect((await request.delete(`${root}/users/${userId}/roles/${roleId}`, { headers })).status()).toBe(204)
+  expect((await request.get('http://127.0.0.1:5000/api/auth/me', { headers: assignedHeaders })).status()).toBe(401)
   expect((await request.get(`${root}/users/${userId}/roles`, { headers }).then(r => r.json()) as Array<{ id: string }>).some(r => r.id === roleId)).toBeFalsy()
   expect((await request.post(`${root}/roles/${roleId}/enabled`, { headers, data: { enabled: false } })).ok()).toBeTruthy()
   expect((await request.post(`${root}/users/${userId}/roles/${roleId}`, { headers })).status()).toBe(404)

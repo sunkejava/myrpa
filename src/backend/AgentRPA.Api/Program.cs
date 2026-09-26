@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 using AgentRPA.Api.HostedServices;
 using AgentRPA.Api.Hubs;
@@ -51,6 +52,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         ValidateIssuer = true, ValidIssuer = jwt["Issuer"], ValidateAudience = true, ValidAudience = jwt["Audience"], ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)), ValidateLifetime = true, ClockSkew = TimeSpan.FromSeconds(30),
         NameClaimType = System.Security.Claims.ClaimTypes.Name, RoleClaimType = System.Security.Claims.ClaimTypes.Role
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var rawUserId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(rawUserId, out var userId)) { context.Fail("无效的账户标识。"); return; }
+            var db = context.HttpContext.RequestServices.GetRequiredService<AgentRpaDbContext>();
+            var enabled = await db.UserAccounts.AsNoTracking().Where(x => x.Id == userId)
+                .Select(x => (bool?)x.Enabled).SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+            if (enabled != true) { context.Fail("账户已停用或不存在。"); return; }
+            var activeRoles = await (from membership in db.UserRoles.AsNoTracking()
+                join role in db.Roles.AsNoTracking() on membership.RoleId equals role.Id
+                where membership.UserAccountId == userId && role.Enabled
+                select role.Name).ToListAsync(context.HttpContext.RequestAborted);
+            var issuedRoles = context.Principal!.FindAll(ClaimTypes.Role).Select(x => x.Value).ToHashSet(StringComparer.Ordinal);
+            if (!issuedRoles.SetEquals(activeRoles)) context.Fail("账户角色发生变化，请重新登录。");
+        }
     };
 });
 builder.Services.AddAuthorization();
