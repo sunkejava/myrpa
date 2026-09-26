@@ -95,6 +95,18 @@ function updateDefinition(patch: Record<string, unknown>) {
   if (!parsedDefinition.value) { error.value = t('workflow.invalidJson'); return }
   definitionJson.value = JSON.stringify({ ...parsedDefinition.value, ...patch }, null, 2)
 }
+function selectAdapter(raw: string) {
+  const code = raw.trim()
+  if (!parsedDefinition.value) return
+  const prior = typeof parsedDefinition.value.adapter === 'string' ? parsedDefinition.value.adapter : 'direct'
+  const current = parsedDefinition.value.executionRequirement
+  const requirement: Record<string, unknown> = current && typeof current === 'object' && !Array.isArray(current)
+    ? { ...current as Record<string, unknown> } : {}
+  const oldCapabilities = Array.isArray(requirement.requiredCapabilities) ? requirement.requiredCapabilities : []
+  requirement.requiredCapabilities = oldCapabilities.filter(capability => capability !== `Adapter:${prior}`)
+  if (code && code !== 'direct') requirement.requiredCapabilities = [...requirement.requiredCapabilities as unknown[], `Adapter:${code}`]
+  updateDefinition({ adapter: code || 'direct', executionRequirement: requirement })
+}
 function addStep(type: string) {
   if (!parsedDefinition.value) { error.value = t('workflow.invalidJson'); return }
   const next = [...steps.value]
@@ -168,7 +180,8 @@ onMounted(async () => {
     <template v-if="workflowId">
       <h3>{{ t('workflow.definition') }}</h3>
       <div class="resource-grid"><label>{{ t('workflow.risk') }}<select :aria-label="t('workflow.riskAria')" :value="parsedDefinition?.riskLevel || 'Low'" @change="updateDefinition({ riskLevel: ($event.target as HTMLSelectElement).value })"><option v-for="risk in ['Low', 'Medium', 'High', 'Critical']" :key="risk">{{ risk }}</option></select></label>
-      <label>{{ t('workflow.approval') }}<select :value="parsedDefinition?.requiresApproval ? 'true' : 'false'" @change="updateDefinition({ requiresApproval: ($event.target as HTMLSelectElement).value === 'true' })"><option value="false">{{ t('workflow.autoApproval') }}</option><option value="true">{{ t('workflow.mustApprove') }}</option></select></label></div>
+      <label>{{ t('workflow.approval') }}<select :value="parsedDefinition?.requiresApproval ? 'true' : 'false'" @change="updateDefinition({ requiresApproval: ($event.target as HTMLSelectElement).value === 'true' })"><option value="false">{{ t('workflow.autoApproval') }}</option><option value="true">{{ t('workflow.mustApprove') }}</option></select></label>
+      <label>站点适配器编码<input :value="parsedDefinition?.adapter || 'direct'" maxlength="64" placeholder="direct 或已配置的 Adapter 编码" @change="selectAdapter(($event.target as HTMLInputElement).value)" /></label></div>
       <details class="workflow-tools"><summary class="action-btn">{{ t('workflow.addStep') }}</summary><div class="actions"><button v-for="type in stepTypes" :key="type" type="button" class="action-btn" @click="addStep(type)">＋ {{ type }}</button></div></details>
       <p class="muted">{{ t('workflow.steps') }}：{{ steps.map(step => `${step.id || t('workflow.unnamed')} (${step.type || t('workflow.unknown')})`).join(' → ') || t('workflow.none') }}。{{ t('workflow.jsonHelp') }}</p>
       <WorkflowCanvas :steps="steps" />

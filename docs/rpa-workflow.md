@@ -72,7 +72,7 @@
 }
 ```
 
-节点启动时校验编码、地址和映射并自动上报 `Adapter:beijing-medical-test` 能力；重复编码或试图把页面映射到其他主机时拒绝启动。工作流根节点填 `"adapter":"beijing-medical-test"`，同时声明 `"executionRequirement":{"requiredCapabilities":["Adapter:beijing-medical-test"]}`；Navigate 使用 `"url":"@site.login"`，Input/Extract 使用配置中的语义选择器。管理员仍需将系统资源中的地址配置为获授权的真实地址，并对登录、查询结果、下载与权限逐项验收。配置中的示例域名不可访问，也不是北京医保生产接口。
+节点启动时校验编码、地址和映射并自动上报 `Adapter:beijing-medical-test` 能力；重复编码或试图把页面映射到其他主机时拒绝启动。在工作流设计器的“站点适配器编码”输入 `beijing-medical-test` 时，会同步添加 `executionRequirement.requiredCapabilities`；也可在高级 JSON 中设置 `"adapter":"beijing-medical-test"` 和 `"executionRequirement":{"requiredCapabilities":["Adapter:beijing-medical-test"]}`。Navigate 使用 `"url":"@site.login"`，Input/Extract 使用配置中的语义选择器。管理员仍需将系统资源中的地址配置为获授权的真实地址，并对登录、查询结果、下载与权限逐项验收。配置中的示例域名不可访问，也不是北京医保生产接口。
 
 `timeoutMs` 范围 100–120000，默认 30000。仅 `Navigate`、`WaitForElement`、`Assert`、`Extract` 可用 `retryCount`（0–3）；Click/Upload/Download/HumanTask 不能通过步骤重试绕过外部幂等要求。嵌套深度最多 8 层，每个数组最多 1000 步。任务级“重试失败”仅允许无需审批的只读流程自动重试；提交过外部业务的任务必须先核验外部状态。
 
