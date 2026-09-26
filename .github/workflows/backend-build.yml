@@ -87,6 +87,18 @@ jobs:
               json.dumps({'userName': 'usera', 'password': 'UserATestPassword123!'}).encode(),
               {'Content-Type': 'application/json'})) as response:
               user_token = json.load(response)['accessToken']
+          def refresh_user_token():
+              with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/login',
+                  json.dumps({'userName': 'usera', 'password': 'UserATestPassword123!'}).encode(),
+                  {'Content-Type': 'application/json'})) as response:
+                  return json.load(response)['accessToken']
+          def assert_token_revoked(bearer):
+              try:
+                  urllib.request.urlopen(urllib.request.Request(base + '/api/auth/me',
+                      headers={'Authorization': 'Bearer ' + bearer}))
+                  raise AssertionError('Old token survived role change')
+              except urllib.error.HTTPError as error:
+                  assert error.code == 401, error.code
           try:
               post('/api/business-resources/cities', {'code': 'CN-SD-QD', 'name': '青岛市'}, user_token)
               raise AssertionError('Non-admin created a city')
@@ -151,6 +163,8 @@ jobs:
           assert check(qd, jn_system, jn_function) == 403
           role = post('/api/user-management/roles', {'name': 'JinanOperator', 'displayName': '济南社保操作员'}, token)
           post(f'/api/user-management/users/{user["id"]}/roles/{role["id"]}', {}, token)
+          assert_token_revoked(user_token)
+          user_token = refresh_user_token()
           role_policy = post('/api/role-policies', {'roleId': role['id'], 'cityId': jn['id'],
               'systemId': jn_system['id'], 'functionId': jn_function['id'], 'action': 'Execute'}, token)
           assert check(jn, jn_system, jn_function) == 200
@@ -207,6 +221,8 @@ jobs:
           with urllib.request.urlopen(urllib.request.Request(base + '/api/user-management/roles', headers={'Authorization': 'Bearer ' + token})) as response:
               admin_role = next(x for x in json.load(response) if x['name'] == 'Admin')
           post(f'/api/user-management/users/{user["id"]}/roles/{admin_role["id"]}', {}, token)
+          assert_token_revoked(user_token)
+          user_token = refresh_user_token()
           with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/login',
               json.dumps({'userName': 'usera', 'password': 'UserATestPassword123!'}).encode(),
               {'Content-Type': 'application/json'})) as response:
