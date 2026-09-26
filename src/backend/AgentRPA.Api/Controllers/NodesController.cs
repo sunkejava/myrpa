@@ -31,7 +31,7 @@ public sealed class NodesController(
             (x.Status == NodeStatus.Online || x.Status == NodeStatus.Draining), cancellationToken)) return StatusCode(403);
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == executionId && x.NodeId == nodeId && x.WorkerSlotId == workerSlotId, cancellationToken);
         if (execution is null || execution.Status is AgentRPA.Domain.Tasks.ExecutionStatus.Succeeded or AgentRPA.Domain.Tasks.ExecutionStatus.Failed or AgentRPA.Domain.Tasks.ExecutionStatus.Cancelled) return NotFound();
-        if (string.IsNullOrWhiteSpace(artifactType) || artifactType.Length > 64 || string.IsNullOrWhiteSpace(fileName) ||
+        if (artifactType is not ("Screenshot" or "Download" or "Upload") || string.IsNullOrWhiteSpace(fileName) ||
             fileName.Length > 260 || Path.GetFileName(fileName) != fileName ||
             sha256.Length != 64 || !sha256.All(Uri.IsHexDigit) ||
             Request.ContentLength is null or < 0 or > 50L * 1024 * 1024)
@@ -47,6 +47,10 @@ public sealed class NodesController(
                 return BadRequest(new { message = "产物内容长度或 SHA256 校验失败。" });
             db.ExecutionArtifacts.Add(new ExecutionArtifact(executionId, execution.TaskItemId, artifactType, fileName,
                 storageKey, Request.ContentType, length, actualHash));
+            var sequence = (await db.ExecutionLogs.Where(x => x.ExecutionId == executionId)
+                .Select(x => (long?)x.Sequence).MaxAsync(cancellationToken) ?? -1) + 1;
+            db.ExecutionLogs.Add(new ExecutionLog(executionId, sequence, ExecutionLogLevel.Information,
+                ExecutionLogEventType.Artifact, $"节点上传产物：{artifactType}"));
             await db.SaveChangesAsync(cancellationToken);
             return Ok(new { storageKey, sha256 = actualHash });
         }
