@@ -18,7 +18,9 @@ public sealed record WorkflowRuntimeEvent(
     WorkflowRuntimeArtifact? Artifact = null,
     string? StepType = null,
     string? OutputKey = null,
-    string? OutputValue = null);
+    string? OutputValue = null,
+    string? InterventionType = null,
+    string? InterventionTitle = null);
 
 public sealed record WorkflowRuntimeArtifact(
     string ArtifactType,
@@ -115,7 +117,9 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
                 case "end": return;
                 case "script": throw new InvalidOperationException("Script Step 默认被禁止，必须通过受控 Script Provider 执行。 ");
                 case "humantask":
-                    await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。"));
+                    await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。",
+                        InterventionType: GetString(config, "interventionType") ?? "ManualApproval",
+                        InterventionTitle: GetString(config, "title") ?? $"流程步骤 {id} 等待人工确认"));
                     break;
                 default: throw new NotSupportedException($"NodeAgent 暂不支持 Workflow Step: {type}");
             }

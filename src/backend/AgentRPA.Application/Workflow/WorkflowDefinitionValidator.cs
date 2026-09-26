@@ -84,6 +84,13 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 (!HasString(config, "output") || config.GetProperty("output").GetString() is not { } output ||
                  output.Length > 64 || !char.IsLetter(output[0]) || output.Any(c => !char.IsLetterOrDigit(c) && c != '_')))
                 errors.Add($"{location} 的 config.output 必须是以字母开头、最多 64 位的字段名。");
+            if (stepType == WorkflowStepType.HumanTask && config.TryGetProperty("interventionType", out var interventionType) &&
+                (interventionType.ValueKind != JsonValueKind.String ||
+                 !new[] { "Captcha", "FaceAuthentication", "UKeyConfirmation", "ManualApproval" }.Contains(interventionType.GetString(), StringComparer.OrdinalIgnoreCase)))
+                errors.Add($"{location} 的 config.interventionType 仅支持 Captcha、FaceAuthentication、UKeyConfirmation、ManualApproval。");
+            if (stepType == WorkflowStepType.HumanTask && config.TryGetProperty("title", out var title) &&
+                (title.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title.GetString()) || title.GetString()!.Length > 200))
+                errors.Add($"{location} 的 config.title 必须是 1 至 200 字符的标题。");
             if (config.TryGetProperty("selector", out var selector) && selector.ValueKind == JsonValueKind.String &&
                 selector.GetString() is { } value && value.Contains("replace-", StringComparison.OrdinalIgnoreCase))
                 errors.Add($"{location} 的占位选择器尚未替换。");

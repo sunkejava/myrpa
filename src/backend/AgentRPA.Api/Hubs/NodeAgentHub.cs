@@ -113,8 +113,11 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
                 task?.SetStatus(DomainTaskStatus.WaitingForHuman);
                 if (task?.SubjectId is Guid ownerId && !await db.HumanInterventions.AnyAsync(x => x.ExecutionId == execution.Id && x.Status == InterventionStatus.Opened, cancellationToken))
                 {
-                    var intervention = new HumanIntervention(execution.Id, ownerId, InterventionType.ManualApproval,
-                        $"流程步骤 {progress.StepId ?? "HumanTask"} 等待人工确认", DateTimeOffset.UtcNow.AddMinutes(30));
+                    if (!Enum.TryParse<InterventionType>(progress.InterventionType ?? "ManualApproval", true, out var interventionType) ||
+                        interventionType == InterventionType.QrLogin || progress.InterventionTitle is { Length: > 200 })
+                        throw new HubException("人工介入类型或标题无效；扫码登录请使用一次性授权接口。");
+                    var intervention = new HumanIntervention(execution.Id, ownerId, interventionType,
+                        progress.InterventionTitle ?? $"流程步骤 {progress.StepId ?? "HumanTask"} 等待人工确认", DateTimeOffset.UtcNow.AddMinutes(30));
                     intervention.Open(null);
                     db.HumanInterventions.Add(intervention);
                 }

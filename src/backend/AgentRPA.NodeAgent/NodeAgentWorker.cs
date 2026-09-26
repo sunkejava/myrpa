@@ -127,7 +127,7 @@ public sealed class NodeAgentWorker(
                 if (e.Artifact is not null)
                     await UploadArtifactAsync(command, e.Artifact, linked.Token);
                 await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token, e.StepType,
-                    e.Status == "Succeeded" ? JsonSerializer.Serialize(extracted) : null);
+                    e.Status == "Succeeded" ? JsonSerializer.Serialize(extracted) : null, e.InterventionType, e.InterventionTitle);
                 if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!humanResumes.TryGetValue(command.ExecutionId, out var pending))
@@ -145,7 +145,7 @@ public sealed class NodeAgentWorker(
 
     private Task CancelExecutionAsync(Guid executionId) { if (executions.TryGetValue(executionId, out var source)) source.Cancel(); if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetCanceled(); return Task.CompletedTask; }
     private Task ResumeExecutionAsync(Guid executionId) { if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetResult(true); return Task.CompletedTask; }
-    private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken, string? stepType = null, string? resultJson = null) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow, stepType, resultJson), cancellationToken);
+    private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken, string? stepType = null, string? resultJson = null, string? interventionType = null, string? interventionTitle = null) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow, stepType, resultJson, interventionType, interventionTitle), cancellationToken);
 
     private async Task UploadArtifactAsync(ExecutionCommand command, WorkflowRuntimeArtifact artifact, CancellationToken cancellationToken)
     {

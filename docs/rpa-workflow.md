@@ -41,15 +41,15 @@
 | `Select` | `selector`, `value` | 按 HTML `option` 的 value 选择；不是自定义下拉框的通用方案。 |
 | `Wait` | `milliseconds`（默认 500） | 延迟 0–120000 毫秒，仍受步骤超时约束。 |
 | `WaitForElement` | `selector`, 可选 `timeout` | 等待元素出现；适合查询结果加载。 |
-| `Extract` | `selector` | 读取文本并写入执行进度日志（截断），**未形成可供下步引用的结构化变量**；涉及个人信息须避免写入日志。 |
+| `Extract` | `selector`, `output` | 将文本保存为结构化结果字段，并允许后续步骤使用 `{{字段名}}`；结果只在任务所属用户的任务详情中返回，不写入执行进度日志。单字段最多 16384 字符。 |
 | `Assert` | `selector`, `contains` | 元素文本不包含期望值时失败；仅作为只读断言。 |
-| `Screenshot` | `path`（默认 `artifacts/{id}.png`）, `fullPage`（默认 true） | 保存节点本地截图并上报产物；下载仍取决于已配置的产物访问链路。 |
+| `Screenshot` | `path`（默认 `artifacts/{id}.png`）, `fullPage`（默认 true） | 节点生成截图后上传到服务端产物存储，校验 SHA256 和长度；任务所属用户可下载，单文件最大 50 MiB。 |
 | `Download` | `selector`, `path`, 可选 `timeout` | 等待点击产生浏览器下载，并保存到节点文件路径；属于有副作用的步骤，禁止自动重试。 |
 | `Upload` | `selector`, `path` | 将 NodeAgent 本地已存在的文件设为上传项；输入路径不是浏览器电脑上的文件。 |
 | `Condition` | `selector`, `contains`, `then` 和/或 `else` 步骤数组 | 元素文本包含指定字符串则执行 then，否则执行 else。 |
 | `Loop` | `count`（0–1000）, `steps` 数组 | 将内嵌步骤重复指定次数；不支持基于表格行的自动遍历。 |
 | `SubWorkflow` | `steps` 数组 | 执行本定义中的内联步骤；**尚不支持**按其他 Workflow ID 跨工作流调用。 |
-| `HumanTask` | 可为空 | 报告 `WaitingForHuman`，服务端生成待处理记录；所有者确认后在**原浏览器会话**继续。当前为人工确认，自动获取/展示远端浏览器的扫码界面仍待实现。 |
+| `HumanTask` | 可为空；`interventionType` 可选 Captcha、FaceAuthentication、UKeyConfirmation、ManualApproval；`title` 可选 | 报告 `WaitingForHuman`，服务端生成相应类型待处理记录；所有者确认后在**原浏览器会话**继续。该确认流程不执行厂商 UKey 签名，也不提供远端浏览器可视接管或验证码自动识别。 |
 | `End` | 可为空 | 结束当前级别的步骤数组；作为末尾节点使用。 |
 | `Script` | — | 发布校验会拒绝，受控脚本 Provider 尚未实现。 |
 
@@ -70,4 +70,4 @@
 
 ## 版本与当前限制
 
-工作流每次保存创建新版本，发布后才能创建任务；既有任务固定其创建时版本。停用阻断新任务及未派发任务，在线执行受取消和下一步门禁约束。设计器尚无单步在线调试；调试需在获授权的模拟/测试系统中提交任务，结合任务详情检查点、日志和产物核对。`Extract` 输出、远程节点产物、UKey/验证码 Provider、浏览器可视人工接管、跨工作流引用与生产级回滚仍有未完成任务，详见 [开发计划](development-plan.md)。
+工作流每次保存创建新版本，发布后才能创建任务；既有任务固定其创建时版本。停用阻断新任务及未派发任务，在线执行受取消和下一步门禁约束。设计器尚无单步在线调试；调试需在获授权的模拟/测试系统中提交任务，结合任务详情检查点、日志、任务结果 JSON 和产物核对。真实站点适配、UKey/验证码厂商 Provider、组织租户隔离、浏览器可视人工接管、跨工作流引用与生产级回滚仍有未完成任务，详见 [开发计划](development-plan.md)。
