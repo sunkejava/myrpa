@@ -72,6 +72,20 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             if ((stepType is WorkflowStepType.Condition or WorkflowStepType.Loop or WorkflowStepType.SubWorkflow) && !hasConfig)
                 errors.Add($"{location} 缺少嵌套 config。");
             if (!hasConfig) continue;
+            if (stepType == WorkflowStepType.Navigate && !HasString(config, "url"))
+                errors.Add($"{location} 缺少 config.url。");
+            if (stepType is WorkflowStepType.Click or WorkflowStepType.Input or WorkflowStepType.Select or
+                WorkflowStepType.WaitForElement or WorkflowStepType.Extract or WorkflowStepType.Upload or
+                WorkflowStepType.Download or WorkflowStepType.Assert or WorkflowStepType.Condition && !HasString(config, "selector"))
+                errors.Add($"{location} 缺少 config.selector。");
+            if (stepType == WorkflowStepType.Upload && !HasString(config, "path"))
+                errors.Add($"{location} 缺少 config.path。");
+            if (config.TryGetProperty("selector", out var selector) && selector.ValueKind == JsonValueKind.String &&
+                selector.GetString() is { } value && value.Contains("replace-", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"{location} 的占位选择器尚未替换。");
+            if (stepType is WorkflowStepType.Loop or WorkflowStepType.SubWorkflow &&
+                (!config.TryGetProperty("steps", out var nestedSteps) || nestedSteps.ValueKind != JsonValueKind.Array))
+                errors.Add($"{location} 缺少 config.steps 步骤数组。");
             foreach (var key in new[] { "steps", "then", "else" })
             {
                 if (!config.TryGetProperty(key, out var nested)) continue;
@@ -81,4 +95,6 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
         }
         if (steps.GetArrayLength() == 0) errors.Add("Workflow 至少需要一个 Step。");
     }
+    private static bool HasString(JsonElement value, string key) =>
+        value.TryGetProperty(key, out var field) && field.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(field.GetString());
 }

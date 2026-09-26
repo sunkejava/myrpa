@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import WorkflowCanvas from './WorkflowCanvas.vue'
+import WorkflowTemplateGallery from './WorkflowTemplateGallery.vue'
+import WorkflowStepEditor from './WorkflowStepEditor.vue'
+import type { WorkflowTemplate } from '../../data/workflow-templates/catalog'
 import FormDialog from '../common/FormDialog.vue'
 import { workflowRequest, type WorkflowResource as Resource, type WorkflowItem as Workflow, type WorkflowVersion as Version } from '../../api/modules/workflows'
 import { useLocale } from '../../locales'
@@ -23,6 +26,8 @@ const error = ref('')
 const notice = ref('')
 const busy = ref(false)
 const creating = ref(false)
+const pendingTemplate = ref<WorkflowTemplate | null>(null)
+type Step = { id?: string; type?: string; config?: Record<string, unknown>; timeoutMs?: number; retryCount?: number; requiredAction?: string }
 const defaultDefinition = () => JSON.stringify({ version: 1, riskLevel: 'Low', requiresApproval: false, steps: [{ id: 'step-1', type: 'End' }] }, null, 2)
 const definitionJson = ref(defaultDefinition())
 const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'HumanTask', 'Assert', 'End']
@@ -33,7 +38,7 @@ const parsedDefinition = computed(() => {
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
   } catch { return null }
 })
-const steps = computed(() => Array.isArray(parsedDefinition.value?.steps) ? parsedDefinition.value.steps as { id?: string; type?: string; config?: Record<string, unknown> }[] : [])
+const steps = computed(() => Array.isArray(parsedDefinition.value?.steps) ? parsedDefinition.value.steps as Step[] : [])
 
 const call = <T,>(path: string, method = 'GET', body?: object) => workflowRequest<T>(props.token, path, method, body)
 function fail(e: unknown) { error.value = e instanceof Error ? e.message : t('workflow.operationFailed') }
@@ -76,8 +81,13 @@ async function createWorkflow() {
       businessFunctionId: functionId.value, name: workflowName.value.trim(), description: workflowDescription.value.trim()
     })
     await loadWorkflows(); await chooseWorkflow(result.id)
+    if (pendingTemplate.value) {
+      definitionJson.value = JSON.stringify(pendingTemplate.value.definition, null, 2)
+      notice.value = `已载入「${pendingTemplate.value.name}」草稿，请核对资源与步骤后再发布。`
+      pendingTemplate.value = null
+    }
     creating.value = false
-    notice.value = t('workflow.created')
+    if (!notice.value) notice.value = t('workflow.created')
   } catch (e) { fail(e) }
   finally { busy.value = false }
 }
@@ -92,10 +102,28 @@ function addStep(type: string) {
   next.splice(endIndex < 0 ? next.length : endIndex, 0, { id: `step-${crypto.randomUUID().slice(0, 8)}`, type, config: {} })
   updateDefinition({ steps: next })
 }
+function editStep(index: number, step: Step) { const next = [...steps.value]; next[index] = step; updateDefinition({ steps: next }) }
+function removeStep(index: number) { updateDefinition({ steps: steps.value.filter((_, i) => i !== index) }) }
+function moveStep(from: number, to: number) {
+  const next = [...steps.value]; next.splice(to, 0, ...next.splice(from, 1)); updateDefinition({ steps: next })
+}
+function selectTemplate(template: WorkflowTemplate) {
+  if (workflowId.value) {
+    definitionJson.value = JSON.stringify(template.definition, null, 2)
+    notice.value = `已载入「${template.name}」草稿，发布前请核对当前 Workflow 绑定的业务功能。`
+  } else {
+    pendingTemplate.value = template
+    workflowName.value = template.name
+    workflowDescription.value = template.summary
+    creating.value = true
+    notice.value = `请选择「${template.resource}」对应的城市、系统和业务功能。`
+  }
+}
 async function publishVersion() {
   busy.value = true; error.value = ''; notice.value = ''
   try {
     if (!workflowId.value || !parsedDefinition.value || !Array.isArray(parsedDefinition.value.steps)) throw new Error(t('workflow.invalidSteps'))
+    if (definitionJson.value.includes('replace-')) throw new Error('示例中的 replace-* 页面选择器尚未替换，不能发布。')
     const version = await call<{ version: number }>(`workflows/${workflowId.value}/versions`, 'POST', { definitionJson: definitionJson.value })
     await call(`workflows/${workflowId.value}/versions/${version.version}/publish`, 'POST', {})
     await Promise.all([loadWorkflows(), chooseWorkflow(workflowId.value)])
@@ -130,6 +158,7 @@ onMounted(async () => {
 <template>
   <div class="page-toolbar"><div><h2>{{ t('workflow.title') }}</h2><p class="muted">{{ t('workflow.help') }}</p></div><button class="action-btn primary" @click="creating = true">{{ t('workflow.add') }}</button></div>
   <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
+  <WorkflowTemplateGallery @select="selectTemplate" />
   <section class="panel form-panel resource-panel">
     <div class="resource-grid">
       <label>{{ t('workflow.existing') }}<select :value="workflowId" @change="chooseWorkflow(($event.target as HTMLSelectElement).value)"><option value="">{{ t('workflow.chooseWorkflow') }}</option><option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }} · {{ workflow.status }}</option></select></label>
@@ -142,6 +171,7 @@ onMounted(async () => {
       <details class="workflow-tools"><summary class="action-btn">{{ t('workflow.addStep') }}</summary><div class="actions"><button v-for="type in stepTypes" :key="type" type="button" class="action-btn" @click="addStep(type)">＋ {{ type }}</button></div></details>
       <p class="muted">{{ t('workflow.steps') }}：{{ steps.map(step => `${step.id || t('workflow.unnamed')} (${step.type || t('workflow.unknown')})`).join(' → ') || t('workflow.none') }}。{{ t('workflow.jsonHelp') }}</p>
       <WorkflowCanvas :steps="steps" />
+      <section class="workflow-step-list"><h3>逐节点配置</h3><WorkflowStepEditor v-for="(step, index) in steps" :key="`${step.id || step.type}-${index}`" :step="step" :index="index" :total="steps.length" @update="editStep" @remove="removeStep" @move="moveStep" /></section>
       <details class="workflow-tools"><summary class="action-btn">{{ t('workflow.jsonEditor') }}</summary><label>{{ t('workflow.definitionJson') }}<textarea v-model="definitionJson" class="workflow-json" spellcheck="false" /></label></details>
       <div class="actions"><button type="button" class="action-btn primary" :disabled="busy || !parsedDefinition" @click="publishVersion">{{ t('workflow.publish') }}</button><button v-if="currentWorkflow?.status === 'Published'" type="button" class="action-btn" :disabled="busy" @click="disableWorkflow">{{ t('workflow.disable') }}</button><button v-if="currentWorkflow?.status === 'Disabled' && versions.some(version => version.published)" type="button" class="action-btn" :disabled="busy" @click="enableWorkflow">{{ t('workflow.reenable') }}</button></div>
     </template>

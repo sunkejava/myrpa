@@ -1,0 +1,123 @@
+{
+  "riskLevel": "High",
+  "requiresApproval": true,
+  "steps": [
+    {
+      "id": "open",
+      "type": "Navigate",
+      "config": {
+        "url": "mock://login"
+      }
+    },
+    {
+      "id": "account",
+      "type": "Input",
+      "config": {
+        "selector": "@login.account",
+        "value": "demo"
+      }
+    },
+    {
+      "id": "password",
+      "type": "Input",
+      "config": {
+        "selector": "@login.password",
+        "value": "Demo123!"
+      }
+    },
+    {
+      "id": "login",
+      "type": "Click",
+      "config": {
+        "selector": "@login.submit"
+      }
+    },
+    {
+      "id": "form",
+      "type": "WaitForElement",
+      "config": {
+        "selector": "@employee.operation"
+      }
+    },
+    {
+      "id": "operation",
+      "type": "Select",
+      "config": {
+        "selector": "@employee.operation",
+        "value": "remove"
+      }
+    },
+    {
+      "id": "name",
+      "type": "Input",
+      "config": {
+        "selector": "@employee.name",
+        "value": "{{employeeName}}"
+      }
+    },
+    {
+      "id": "id",
+      "type": "Input",
+      "config": {
+        "selector": "@employee.id",
+        "value": "{{idNumber}}"
+      }
+    },
+    {
+      "id": "request",
+      "type": "Input",
+      "config": {
+        "selector": "@employee.request",
+        "value": "{{submissionId}}"
+      }
+    },
+    {
+      "id": "submit",
+      "type": "Click",
+      "config": {
+        "selector": "@employee.submit"
+      }
+    },
+    {
+      "id": "result",
+      "type": "Assert",
+      "config": {
+        "selector": "@employee.success",
+        "contains": "减员申报成功"
+      }
+    }
+  ],
+  "parameters": {
+    "mockBaseUrl": {
+      "type": "string",
+      "required": true,
+      "minLength": 10,
+      "maxLength": 2048
+    },
+    "employeeName": {
+      "type": "string",
+      "required": true,
+      "minLength": 2,
+      "maxLength": 40
+    },
+    "idNumber": {
+      "type": "string",
+      "required": true,
+      "minLength": 18,
+      "maxLength": 18,
+      "sensitive": true
+    },
+    "submissionId": {
+      "type": "string",
+      "required": true,
+      "minLength": 6,
+      "maxLength": 128
+    }
+  },
+  "adapter": "qd-social-security",
+  "executionRequirement": {
+    "requiredCapabilities": [
+      "Adapter:qd-social-security"
+    ]
+  }
+}

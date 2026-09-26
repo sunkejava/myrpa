@@ -134,3 +134,30 @@ test('资源页可以查看并切换业务系统状态', async ({ page, request 
   await systemRow.getByRole('button', { name: '启用' }).click()
   await expect(systemRow).toContainText('启用')
 })
+
+test('工作流默认模板可展示并作为草稿绑定预置业务资源', async ({ page, request }) => {
+  const login = await request.post('http://127.0.0.1:5000/api/auth/login', { data: { userName: 'admin', password: 'BrowserTestPassword123!' } })
+  const headers = { Authorization: `Bearer ${(await login.json() as { accessToken: string }).accessToken}` }
+  const root = 'http://127.0.0.1:5000/api/business-resources'
+  const city = (await (await request.get(`${root}/cities`, { headers })).json() as { id: string; code: string }[]).find(item => item.code === 'CN-BJ')!
+  const system = (await (await request.get(`${root}/cities/${city.id}/systems`, { headers })).json() as { id: string; code: string }[]).find(item => item.code === 'BJ-MEDICAL')!
+  const fn = (await (await request.get(`${root}/systems/${system.id}/functions`, { headers })).json() as { id: string; code: string }[]).find(item => item.code === 'PERSON-QUERY')!
+  await page.goto('/')
+  await page.getByLabel('用户名').fill('admin')
+  await page.getByLabel('密码').fill('BrowserTestPassword123!')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await page.getByRole('button', { name: 'Workflow 管理' }).click()
+  const sample = page.getByRole('article').filter({ hasText: '北京医保 · 人员信息查询' })
+  await expect(sample).toContainText('依赖资源：北京 / 医保 / PERSON-QUERY')
+  await sample.getByRole('button', { name: '载入为草稿' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByLabel('名称')).toHaveValue('北京医保 · 人员信息查询')
+  await dialog.getByLabel('城市').selectOption(city.id)
+  await dialog.getByLabel('系统').selectOption(system.id)
+  await dialog.getByLabel('功能').selectOption(fn.id)
+  await dialog.getByRole('button', { name: '创建 Workflow' }).click()
+  await expect(page.getByText('逐节点配置')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Workflow 步骤预览' }).getByRole('button', { name: /Navigate/ })).toBeVisible()
+  await page.getByRole('button', { name: '创建并发布新版本' }).click()
+  await expect(page.getByRole('alert')).toContainText('replace-*')
+})
