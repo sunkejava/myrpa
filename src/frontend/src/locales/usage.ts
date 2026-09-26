@@ -1,0 +1,2 @@
+export const zh = { title: '我的 LLM 用量', taskId: '任务 ID（可选）', taskFilter: '按任务筛选', time: '时间', model: '模型', provider: 'Provider', input: '输入', output: '输出', total: '合计', calls: '调用', times: '次', empty: '暂无 Token 用量。', failure: '用量查询失败', more: '加载更多' }
+export const en = { title: 'My LLM usage', taskId: 'Task ID (optional)', taskFilter: 'Filter by task', time: 'Time', model: 'Model', provider: 'Provider', input: 'Input', output: 'Output', total: 'Total', calls: 'Calls', times: 'times', empty: 'No token usage.', failure: 'Usage query failed', more: 'Load more' }

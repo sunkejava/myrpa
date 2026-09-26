@@ -1,0 +1,2 @@
+export const zh = { title: '审计记录', actor: '操作者', resource: '资源', time: '时间', action: '动作', result: '结果', summary: '说明', exact: '精确匹配', empty: '暂无审计记录。', failure: '审计查询失败' }
+export const en = { title: 'Audit log', actor: 'Actor', resource: 'Resource', time: 'Time', action: 'Action', result: 'Result', summary: 'Summary', exact: 'Exact match', empty: 'No audit entries.', failure: 'Audit query failed' }
