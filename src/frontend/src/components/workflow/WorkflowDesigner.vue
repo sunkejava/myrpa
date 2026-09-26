@@ -107,18 +107,43 @@ function selectAdapter(raw: string) {
   if (code && code !== 'direct') requirement.requiredCapabilities = [...requirement.requiredCapabilities as unknown[], `Adapter:${code}`]
   updateDefinition({ adapter: code || 'direct', executionRequirement: requirement })
 }
+function updateSteps(next: Step[]) {
+  const certificates = new Set<string>()
+  let requiresSigning = false
+  function visit(nodes: Step[], depth: number) {
+    if (depth > 8) return
+    for (const step of nodes) {
+      const thumbprint = step.config?.certificateThumbprint
+      if (step.type === 'UKeySign') requiresSigning = true
+      if (step.type === 'UKeySign' && typeof thumbprint === 'string' && /^[a-f\d]{40}([a-f\d]{24})?$/i.test(thumbprint))
+        certificates.add(`Certificate:${thumbprint}`)
+      for (const key of ['then', 'else', 'steps']) {
+        const branch = step.config?.[key]
+        if (Array.isArray(branch)) visit(branch as Step[], depth + 1)
+      }
+    }
+  }
+  visit(next, 0)
+  const current = parsedDefinition.value?.executionRequirement
+  const requirement: Record<string, unknown> = current && typeof current === 'object' && !Array.isArray(current)
+    ? { ...current as Record<string, unknown> } : {}
+  const existing = Array.isArray(requirement.requiredCapabilities) ? requirement.requiredCapabilities : []
+  requirement.requiredCapabilities = [...existing.filter(x => typeof x === 'string' && !x.startsWith('Certificate:')), ...certificates]
+  updateDefinition({ steps: next, executionRequirement: requirement,
+    requiresApproval: requiresSigning || Boolean(parsedDefinition.value?.requiresApproval) })
+}
 function addStep(type: string) {
   if (!parsedDefinition.value) { error.value = t('workflow.invalidJson'); return }
   const next = [...steps.value]
   const endIndex = next.findIndex(step => step.type?.toLowerCase() === 'end')
   const config = type === 'Loop' || type === 'SubWorkflow' ? { steps: [] } : type === 'Condition' ? { then: [], else: [] } : {}
   next.splice(endIndex < 0 ? next.length : endIndex, 0, { id: `step-${crypto.randomUUID().slice(0, 8)}`, type, config })
-  updateDefinition({ steps: next })
+  updateSteps(next)
 }
-function editStep(index: number, step: Step) { const next = [...steps.value]; next[index] = step; updateDefinition({ steps: next }) }
-function removeStep(index: number) { updateDefinition({ steps: steps.value.filter((_, i) => i !== index) }) }
+function editStep(index: number, step: Step) { const next = [...steps.value]; next[index] = step; updateSteps(next) }
+function removeStep(index: number) { updateSteps(steps.value.filter((_, i) => i !== index)) }
 function moveStep(from: number, to: number) {
-  const next = [...steps.value]; next.splice(to, 0, ...next.splice(from, 1)); updateDefinition({ steps: next })
+  const next = [...steps.value]; next.splice(to, 0, ...next.splice(from, 1)); updateSteps(next)
 }
 function selectTemplate(template: WorkflowTemplate) {
   if (workflowId.value) {
