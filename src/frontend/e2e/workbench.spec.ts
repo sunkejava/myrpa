@@ -124,6 +124,8 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('名称').fill('可发布流程')
   await page.getByRole('button', { name: '创建 Workflow' }).click()
   await page.getByRole('combobox', { name: 'Workflow 风险级别' }).selectOption('High')
+  await page.getByText('高级 JSON 编辑').click()
+  await expect(page.getByLabel('Definition JSON')).toBeVisible()
   await page.getByRole('button', { name: '创建并发布新版本' }).click()
   await expect(page.getByRole('status')).toContainText('已发布')
   await expect(page.getByRole('region', { name: 'Workflow 步骤预览' }).getByRole('button', { name: /End/ })).toBeVisible()
