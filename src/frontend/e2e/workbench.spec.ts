@@ -78,6 +78,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: '分配角色' }).click()
   await expect(page.getByText('已分配：执行员')).toBeVisible()
   await page.getByRole('button', { name: '权限中心' }).click()
+  await page.getByRole('button', { name: '新增授权' }).click()
   await page.getByLabel('授权对象').selectOption('role')
   await page.locator('form select').nth(1).selectOption(role.id)
   await page.getByLabel('城市').selectOption(city.id)
