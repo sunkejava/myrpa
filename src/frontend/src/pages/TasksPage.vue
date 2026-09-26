@@ -17,8 +17,8 @@ async function call<T>(path: string, method = 'GET'): Promise<T> {
     const body: unknown = await response.json().catch(() => null)
     throw new Error(body && typeof body === 'object' && 'message' in body ? String(body.message) : `请求失败 (${response.status})`)
   }
-  if (response.status === 204 || response.headers.get('content-length') === '0') return undefined as T
-  return await response.json() as T
+  const content = await response.text()
+  return (content ? JSON.parse(content) : undefined) as T
 }
 async function loadTasks() {
   try { tasks.value = await call<Task[]>('') }

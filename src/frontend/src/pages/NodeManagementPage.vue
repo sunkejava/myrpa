@@ -19,8 +19,8 @@ async function call<T>(path: string, method = 'GET', data?: object): Promise<T> 
     const details: unknown = await response.json().catch(() => null)
     throw new Error(details && typeof details === 'object' && 'message' in details ? String(details.message) : `请求失败 (${response.status})`)
   }
-  if (response.status === 204 || response.headers.get('content-length') === '0') return undefined as T
-  return await response.json() as T
+  const content = await response.text()
+  return (content ? JSON.parse(content) : undefined) as T
 }
 async function load() {
   error.value = ''
