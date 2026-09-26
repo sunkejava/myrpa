@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import HumanInterventionPanel from '../components/task/HumanInterventionPanel.vue'
+import type { Intervention } from '../types/intervention'
 
-type Intervention = { id: string; executionId: string; type: string; status: string; title: string; expiresAt: string; qrToken?: string }
 const props = defineProps<{ token: string }>()
 const rows = ref<Intervention[]>([])
 const executionId = ref('')
@@ -74,10 +75,6 @@ onMounted(load)
       <label>一次性令牌<input v-model.trim="qrInput" required autocomplete="off" /></label>
       <button class="action-btn" :disabled="busy || !qrId">确认扫码完成</button>
     </form>
-    <div class="table-wrap"><table><thead><tr><th>标题 / 执行</th><th>类型</th><th>状态</th><th>到期</th><th>操作</th></tr></thead><tbody>
-      <tr v-for="row in rows" :key="row.id"><td>{{ row.title }}<small>{{ row.executionId }}</small></td><td>{{ row.type }}</td><td>{{ row.status }}</td><td>{{ new Date(row.expiresAt).toLocaleString('zh-CN') }}</td>
-        <td><button v-if="row.status === 'Opened' || row.status === 'Pending'" class="action-btn" :disabled="busy || row.type === 'QrLogin'" @click="action(row, 'complete')">完成</button>
-          <button v-if="row.status === 'Opened' || row.status === 'Pending'" class="action-btn" :disabled="busy" @click="action(row, 'cancel')">取消</button></td></tr>
-    </tbody></table><p v-if="rows.length === 0" class="muted empty">暂无人工介入记录。</p></div>
+    <HumanInterventionPanel :rows="rows" :busy="busy" @complete="action($event, 'complete')" @cancel="action($event, 'cancel')" />
   </section>
 </template>

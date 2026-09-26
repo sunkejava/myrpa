@@ -3,11 +3,12 @@ import { onMounted, ref } from 'vue'
 import TaskTimeline from './TaskTimeline.vue'
 import ExecutionLog from './ExecutionLog.vue'
 import TaskItemTable from './TaskItemTable.vue'
+import BrowserPreview from './BrowserPreview.vue'
 import type { TaskItem as Item, Timeline, ExecutionEntry as Log } from '../../types/task'
 
 type Task = { id: string; name: string; status: string; approvalStatus?: string | null; items: Item[] }
 type Checkpoint = { stepId: string; sequence: number; eventType: string; metadataJson?: string | null }
-type Artifact = { id: string; fileName: string; artifactType: string; size: number; sha256?: string | null; expiresAt?: string | null }
+type Artifact = { id: string; fileName: string; artifactType: string; contentType?: string | null; size: number; sha256?: string | null; expiresAt?: string | null }
 const props = defineProps<{ taskId: string; token: string }>()
 const task = ref<Task | null>(null)
 const checkpoints = ref<Checkpoint[]>([])
@@ -73,7 +74,7 @@ onMounted(load)
       <div class="table-wrap"><table><thead><tr><th>序号</th><th>Step ID</th><th>类型</th><th>事件</th></tr></thead><tbody><tr v-for="item in checkpoints" :key="item.sequence"><td>{{ item.sequence }}</td><td>{{ item.stepId }}</td><td>{{ stepType(item.metadataJson) }}</td><td>{{ item.eventType === 'StepStarted' ? '开始' : '完成' }}</td></tr></tbody></table><p v-if="!checkpoints.length" class="muted empty">暂无 Step 检查点。</p></div>
       <ExecutionLog :logs="logs" />
       <h3>执行产物</h3>
-      <div class="table-wrap"><table><thead><tr><th>文件</th><th>类型</th><th>大小</th><th>有效期</th><th>操作</th></tr></thead><tbody><tr v-for="artifact in artifacts" :key="artifact.id"><td>{{ artifact.fileName }}<small v-if="artifact.sha256">SHA256：{{ artifact.sha256 }}</small></td><td>{{ artifact.artifactType }}</td><td>{{ artifact.size }} B</td><td>{{ artifact.expiresAt ? new Date(artifact.expiresAt).toLocaleString('zh-CN') : '长期' }}</td><td><button class="action-btn" @click="download(artifact)">下载</button></td></tr></tbody></table><p v-if="!artifacts.length" class="muted empty">暂无执行产物。</p></div>
+      <div class="table-wrap"><table><thead><tr><th>文件</th><th>类型</th><th>大小</th><th>有效期</th><th>操作</th></tr></thead><tbody><tr v-for="artifact in artifacts" :key="artifact.id"><td>{{ artifact.fileName }}<small v-if="artifact.sha256">SHA256：{{ artifact.sha256 }}</small></td><td>{{ artifact.artifactType }}</td><td>{{ artifact.size }} B</td><td>{{ artifact.expiresAt ? new Date(artifact.expiresAt).toLocaleString('zh-CN') : '长期' }}</td><td><button class="action-btn" @click="download(artifact)">下载</button><BrowserPreview v-if="artifact.contentType?.startsWith('image/')" :token="token" :execution-id="executionId" :artifact-id="artifact.id" :file-name="artifact.fileName" /></td></tr></tbody></table><p v-if="!artifacts.length" class="muted empty">暂无执行产物。</p></div>
     </template>
   </section>
 </template>

@@ -43,3 +43,5 @@
 .detail-drawer { margin-left: auto; height: 100%; width: min(850px, 100%); overflow: auto; border-left: 1px solid var(--line); color: var(--text); background: var(--bg); }
 .detail-drawer > .panel { margin: 16px; }
 .detail-drawer > .panel-title { align-items: center; }
+.browser-preview { display: inline-block; vertical-align: top; }
+.browser-preview img { display: block; max-width: min(640px, 75vw); max-height: 70vh; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 8px; }
