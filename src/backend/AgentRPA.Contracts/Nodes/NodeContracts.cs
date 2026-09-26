@@ -50,7 +50,8 @@ public sealed record ExecutionProgress(
     int? ProgressPercent,
     string? Message,
     DateTimeOffset OccurredAt,
-    string? StepType = null);
+    string? StepType = null,
+    string? ResultJson = null);
 
 /// <summary>节点向服务端登记运行时产物。StorageKey 是 NodeAgent 侧受控存储位置，不允许把它当作客户端路径直接访问。</summary>
 public sealed record ExecutionArtifactReport(

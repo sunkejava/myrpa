@@ -80,6 +80,10 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 errors.Add($"{location} 缺少 config.selector。");
             if (stepType == WorkflowStepType.Upload && !HasString(config, "path"))
                 errors.Add($"{location} 缺少 config.path。");
+            if (stepType == WorkflowStepType.Extract &&
+                (!HasString(config, "output") || config.GetProperty("output").GetString() is not { } output ||
+                 output.Length > 64 || !char.IsLetter(output[0]) || output.Any(c => !char.IsLetterOrDigit(c) && c != '_')))
+                errors.Add($"{location} 的 config.output 必须是以字母开头、最多 64 位的字段名。");
             if (config.TryGetProperty("selector", out var selector) && selector.ValueKind == JsonValueKind.String &&
                 selector.GetString() is { } value && value.Contains("replace-", StringComparison.OrdinalIgnoreCase))
                 errors.Add($"{location} 的占位选择器尚未替换。");

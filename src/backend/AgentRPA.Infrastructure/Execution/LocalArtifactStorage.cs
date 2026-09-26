@@ -35,6 +35,15 @@ public sealed class LocalArtifactStorage : IArtifactStorage
         return Task.CompletedTask;
     }
 
+    public async Task StoreAsync(string storageKey, Stream content, CancellationToken cancellationToken = default)
+    {
+        var path = Resolve(storageKey);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, true);
+        try { await content.CopyToAsync(file, cancellationToken); }
+        catch { file.Close(); File.Delete(path); throw; }
+    }
+
     private string Resolve(string storageKey)
     {
         if (string.IsNullOrWhiteSpace(storageKey)) throw new ArgumentException("StorageKey 不能为空。", nameof(storageKey));

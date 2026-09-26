@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using AgentRPA.Application.Nodes;
+using AgentRPA.Application.Execution;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Execution;
 using AgentRPA.Infrastructure.Persistence;
@@ -16,8 +17,45 @@ namespace AgentRPA.Api.Controllers;
 public sealed class NodesController(
     INodeRegistryService nodeRegistry,
     AgentRpaDbContext db,
-    IConfiguration configuration) : ControllerBase
+    IConfiguration configuration,
+    IArtifactStorage artifactStorage) : ControllerBase
 {
+    /// <summary>节点将执行产物上传到服务端存储；客户端不能指定服务器路径。</summary>
+    [HttpPost("{nodeId:guid}/executions/{executionId:guid}/artifacts"), RequestSizeLimit(52_428_800)]
+    public async Task<IActionResult> UploadArtifact(Guid nodeId, Guid executionId,
+        [FromQuery] Guid workerSlotId, [FromQuery] string artifactType, [FromQuery] string fileName,
+        [FromQuery] string sha256, CancellationToken cancellationToken)
+    {
+        if (!await ValidateAgentKeyAsync(nodeId, cancellationToken)) return Unauthorized();
+        if (!await db.ExecutionNodes.AnyAsync(x => x.Id == nodeId &&
+            (x.Status == NodeStatus.Online || x.Status == NodeStatus.Draining), cancellationToken)) return StatusCode(403);
+        var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == executionId && x.NodeId == nodeId && x.WorkerSlotId == workerSlotId, cancellationToken);
+        if (execution is null || execution.Status is AgentRPA.Domain.Tasks.ExecutionStatus.Succeeded or AgentRPA.Domain.Tasks.ExecutionStatus.Failed or AgentRPA.Domain.Tasks.ExecutionStatus.Cancelled) return NotFound();
+        if (string.IsNullOrWhiteSpace(artifactType) || artifactType.Length > 64 || string.IsNullOrWhiteSpace(fileName) ||
+            fileName.Length > 260 || Path.GetFileName(fileName) != fileName ||
+            sha256.Length != 64 || !sha256.All(Uri.IsHexDigit) ||
+            Request.ContentLength is null or < 0 or > 50L * 1024 * 1024)
+            return BadRequest(new { message = "产物元数据或文件大小无效。" });
+        var storageKey = $"executions/{executionId:N}/{Guid.NewGuid():N}";
+        try
+        {
+            await artifactStorage.StoreAsync(storageKey, Request.Body, cancellationToken);
+            await using var stream = await artifactStorage.OpenReadAsync(storageKey, cancellationToken);
+            var length = stream.Length;
+            var actualHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
+            if (length != Request.ContentLength || !string.Equals(actualHash, sha256, StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "产物内容长度或 SHA256 校验失败。" });
+            db.ExecutionArtifacts.Add(new ExecutionArtifact(executionId, execution.TaskItemId, artifactType, fileName,
+                storageKey, Request.ContentType, length, actualHash));
+            await db.SaveChangesAsync(cancellationToken);
+            return Ok(new { storageKey, sha256 = actualHash });
+        }
+        finally
+        {
+            if (!await db.ExecutionArtifacts.AnyAsync(x => x.StorageKey == storageKey, CancellationToken.None))
+                await artifactStorage.DeleteAsync(storageKey, CancellationToken.None);
+        }
+    }
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterNodeRequest request, CancellationToken cancellationToken)
     {

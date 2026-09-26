@@ -16,7 +16,9 @@ public sealed record WorkflowRuntimeEvent(
     int ProgressPercent,
     string? Message,
     WorkflowRuntimeArtifact? Artifact = null,
-    string? StepType = null);
+    string? StepType = null,
+    string? OutputKey = null,
+    string? OutputValue = null);
 
 public sealed record WorkflowRuntimeArtifact(
     string ArtifactType,
@@ -42,9 +44,10 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
         var page = await browser.NewPageAsync();
+        var variables = parameters.ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
         try
         {
-            await ExecuteStepsAsync(page, steps, parameters, report, cancellationToken, adapter, 0);
+            await ExecuteStepsAsync(page, steps, variables, report, cancellationToken, adapter, 0);
             await report(new("Succeeded", null, 100, "Workflow 执行完成。"));
         }
         finally { await browser.CloseAsync(); }
@@ -94,7 +97,11 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
                 case "assert": await ExecuteAssertAsync(page, config, parameters, adapter); break;
                 case "extract":
                     var value = await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Extract 缺少 selector。"), parameters))).InnerTextAsync();
-                    await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), $"Extract: {value[..Math.Min(value.Length, 500)]}")); break;
+                    var outputKey = GetString(config, "output") ?? throw new InvalidOperationException("Extract 缺少 config.output。");
+                    if (value.Length > 16_384) throw new InvalidOperationException("提取结果超过 16384 字符限制。");
+                    if (parameters is not Dictionary<string, string?> variables) throw new InvalidOperationException("Workflow 变量上下文无效。");
+                    variables[outputKey] = value;
+                    await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已提取结构化字段", OutputKey: outputKey, OutputValue: value)); break;
                 case "upload":
                     var uploadPath = Resolve(GetString(config, "path") ?? throw new InvalidOperationException("Upload 缺少 path。"), parameters);
                     await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Upload 缺少 selector。"), parameters))).SetInputFilesAsync(uploadPath);

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace AgentRPA.NodeAgent;
 
@@ -116,14 +117,17 @@ public sealed class NodeAgentWorker(
         var linked = executions[command.ExecutionId];
         var resumeSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         humanResumes[command.ExecutionId] = resumeSignal;
+        var extracted = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
             await ReportAsync(connection, command, "Running", null, 0, "NodeAgent 开始执行 Workflow", linked.Token);
             await runtime.ExecuteAsync(command.WorkflowPayload, command.Parameters, async e =>
             {
-                await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token, e.StepType);
+                if (e.OutputKey is not null && e.OutputValue is not null) extracted[e.OutputKey] = e.OutputValue;
                 if (e.Artifact is not null)
-                    await connection.InvokeAsync("ReportArtifact", new ExecutionArtifactReport(command.ExecutionId, command.NodeId, command.WorkerSlotId, e.Artifact.ArtifactType, e.Artifact.FileName, e.Artifact.StorageKey, e.Artifact.ContentType, e.Artifact.Size, e.Artifact.Hash, DateTimeOffset.UtcNow), linked.Token);
+                    await UploadArtifactAsync(command, e.Artifact, linked.Token);
+                await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token, e.StepType,
+                    e.Status == "Succeeded" ? JsonSerializer.Serialize(extracted) : null);
                 if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!humanResumes.TryGetValue(command.ExecutionId, out var pending))
@@ -141,7 +145,21 @@ public sealed class NodeAgentWorker(
 
     private Task CancelExecutionAsync(Guid executionId) { if (executions.TryGetValue(executionId, out var source)) source.Cancel(); if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetCanceled(); return Task.CompletedTask; }
     private Task ResumeExecutionAsync(Guid executionId) { if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetResult(true); return Task.CompletedTask; }
-    private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken, string? stepType = null) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow, stepType), cancellationToken);
+    private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken, string? stepType = null, string? resultJson = null) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow, stepType, resultJson), cancellationToken);
+
+    private async Task UploadArtifactAsync(ExecutionCommand command, WorkflowRuntimeArtifact artifact, CancellationToken cancellationToken)
+    {
+        if (artifact.Size > 50L * 1024 * 1024) throw new InvalidOperationException("产物超过 50 MiB 上传限制。");
+        var client = httpClientFactory.CreateClient("AgentRPA.Server");
+        var url = $"api/nodes/{command.NodeId}/executions/{command.ExecutionId}/artifacts?workerSlotId={command.WorkerSlotId}&artifactType={Uri.EscapeDataString(artifact.ArtifactType)}&fileName={Uri.EscapeDataString(artifact.FileName)}&sha256={artifact.Hash}";
+        await using var file = File.OpenRead(artifact.StorageKey);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new StreamContent(file) };
+        request.Content.Headers.ContentLength = file.Length;
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(artifact.ContentType ?? "application/octet-stream");
+        request.Headers.Add("X-Agent-Key", options.Value.AgentKey);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 
     private async Task<NodeRegistrationResponse?> RegisterAsync(NodeAgentOptions config, CancellationToken cancellationToken)
     {

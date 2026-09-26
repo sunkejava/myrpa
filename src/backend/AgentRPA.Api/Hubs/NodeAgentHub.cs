@@ -119,7 +119,20 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
                     db.HumanInterventions.Add(intervention);
                 }
             }
-            else if (status == ExecutionStatus.Succeeded) item.Succeed(safeMessage);
+            else if (status == ExecutionStatus.Succeeded)
+            {
+                var resultJson = progress.ResultJson;
+                if (resultJson is null || resultJson.Length > 262_144) throw new HubException("执行结果无效或超过大小限制。");
+                try
+                {
+                    using var result = JsonDocument.Parse(resultJson);
+                    if (result.RootElement.ValueKind != JsonValueKind.Object ||
+                        result.RootElement.EnumerateObject().Any(x => x.Name.Length > 64 || x.Value.ValueKind != JsonValueKind.String))
+                        throw new JsonException();
+                }
+                catch (JsonException) { throw new HubException("执行结果必须是字符串字段组成的 JSON 对象。"); }
+                item.Succeed(resultJson);
+            }
             else if (status == ExecutionStatus.Failed)
             {
                 item.Fail(safeMessage);
@@ -154,23 +167,8 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
     }
 
-    public async Task ReportArtifact(ExecutionArtifactReport report)
-    {
-        var cancellationToken = Context.ConnectionAborted;
-        if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId || nodeId != report.NodeId) throw new HubException("Node 身份校验失败。");
-        if (report.ExecutionId == Guid.Empty || report.WorkerSlotId == Guid.Empty || string.IsNullOrWhiteSpace(report.FileName) || report.FileName.Length > 260 || string.IsNullOrWhiteSpace(report.StorageKey) || report.StorageKey.Length > 1024 || report.Size < 0 || report.Size > 10L * 1024 * 1024 * 1024) throw new HubException("产物元数据无效。");
-        var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == report.ExecutionId, cancellationToken);
-        if (execution is null || execution.NodeId != report.NodeId || execution.WorkerSlotId != report.WorkerSlotId) throw new HubException("Execution 与 Node/WorkerSlot 不匹配。");
-        if (string.IsNullOrWhiteSpace(report.ArtifactType) || report.ArtifactType.Length > 64) throw new HubException("产物类型无效。");
-        var duplicate = await db.ExecutionArtifacts.AnyAsync(x => x.ExecutionId == execution.Id && x.StorageKey == report.StorageKey && x.Sha256 == report.Hash, cancellationToken);
-        if (duplicate) return;
-        var expiresAt = report.ExpiresAt;
-        if (expiresAt.HasValue && expiresAt.Value <= DateTimeOffset.UtcNow) throw new HubException("产物过期时间必须晚于当前时间。");
-        db.ExecutionArtifacts.Add(new ExecutionArtifact(execution.Id, execution.TaskItemId, report.ArtifactType, report.FileName, report.StorageKey, report.ContentType, report.Size, report.Hash, expiresAt));
-        var nextSequence = (await db.ExecutionLogs.Where(x => x.ExecutionId == execution.Id).Select(x => (long?)x.Sequence).MaxAsync(cancellationToken) ?? -1) + 1;
-        db.ExecutionLogs.Add(new ExecutionLog(execution.Id, nextSequence, ExecutionLogLevel.Information, ExecutionLogEventType.Artifact, $"NodeAgent 登记运行时产物：{report.ArtifactType}", null, JsonSerializer.Serialize(new { report.FileName, report.ContentType, report.Size, report.Hash })));
-        await db.SaveChangesAsync(cancellationToken);
-    }
+    public Task ReportArtifact(ExecutionArtifactReport report) =>
+        throw new HubException("请通过节点产物上传接口传送文件内容并校验哈希。");
 
     public override Task OnDisconnectedAsync(Exception? exception)
     {
