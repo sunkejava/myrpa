@@ -24,7 +24,7 @@ public interface INotificationProvider
 
 public sealed record HardwareDeviceInfo(string DeviceId, string ProviderId, string Status, string? CertificateSubject);
 public sealed record HardwareOperationRequest(string TaskId, string Operation, IReadOnlyDictionary<string, object?> Parameters);
-public sealed record HardwareOperationResult(bool Success, string? ErrorCode = null, string? ErrorMessage = null);
+public sealed record HardwareOperationResult(bool Success, string? ErrorCode = null, string? ErrorMessage = null, string? SignatureBase64 = null);
 public sealed record CaptchaRequest(string TaskId, string Type, ReadOnlyMemory<byte> Image);
 public sealed record CaptchaResult(bool Success, string? Value = null, string? ErrorCode = null);
 public sealed record NotificationMessage(string EventCode, string Title, string Body, IReadOnlyList<NotificationAttachment>? Attachments = null);

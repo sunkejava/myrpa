@@ -17,5 +17,6 @@
     <ProjectReference Include="../../src/backend/AgentRPA.Domain/AgentRPA.Domain.csproj" />
     <ProjectReference Include="../../src/backend/AgentRPA.Application/AgentRPA.Application.csproj" />
     <ProjectReference Include="../../src/backend/AgentRPA.NodeAgent/AgentRPA.NodeAgent.csproj" />
+    <ProjectReference Include="../../src/backend/AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -94,7 +94,7 @@
 - [ ] 大规模节点调度性能优化
 
 ### Phase 7
-- [ ] 厂商 UKey SDK / PIN / 签名 Provider
+- [ ] 厂商 UKey SDK / PIN / 签名 Provider（Windows 当前用户证书存储可执行 RSA/ECDSA SHA-256 摘要签名并验证证书用途；厂商专有 SDK、节点工作流调用、硬件 PIN 会话及真实设备验收仍待完成）
 - [ ] Captcha Provider 路由 / 超时 / 重试 / 熔断
 - [x] QR 临时安全入口：短期随机令牌、SHA-256 摘要存储、主体/Execution 绑定、一次性条件消费、过期状态
 - [x] 扫码/人工完成后恢复 Browser Session / Execution；NodeAgent 短暂断线后重连会补发 Resume

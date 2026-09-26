@@ -28,9 +28,11 @@ OpenAiCompatibleLlmProvider
 
 ## 3. UKey / USB Key
 
+当前 `WindowsCertificateHardwareProvider` 可在 Windows 当前用户证书存储发现带私钥的证书，并执行 `SignDigestSha256`：传入 `certificateThumbprint` 和 32 字节摘要的 `digestBase64`，返回 `SignatureBase64`；RSA 使用 SHA-256/PKCS#1 v1.5，ECDSA 使用 SHA-256。证书必须有效并允许数字签名。软件证书同样可能出现在证书存储，因此发现证书**不能证明**已连接硬件 UKey；Windows 证书驱动若请求 PIN，须由获授权的交互式 Windows 会话完成，服务端不能代填 PIN。当前尚未在 NodeAgent 的工作流步骤中调用此 Provider，也尚未在目标厂商设备上验收。
+
 RPA Worker 应支持 Windows 执行节点自动发现 UKey，并通过统一 `IHardwareCredentialProvider` 抽象访问厂商 SDK、COM、CSP/KSP、PKCS#11 等能力。
 
-支持设备发现、插拔检测、健康状态、任务/账号绑定、多设备选择、签名/证书操作，以及 UKey 缺失时进入 `WaitingHardware` 并通知用户。私钥和 PIN 永不进入数据库或普通日志。
+目标能力包括设备发现、插拔检测、健康状态、任务/账号绑定、多设备选择、签名/证书操作，以及 UKey 缺失时进入 `WaitingHardware` 并通知用户。私钥和 PIN 永不进入数据库或普通日志。
 
 应预留远程硬件代理，使 Browser Worker 与 UKey 所在机器可以分离部署；远程代理必须双向认证并校验任务授权。
 
