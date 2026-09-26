@@ -39,7 +39,7 @@ jobs:
           bash scripts/seed-development.sh
           python3 - <<'PY'
           import sqlite3
-          with sqlite3.connect('seed-ci.db') as db:
+          with sqlite3.connect('src/backend/AgentRPA.Api/seed-ci.db') as db:
               for table, code in [('cities', 'DEMO-QD'), ('business_systems', 'DEMO-SOCIAL'), ('business_functions', 'DEMO-QUERY')]:
                   assert db.execute(f'SELECT count(*) FROM {table} WHERE Code = ?', (code,)).fetchone()[0] == 1
               assert db.execute('SELECT count(*) FROM user_accounts WHERE UserName = ?', ('admin',)).fetchone()[0] == 1
