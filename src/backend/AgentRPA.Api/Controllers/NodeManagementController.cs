@@ -71,9 +71,9 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
     }
 
     [HttpPost("nodes/{id:guid}/drain")]
-    public async Task<IActionResult> Drain(Guid id, CancellationToken ct) { var node = await db.ExecutionNodes.FindAsync([id], ct); if (node is null) return NotFound(); node.SetStatus(NodeStatus.Draining); await db.SaveChangesAsync(ct); return Ok(); }
+    public async Task<IActionResult> Drain(Guid id, CancellationToken ct) { var node = await db.ExecutionNodes.FindAsync([id], ct); if (node is null) return NotFound(); if (node.Status is NodeStatus.PendingApproval or NodeStatus.Rejected or NodeStatus.Revoked) return Conflict(new { message = "节点尚未获准执行或身份已失效。" }); node.SetStatus(NodeStatus.Draining); await db.SaveChangesAsync(ct); return Ok(); }
     [HttpPost("nodes/{id:guid}/disable")]
-    public async Task<IActionResult> Disable(Guid id, CancellationToken ct) { var node = await db.ExecutionNodes.FindAsync([id], ct); if (node is null) return NotFound(); node.SetStatus(NodeStatus.Disabled); await db.SaveChangesAsync(ct); return Ok(); }
+    public async Task<IActionResult> Disable(Guid id, CancellationToken ct) { var node = await db.ExecutionNodes.FindAsync([id], ct); if (node is null) return NotFound(); if (node.Status is NodeStatus.PendingApproval or NodeStatus.Rejected or NodeStatus.Revoked) return Conflict(new { message = "节点尚未获准执行或身份已失效。" }); node.SetStatus(NodeStatus.Disabled); await db.SaveChangesAsync(ct); return Ok(); }
 }
 
 public sealed record CreateNodePoolRequest(string Name, string? Description);

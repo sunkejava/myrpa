@@ -34,7 +34,9 @@ public sealed class NodesController(
             request.NetworkZone, request.NodePoolId, request.AgentVersion,
             request.Capabilities.Select(x => new NodeCapabilityInput(x.Code, x.Version, x.MetadataJson)).ToArray(),
             request.WorkerSlots);
-        var node = await nodeRegistry.RegisterAsync(registration, cancellationToken);
+        ExecutionNode node;
+        try { node = await nodeRegistry.RegisterAsync(registration, cancellationToken); }
+        catch (InvalidOperationException) { return StatusCode(StatusCodes.Status403Forbidden, new { message = "节点身份已吊销，请更换 AgentKey 重新申请。" }); }
         return Ok(new NodeRegistrationResponse(node.Id, node.AgentKey, node.Status.ToString()));
     }
 
@@ -50,11 +52,14 @@ public sealed class NodesController(
     [Authorize(Roles = "Admin"), HttpPost("{id:guid}/status")]
     public async Task<IActionResult> SetStatus(Guid id, SetNodeStatusRequest request, CancellationToken cancellationToken)
     {
-        if (!Enum.TryParse<NodeStatus>(request.Status, true, out var status))
-            return BadRequest(new { message = "节点状态无效。" });
+        if (!Enum.TryParse<NodeStatus>(request.Status, true, out var status) ||
+            status is not (NodeStatus.Draining or NodeStatus.Disabled or NodeStatus.Online))
+            return BadRequest(new { message = "仅允许设为 Draining、Disabled 或 Online；审批、拒绝和吊销须使用专用接口。" });
 
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (node is null) return NotFound();
+        if (node.Status is NodeStatus.Rejected or NodeStatus.Revoked or NodeStatus.PendingApproval)
+            return Conflict(new { message = "未审批、已拒绝或已吊销的节点不能通过状态接口启用。" });
         node.SetStatus(status);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { node.Id, status = node.Status.ToString() });
@@ -65,7 +70,36 @@ public sealed class NodesController(
     {
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (node is null) return NotFound();
+        if (node.Status != NodeStatus.PendingApproval)
+            return Conflict(new { message = "只能审批待审批节点。" });
         node.Approve();
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new { node.Id, status = node.Status.ToString() });
+    }
+
+    [Authorize(Roles = "Admin"), HttpPost("{id:guid}/reject")]
+    public async Task<IActionResult> Reject(Guid id, CancellationToken cancellationToken)
+    {
+        var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (node is null) return NotFound();
+        if (node.Status != NodeStatus.PendingApproval)
+            return Conflict(new { message = "只能拒绝待审批节点。" });
+        node.SetStatus(NodeStatus.Rejected);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new { node.Id, status = node.Status.ToString() });
+    }
+
+    [Authorize(Roles = "Admin"), HttpPost("{id:guid}/revoke")]
+    public async Task<IActionResult> Revoke(Guid id, CancellationToken cancellationToken)
+    {
+        var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (node is null) return NotFound();
+        if (node.Status == NodeStatus.Revoked) return Ok(new { node.Id, status = node.Status.ToString() });
+        if (await db.Executions.AnyAsync(x => x.NodeId == id &&
+            (x.Status == AgentRPA.Domain.Tasks.ExecutionStatus.Dispatched || x.Status == AgentRPA.Domain.Tasks.ExecutionStatus.Running ||
+             x.Status == AgentRPA.Domain.Tasks.ExecutionStatus.Paused || x.Status == AgentRPA.Domain.Tasks.ExecutionStatus.WaitingForHuman), cancellationToken))
+            return Conflict(new { message = "节点有未结束执行；请先排空节点并等待执行完成，再吊销身份。" });
+        node.SetStatus(NodeStatus.Revoked);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { node.Id, status = node.Status.ToString() });
     }

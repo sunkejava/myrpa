@@ -63,6 +63,27 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
   expect(queuedAfterCancel.status()).toBe(409)
 
   const registrationKey = 'BrowserNodeRegistrationKey123!'
+  const applicantKey = `applicant-${randomUUID()}`
+  const applicantRequest = { headers: { 'X-Node-Registration-Key': registrationKey }, data: {
+    agentKey: applicantKey, name: '待审核节点', nodeKind: 'Physical', osPlatform: 'Linux', architecture: 'X64',
+    agentVersion: '0.1.0', networkZone: 'default', capabilities: [], workerSlots: ['worker-01']
+  } }
+  const applicant = await request.post(`${api}/api/nodes/register`, applicantRequest)
+  expect(applicant.ok()).toBeTruthy()
+  const applicantId = (await applicant.json() as { nodeId: string }).nodeId
+  expect(await post(`/api/nodes/${applicantId}/reject`, {})).toMatchObject({ status: 'Rejected' })
+  const bypassApproval = await request.post(`${api}/api/nodes/${applicantId}/status`, { headers: admin, data: { status: 'Online' } })
+  expect(bypassApproval.status()).toBe(409)
+  const applicationAgain = await request.post(`${api}/api/nodes/register`, applicantRequest)
+  expect((await applicationAgain.json() as { status: string })).toMatchObject({ status: 'PendingApproval' })
+  expect(await post(`/api/nodes/${applicantId}/approve`, {})).toMatchObject({ status: 'Online' })
+  expect(await post(`/api/nodes/${applicantId}/revoke`, {})).toMatchObject({ status: 'Revoked' })
+  const revokedRegistration = await request.post(`${api}/api/nodes/register`, applicantRequest)
+  expect(revokedRegistration.status()).toBe(403)
+  const revokedHeartbeat = await request.post(`${api}/api/nodes/heartbeat`, { headers: { 'X-Agent-Key': applicantKey },
+    data: { nodeId: applicantId, agentVersion: '0.1.0', status: 'Online', cpuUsage: 0, memoryUsage: 0,
+      availableSlots: 1, sentAt: new Date().toISOString() } })
+  expect(revokedHeartbeat.status()).toBe(404)
   const agentKey = `browser-agent-${Date.now()}`
   const registration = await request.post(`${api}/api/nodes/register`, {
     headers: { 'X-Node-Registration-Key': registrationKey }, data: {

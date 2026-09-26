@@ -16,6 +16,10 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
             node = new ExecutionNode(registration.AgentKey, registration.Name, registration.NodeKind, registration.OsPlatform, registration.Architecture);
             db.ExecutionNodes.Add(node);
         }
+        else if (node.Status == NodeStatus.Revoked)
+            throw new InvalidOperationException("该节点身份已吊销，必须更换 AgentKey 重新申请。");
+        else if (node.Status == NodeStatus.Rejected)
+            node.SetStatus(NodeStatus.PendingApproval);
         node.SetPool(registration.NodePoolId);
         node.SetNetworkZone(registration.NetworkZone);
         node.RegisterHeartbeat(registration.AgentVersion, DateTimeOffset.UtcNow);
@@ -28,7 +32,7 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
     public async Task<bool> HeartbeatAsync(Guid nodeId, string agentVersion, DateTimeOffset heartbeatAt, CancellationToken cancellationToken)
     {
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == nodeId, cancellationToken);
-        if (node is null) return false;
+        if (node is null || node.Status is NodeStatus.PendingApproval or NodeStatus.Rejected or NodeStatus.Revoked or NodeStatus.Disabled) return false;
         node.RegisterHeartbeat(agentVersion, heartbeatAt);
         await db.SaveChangesAsync(cancellationToken);
         return true;

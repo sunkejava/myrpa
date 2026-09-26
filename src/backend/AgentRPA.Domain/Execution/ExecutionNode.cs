@@ -5,7 +5,7 @@ namespace AgentRPA.Domain.Execution;
 /// <summary>执行节点类型，表示 RPA 实际运行所在的基础环境。</summary>
 public enum NodeKind { Physical = 1, VirtualMachine = 2, CloudDesktop = 3, Container = 4 }
 public enum OsPlatform { Windows = 1, Linux = 2, MacOS = 3, Other = 99 }
-public enum NodeStatus { Offline = 0, Online = 1, Draining = 2, Disabled = 3, Unhealthy = 4, PendingApproval = 5 }
+public enum NodeStatus { Offline = 0, Online = 1, Draining = 2, Disabled = 3, Unhealthy = 4, PendingApproval = 5, Rejected = 6, Revoked = 7 }
 
 /// <summary>服务端管理的一个实际 RPA 执行环境。</summary>
 public sealed class ExecutionNode : Entity
@@ -29,7 +29,7 @@ public sealed class ExecutionNode : Entity
     {
         AgentVersion = agentVersion;
         LastHeartbeatAt = heartbeatAt;
-        if (Status == NodeStatus.PendingApproval || Status == NodeStatus.Draining || Status == NodeStatus.Disabled) return;
+        if (Status is NodeStatus.PendingApproval or NodeStatus.Draining or NodeStatus.Disabled or NodeStatus.Rejected or NodeStatus.Revoked) return;
         Status = NodeStatus.Online;
     }
     public void Approve() => Status = NodeStatus.Online;

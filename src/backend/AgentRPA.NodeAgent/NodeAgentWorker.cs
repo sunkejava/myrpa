@@ -43,7 +43,7 @@ public sealed class NodeAgentWorker(
             if (registration is null) await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
         if (registration is null) return;
-        if (string.Equals(registration.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase))
+        if (registration.Status is "PendingApproval" or "Rejected")
         {
             logger.LogWarning("Node {NodeId} is pending administrator approval; waiting before connecting for execution.", registration.NodeId);
             while (!stoppingToken.IsCancellationRequested)
@@ -51,7 +51,7 @@ public sealed class NodeAgentWorker(
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 registration = await RegisterAsync(config, stoppingToken);
                 if (registration is null) continue;
-                if (!string.Equals(registration.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase)) break;
+                if (registration.Status is not ("PendingApproval" or "Rejected")) break;
             }
         }
 
