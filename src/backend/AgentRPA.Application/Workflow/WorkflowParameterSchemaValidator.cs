@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AgentRPA.Application.Workflow;
 
@@ -21,12 +22,33 @@ public sealed class WorkflowParameterSchemaValidator
             if (!AllowedTypes.Contains(type ?? string.Empty)) errors.Add($"参数 {property.Name} 的 type 无效。");
             if (schema.TryGetProperty("required", out var required) && required.ValueKind is not JsonValueKind.True and not JsonValueKind.False) errors.Add($"参数 {property.Name} 的 required 必须是 Boolean。");
             if (schema.TryGetProperty("sensitive", out var sensitive) && sensitive.ValueKind is not JsonValueKind.True and not JsonValueKind.False) errors.Add($"参数 {property.Name} 的 sensitive 必须是 Boolean。");
-            if (schema.TryGetProperty("minLength", out var minLength) && (!minLength.TryGetInt32(out var min) || min < 0)) errors.Add($"参数 {property.Name} 的 minLength 无效。");
-            if (schema.TryGetProperty("maxLength", out var maxLength) && (!maxLength.TryGetInt32(out var max) || max < 0)) errors.Add($"参数 {property.Name} 的 maxLength 无效。");
-            if (schema.TryGetProperty("minimum", out var minimum) && minimum.ValueKind is not JsonValueKind.Number) errors.Add($"参数 {property.Name} 的 minimum 必须是 Number。");
-            if (schema.TryGetProperty("maximum", out var maximum) && maximum.ValueKind is not JsonValueKind.Number) errors.Add($"参数 {property.Name} 的 maximum 必须是 Number。");
-            if (schema.TryGetProperty("enum", out var enumValues) && enumValues.ValueKind != JsonValueKind.Array) errors.Add($"参数 {property.Name} 的 enum 必须是 Array。");
+            if (schema.TryGetProperty("minLength", out var minLength) && (minLength.ValueKind != JsonValueKind.Number || !minLength.TryGetInt32(out var min) || min < 0)) errors.Add($"参数 {property.Name} 的 minLength 无效。");
+            if (schema.TryGetProperty("maxLength", out var maxLength) && (maxLength.ValueKind != JsonValueKind.Number || !maxLength.TryGetInt32(out var max) || max < 0)) errors.Add($"参数 {property.Name} 的 maxLength 无效。");
+            if (TryInt(schema, "minLength", out var lowerLength) && TryInt(schema, "maxLength", out var upperLength) && lowerLength > upperLength)
+                errors.Add($"参数 {property.Name} 的 minLength 不能大于 maxLength。");
+            if (schema.TryGetProperty("minimum", out var minimum) && (minimum.ValueKind != JsonValueKind.Number || !minimum.TryGetDecimal(out _))) errors.Add($"参数 {property.Name} 的 minimum 必须是有效的 Number。");
+            if (schema.TryGetProperty("maximum", out var maximum) && (maximum.ValueKind != JsonValueKind.Number || !maximum.TryGetDecimal(out _))) errors.Add($"参数 {property.Name} 的 maximum 必须是有效的 Number。");
+            if (TryDecimal(schema, "minimum", out var lower) && TryDecimal(schema, "maximum", out var upper) && lower > upper)
+                errors.Add($"参数 {property.Name} 的 minimum 不能大于 maximum。");
+            if (schema.TryGetProperty("enum", out var enumValues) &&
+                (enumValues.ValueKind != JsonValueKind.Array || enumValues.GetArrayLength() is 0 or > 100 ||
+                 enumValues.EnumerateArray().Any(x => !MatchesJsonType(type, x))))
+                errors.Add($"参数 {property.Name} 的 enum 必须包含 1 至 100 个与 type 一致的值。");
+            if (schema.TryGetProperty("pattern", out var pattern))
+            {
+                if (!string.Equals(type, "string", StringComparison.OrdinalIgnoreCase) || pattern.ValueKind != JsonValueKind.String ||
+                    pattern.GetString() is not { Length: > 0 and <= 256 } expression || !IsValidPattern(expression))
+                    errors.Add($"参数 {property.Name} 的 pattern 必须是有效且不超过 256 字符的字符串正则表达式。");
+            }
             if (schema.TryGetProperty("default", out var defaultValue) && !MatchesJsonType(type, defaultValue)) errors.Add($"参数 {property.Name} 的 default 与 type 不匹配。");
+            else if (schema.TryGetProperty("default", out defaultValue) && MatchesJsonType(type, defaultValue))
+            {
+                var defaults = new List<string>();
+                ValidateConstraints(property.Name, schema, defaultValue.ValueKind == JsonValueKind.String ? defaultValue.GetString()! :
+                    defaultValue.ValueKind == JsonValueKind.Number && defaultValue.TryGetDecimal(out var numberDefault) ? numberDefault :
+                    defaultValue.ValueKind is JsonValueKind.True or JsonValueKind.False ? defaultValue.GetBoolean() : defaultValue, defaults);
+                if (defaults.Count > 0) errors.Add($"参数 {property.Name} 的 default 不满足约束。");
+            }
         }
         return errors;
     }
@@ -69,6 +91,13 @@ public sealed class WorkflowParameterSchemaValidator
         {
             if (TryInt(schema, "minLength", out var min) && text.Length < min) errors.Add($"参数 {name} 长度不能小于 {min}。");
             if (TryInt(schema, "maxLength", out var max) && text.Length > max) errors.Add($"参数 {name} 长度不能超过 {max}。");
+            if (schema.TryGetProperty("pattern", out var pattern) && pattern.ValueKind == JsonValueKind.String &&
+                pattern.GetString() is { Length: > 0 and <= 256 } expression)
+            {
+                try { if (!Regex.IsMatch(text, expression, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) errors.Add($"参数 {name} 格式不匹配。"); }
+                catch (RegexMatchTimeoutException) { errors.Add($"参数 {name} 格式检查超时。"); }
+                catch (ArgumentException) { errors.Add($"参数 {name} 格式规则无效。"); }
+            }
         }
         if (TryDecimal(value, out var number))
         {
@@ -118,5 +147,11 @@ public sealed class WorkflowParameterSchemaValidator
     private static bool TryDecimal(object value, out decimal result)
     {
         switch (value) { case decimal d: result = d; return true; case double d when !double.IsNaN(d) && !double.IsInfinity(d): result = (decimal)d; return true; case float f when !float.IsNaN(f) && !float.IsInfinity(f): result = (decimal)f; return true; case byte b: result = b; return true; case sbyte b: result = b; return true; case short b: result = b; return true; case ushort b: result = b; return true; case int b: result = b; return true; case uint b: result = b; return true; case long b: result = b; return true; case ulong b: result = b; return true; default: result = 0; return false; }
+    }
+
+    private static bool IsValidPattern(string expression)
+    {
+        try { _ = new Regex(expression, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)); return true; }
+        catch (ArgumentException) { return false; }
     }
 }

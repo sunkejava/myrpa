@@ -54,7 +54,7 @@
 - [x] OpenAI Compatible / llama.cpp 结构化解析兜底
 - [x] LLM Token 用量持久化：主体、Provider、Model、Input/Output/Total Tokens
 - [x] LLM Token 用量用户隔离查询与汇总 API，SQLite 使用 ID 稳定排序
-- [ ] 完整结构化参数 Schema / 字段类型、必填项与业务校验
+- [ ] 完整结构化参数 Schema / 字段类型、必填项与业务校验（发布前已校验类型、范围、枚举、默认值及有超时限制的字符串正则；身份证、社保等行业语义与跨字段规则待完成）
 - [ ] 执行摘要 / 可审阅的自然语言计划说明
 
 ## Phase 6：执行证据
