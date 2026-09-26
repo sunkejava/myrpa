@@ -3,9 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import SearchForm from '../components/form/SearchForm.vue'
 import DataTable from '../components/table/DataTable.vue'
 import { useLocale } from '../locales'
+import { listUsage, usageSummary, type UsageEntry as Usage, type UsageSummary as Summary } from '../api/modules/usage'
 
-type Summary = { calls: number; inputTokens: number; outputTokens: number; totalTokens: number }
-type Usage = { id: string; taskId: string | null; model: string; providerId: string; inputTokens: number; outputTokens: number; totalTokens: number; occurredAt: string }
 const props = defineProps<{ token: string }>()
 const summary = ref<Summary | null>(null)
 const rows = ref<Usage[]>([])
@@ -22,18 +21,10 @@ function search(values: Record<string, string> = filters.value) { taskId.value =
 async function load(afterId?: string) {
   error.value = ''
   try {
-    const query = new URLSearchParams({ take: '50' })
-    if (taskId.value.trim()) query.set('taskId', taskId.value.trim())
-    if (afterId) query.set('afterId', afterId)
-    const headers = { Authorization: `Bearer ${props.token}` }
-    const [itemsResponse, summaryResponse] = await Promise.all([
-      fetch(`/api/llm-usage?${query}`, { headers }), fetch(`/api/llm-usage/summary${taskId.value.trim() ? `?taskId=${encodeURIComponent(taskId.value.trim())}` : ''}`, { headers })
-    ])
-    if (!itemsResponse.ok || !summaryResponse.ok) throw new Error(`${t('usage.failure')} (${itemsResponse.ok ? summaryResponse.status : itemsResponse.status})`)
-    const result = await itemsResponse.json() as { items: Usage[]; nextAfterId: string | null }
+    const [result, totals] = await Promise.all([listUsage(props.token, taskId.value, afterId), usageSummary(props.token, taskId.value)])
     rows.value = afterId ? [...rows.value, ...result.items] : result.items
     nextAfterId.value = result.nextAfterId
-    summary.value = await summaryResponse.json() as Summary
+    summary.value = totals
   } catch (e) { error.value = e instanceof Error ? e.message : t('usage.failure') }
 }
 onMounted(() => load())

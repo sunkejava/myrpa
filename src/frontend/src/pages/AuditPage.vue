@@ -2,10 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import SearchForm from '../components/form/SearchForm.vue'
 import DataTable from '../components/table/DataTable.vue'
-import { apiRequest } from '../api/http'
+import { listAudit, type AuditEntry as Entry } from '../api/modules/audit'
 import { useLocale } from '../locales'
 
-type Entry = { id: string; createdAt: string; actor: string; action: string; resource: string; resourceId: string; result: string; summary: string }
 const props = defineProps<{ token: string }>()
 const rows = ref<Entry[]>([])
 const filters = ref({ actor: '', resource: '' })
@@ -19,10 +18,7 @@ const columns = computed(() => [{ key: 'createdAt', label: t('audit.time'), sort
 async function load(values: Record<string, string> = filters.value) {
   error.value = ''; busy.value = true
   try {
-    const query = new URLSearchParams({ limit: '100' })
-    if (values.actor?.trim()) query.set('actor', values.actor.trim())
-    if (values.resource?.trim()) query.set('resource', values.resource.trim())
-    rows.value = await apiRequest<Entry[]>(`audit?${query}`, props.token)
+    rows.value = await listAudit(props.token, values)
   } catch (e) { error.value = e instanceof Error ? e.message : t('audit.failure') }
   finally { busy.value = false }
 }

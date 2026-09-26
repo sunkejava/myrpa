@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
 
 test('登录校验、会话刷新、主题语言及全部菜单入口', async ({ page, request }) => {
   test.setTimeout(120_000)
@@ -24,6 +25,10 @@ test('登录校验、会话刷新、主题语言及全部菜单入口', async ({
   await page.getByRole('combobox', { name: '语言', exact: true }).selectOption('en')
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Tasks' })).toBeVisible()
   await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('zh')
+  await page.locator('.theme-settings input[type="file"]').setInputFiles({ name: 'custom.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ system: { tasks: 'Custom tasks' } })) })
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Custom tasks' })).toBeVisible()
+  await page.getByRole('combobox', { name: '语言', exact: true }).selectOption('zh')
   await page.getByLabel('主色').fill('#d05590')
   await page.getByLabel('明暗模式').selectOption('light')
   await page.reload()
@@ -41,4 +46,30 @@ test('登录校验、会话刷新、主题语言及全部菜单入口', async ({
     data: { userName: 'admin', password: 'BrowserTestPassword123!' }
   })
   expect(response.ok()).toBeTruthy()
+})
+
+test('普通账户只能进入自己的功能页面', async ({ page, request }) => {
+  const adminLogin = await request.post('http://127.0.0.1:5000/api/auth/login', {
+    data: { userName: 'admin', password: 'BrowserTestPassword123!' }
+  })
+  expect(adminLogin.ok()).toBeTruthy()
+  const adminToken = (await adminLogin.json() as { accessToken: string }).accessToken
+  const userName = `ui-${randomUUID().slice(0, 12)}`
+  const created = await request.post('http://127.0.0.1:5000/api/user-management/users', {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { userName, displayName: '普通测试用户', password: 'UiTestPassword123!' }
+  })
+  expect(created.ok()).toBeTruthy()
+  await page.goto('/')
+  await page.getByLabel('用户名').fill(userName)
+  await page.getByLabel('密码').fill('UiTestPassword123!')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: '任务中心' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: '账户与角色' })).toHaveCount(0)
+  const token = await page.evaluate(() => sessionStorage.getItem('agentrpa-token'))
+  expect((await request.get('http://127.0.0.1:5000/api/dispatch-monitor', {
+    headers: { Authorization: `Bearer ${token}` }
+  })).status()).toBe(403)
+  await page.getByRole('button', { name: '任务中心' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '任务中心' })).toBeVisible()
 })

@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useLocale } from '../locales'
+import { makePlan as requestPlan, submitPlan, type PlanResponse } from '../api/modules/planner'
 
-type Plan = { cityId: string; systemId: string; functionId: string; action: string; riskLevel: string; workflowId: string; workflowVersion: number; requiresConfirmation: boolean }
-type PlanResponse = { success: boolean; summary: string; ambiguities: string[]; plan: Plan | null }
 const props = defineProps<{ token: string }>()
 const emit = defineEmits<{ submitted: [] }>()
 const instruction = ref('')
@@ -12,17 +11,9 @@ const error = ref('')
 const busy = ref(false)
 const { t } = useLocale()
 
-async function call<T>(path: string, body: object): Promise<T> {
-  const response = await fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${props.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  if (!response.ok) {
-    const details: unknown = await response.json().catch(() => null)
-    throw new Error(details && typeof details === 'object' && 'message' in details ? String(details.message) : `请求失败 (${response.status})`)
-  }
-  return await response.json() as T
-}
 async function makePlan() {
   busy.value = true; error.value = ''; plan.value = null
-  try { plan.value = await call<PlanResponse>('/api/agent/plan', { instruction: instruction.value }) }
+  try { plan.value = await requestPlan(props.token, instruction.value) }
   catch (e) { error.value = e instanceof Error ? e.message : t('task.planFailed') }
   finally { busy.value = false }
 }
@@ -30,7 +21,7 @@ async function execute() {
   if (!plan.value?.plan) return
   busy.value = true; error.value = ''
   try {
-    await call('/api/agent/execute', { instruction: instruction.value, confirmed: true })
+    await submitPlan(props.token, instruction.value)
     plan.value = null; instruction.value = ''; emit('submitted')
   } catch (e) { error.value = e instanceof Error ? e.message : t('task.submitFailed') }
   finally { busy.value = false }
