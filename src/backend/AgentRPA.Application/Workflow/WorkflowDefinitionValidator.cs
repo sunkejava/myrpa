@@ -96,6 +96,9 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                     errors.Add($"{location} 的 certificateThumbprint 必须是证书 SHA-1 或 SHA-256 指纹。");
                 if (!HasString(config, "digestSelector") || !HasString(config, "signatureSelector"))
                     errors.Add($"{location} 缺少 digestSelector 或 signatureSelector。");
+                foreach (var selectorName in new[] { "digestSelector", "signatureSelector" })
+                    if (HasString(config, selectorName) && config.GetProperty(selectorName).GetString()!.Contains("replace-", StringComparison.OrdinalIgnoreCase))
+                        errors.Add($"{location} 的 {selectorName} 尚未替换示例定位符。");
                 if (!hasApproval) errors.Add($"{location} 的 UKeySign 必须要求任务级审批。");
                 if (thumbprint.Length is 40 or 64 && !requiredCapabilities.Contains("Certificate:" + thumbprint))
                     errors.Add($"{location} 必须声明 Certificate:{thumbprint} 节点能力。");

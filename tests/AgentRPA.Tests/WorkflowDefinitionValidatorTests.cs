@@ -35,6 +35,11 @@ public sealed class WorkflowDefinitionValidatorTests
         Assert.Contains(_validator.Validate("{\"requiresApproval\":true,\"steps\":[" + step + "]}"), x => x.Contains("Certificate:" + thumbprint, StringComparison.Ordinal));
         Assert.Empty(_validator.Validate("{\"requiresApproval\":true,\"executionRequirement\":{\"requiredCapabilities\":[\"Certificate:" + thumbprint + "\"]},\"steps\":[" + step + "]}"));
     }
+    [Fact] public void Certificate_signing_rejects_unresolved_digest_selector()
+    {
+        const string definition = """{"requiresApproval":true,"executionRequirement":{"requiredCapabilities":["Certificate:0123456789ABCDEF0123456789ABCDEF01234567"]},"steps":[{"type":"UKeySign","config":{"certificateThumbprint":"0123456789ABCDEF0123456789ABCDEF01234567","digestSelector":"[data-testid=replace-digest]","signatureSelector":"#signature"}}]}""";
+        Assert.Contains(_validator.Validate(definition), x => x.Contains("digestSelector", StringComparison.Ordinal));
+    }
     [Fact] public void Unsupported_nested_action_cannot_be_published()
     {
         const string definition = """{"steps":[{"type":"Condition","config":{"then":[{"type":"Click","requiredAction":"SuperAdmin","config":{"selector":"#submit"}}]}}]}""";
