@@ -39,6 +39,9 @@ td { line-height: 1.5; }
   .nav-group-title { display: none; }
   .sidebar nav button { width: auto; flex: none; white-space: nowrap; }
   .sidebar-foot { display: none; }
-  .topbar { position: static; padding: 0 16px; }
+  .topbar { position: static; padding: 12px 16px; min-height: 72px; height: auto; gap: 8px; flex-wrap: wrap; }
+  .topbar .actions { margin-left: auto; }
+  .topbar .action-btn { padding: 8px 10px; white-space: nowrap; }
+  .page-toolbar { align-items: flex-start; }
   .content { padding: 16px 16px 40px; }
 }
