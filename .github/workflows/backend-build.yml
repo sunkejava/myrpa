@@ -44,6 +44,10 @@ jobs:
                                   ('countries', 'CN'), ('provinces', 'BJ'), ('cities', 'CN-BJ'),
                                   ('business_systems', 'BJ-MEDICAL'), ('business_functions', 'PERSON-QUERY')]:
                   assert db.execute(f'SELECT count(*) FROM {table} WHERE Code = ?', (code,)).fetchone()[0] == 1
+              assert db.execute('SELECT count(*) FROM business_systems WHERE Code IN (?, ?, ?)',
+                  ('BJ-SOCIAL', 'BJ-MEDICAL', 'BJ-HOUSING')).fetchone()[0] == 3
+              assert db.execute('SELECT count(*) FROM business_functions WHERE Code = ?', ('PERSON-ROSTER',)).fetchone()[0] == 6
+              assert db.execute('SELECT count(*) FROM districts').fetchone()[0] >= 7
               assert db.execute('SELECT count(*) FROM user_accounts WHERE UserName = ?', ('admin',)).fetchone()[0] == 1
           PY
       - name: Start API and verify login and access control
@@ -70,6 +74,15 @@ jobs:
               token = json.load(response)['accessToken']
           with urllib.request.urlopen(urllib.request.Request(base + '/api/auth/me', headers={'Authorization': 'Bearer ' + token})) as response:
               assert json.load(response)['userName'] == 'admin'
+          with urllib.request.urlopen(urllib.request.Request(base + '/api/business-resources/cities', headers={'Authorization': 'Bearer ' + token})) as response:
+              beijing_city = next(city for city in json.load(response) if city['code'] == 'CN-BJ')
+          with urllib.request.urlopen(urllib.request.Request(base + f'/api/business-resources/cities/{beijing_city["id"]}/systems', headers={'Authorization': 'Bearer ' + token})) as response:
+              medical = next(system for system in json.load(response) if system['code'] == 'BJ-MEDICAL')
+          address_request = urllib.request.Request(base + f'/api/business-resources/systems/{medical["id"]}/base-url',
+              json.dumps({'baseUrl': 'https://authorized.example.test/'}).encode(),
+              {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token}, method='PUT')
+          with urllib.request.urlopen(address_request) as response:
+              assert json.load(response)['baseUrl'] == 'https://authorized.example.test/'
           with urllib.request.urlopen(urllib.request.Request(base + '/api/tasks', headers={'Authorization': 'Bearer ' + token})) as response:
               assert isinstance(json.load(response), list)
           for path in ('/api/tasks', '/api/workflows', '/api/audit', '/api/node-management/nodes'):
@@ -106,17 +119,17 @@ jobs:
               raise AssertionError('Non-admin created a city')
           except urllib.error.HTTPError as error:
               assert error.code == 403, error.code
-          country = post('/api/business-resources/countries', {'code': 'CN', 'name': '中国'}, token)
+          country = post('/api/business-resources/countries', {'code': 'SMOKE-CN', 'name': '测试国家'}, token)
           province = post(f'/api/business-resources/countries/{country["id"]}/provinces',
               {'code': 'SD', 'name': '山东省'}, token)
           qd = post('/api/business-resources/cities',
-              {'code': 'CN-SD-QD', 'name': '青岛市', 'provinceId': province['id']}, token)
+              {'code': 'SMOKE-SD-QD', 'name': '青岛市', 'provinceId': province['id']}, token)
           district = post(f'/api/business-resources/cities/{qd["id"]}/districts',
               {'code': 'SN', 'name': '市南区'}, token)
           with urllib.request.urlopen(urllib.request.Request(base + f'/api/business-resources/cities/{qd["id"]}/districts',
               headers={'Authorization': 'Bearer ' + user_token})) as response:
               assert any(x['id'] == district['id'] for x in json.load(response))
-          jn = post('/api/business-resources/cities', {'code': 'CN-SD-JN', 'name': '济南市'}, token)
+          jn = post('/api/business-resources/cities', {'code': 'SMOKE-SD-JN', 'name': '济南市'}, token)
           def add_function(city):
               system = post(f'/api/business-resources/cities/{city["id"]}/systems',
                   {'code': 'SOCIAL', 'name': '社保系统'}, token)

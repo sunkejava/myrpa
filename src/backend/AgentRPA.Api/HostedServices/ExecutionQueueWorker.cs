@@ -64,6 +64,12 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
                 await db.SaveChangesAsync(cancellationToken);
                 continue;
             }
+            if (version.DefinitionJson.Contains("{{systemBaseUrl}}", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(businessScope.Value.BaseUrl))
+            {
+                task.SetStatus(DomainTaskStatus.WaitingForResource);
+                await db.SaveChangesAsync(cancellationToken);
+                continue;
+            }
             var permission = await permissionService.CheckAsync(task.SubjectId ?? Guid.Empty, businessScope.Value.CityId, businessScope.Value.SystemId, businessScope.Value.FunctionId, "Execute", cancellationToken);
             if (!permission.Allowed)
             {
@@ -135,21 +141,24 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
                 await leaseService.ReleaseAsync(assignment.LeaseId, cancellationToken);
                 continue;
             }
-            var command = new ExecutionCommand(execution.Id, task.Id, item.Id, task.WorkflowId, task.WorkflowVersion, assignment.NodeId, assignment.WorkerSlotId, version.DefinitionJson, ParseParameters(item.InputJson));
+            var parameters = ParseParameters(item.InputJson);
+            // 系统地址只取自所关联业务资源；任务项不能伪造或覆盖该值。
+            parameters["systemBaseUrl"] = businessScope.Value.BaseUrl;
+            var command = new ExecutionCommand(execution.Id, task.Id, item.Id, task.WorkflowId, task.WorkflowVersion, assignment.NodeId, assignment.WorkerSlotId, version.DefinitionJson, parameters);
             await hub.Clients.Client(connectionId).ExecuteAsync(command);
         }
     }
 
-    private static async Task<(Guid CityId, Guid SystemId, Guid FunctionId)?> ResolveBusinessScopeAsync(AgentRpaDbContext db, Guid workflowId, CancellationToken ct)
+    private static async Task<(Guid CityId, Guid SystemId, Guid FunctionId, string BaseUrl)?> ResolveBusinessScopeAsync(AgentRpaDbContext db, Guid workflowId, CancellationToken ct)
     {
         var row = await db.Workflows.AsNoTracking().Where(x => x.Id == workflowId && x.Status == AgentRPA.Domain.Workflow.WorkflowStatus.Published)
             .Join(db.BusinessFunctions.AsNoTracking(), w => w.BusinessFunctionId, f => f.Id, (w, f) => new { f.Id, f.SystemId })
-            .Join(db.BusinessSystems.AsNoTracking(), x => x.SystemId, s => s.Id, (x, s) => new { FunctionId = x.Id, SystemId = s.Id, s.CityId })
+            .Join(db.BusinessSystems.AsNoTracking(), x => x.SystemId, s => s.Id, (x, s) => new { FunctionId = x.Id, SystemId = s.Id, s.CityId, s.BaseUrl })
             .SingleOrDefaultAsync(ct);
-        return row is null ? null : (row.CityId, row.SystemId, row.FunctionId);
+        return row is null ? null : (row.CityId, row.SystemId, row.FunctionId, row.BaseUrl);
     }
 
-    private static IReadOnlyDictionary<string, string?> ParseParameters(string json)
+    private static Dictionary<string, string?> ParseParameters(string json)
     {
         try
         {

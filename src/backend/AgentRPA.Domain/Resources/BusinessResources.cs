@@ -76,7 +76,7 @@ public sealed class BusinessSystem : Entity
         CityId = cityId;
         Code = City.Require(code, 64, nameof(code)).ToUpperInvariant();
         Name = City.Require(name, 128, nameof(name));
-        BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? string.Empty : City.Require(baseUrl, 1024, nameof(baseUrl));
+        SetBaseUrl(baseUrl);
     }
     public Guid CityId { get; private set; }
     public string Code { get; private set; } = string.Empty;
@@ -84,6 +84,14 @@ public sealed class BusinessSystem : Entity
     public string BaseUrl { get; private set; } = string.Empty;
     public bool Enabled { get; private set; } = true;
     public void SetEnabled(bool enabled) { Enabled = enabled; UpdatedAt = DateTimeOffset.UtcNow; }
+    public void SetBaseUrl(string? baseUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(baseUrl) &&
+            (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http")))
+            throw new ArgumentException("系统地址必须是有效的 HTTP 或 HTTPS 绝对地址。", nameof(baseUrl));
+        BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? string.Empty : City.Require(baseUrl, 1024, nameof(baseUrl));
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }
 
 /// <summary>业务系统中的可自动化业务功能。</summary>

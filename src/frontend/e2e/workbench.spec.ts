@@ -29,7 +29,7 @@ test('login, resource setup, natural language planning and task submission', asy
   })).json()).accessToken as string
   const headers = { Authorization: `Bearer ${token}` }
   const city = await (await request.post(`${api}/api/business-resources/cities`, {
-    headers, data: { code: 'CN-SD-QD', name: '青岛市' }
+    headers, data: { code: 'TEST-CN-SD-QD', name: '测试港市' }
   })).json() as { id: string }
   const system = await (await request.post(`${api}/api/business-resources/cities/${city.id}/systems`, {
     headers, data: { code: 'SOCIAL', name: '社保系统' }
@@ -50,13 +50,13 @@ test('login, resource setup, natural language planning and task submission', asy
   })).ok()).toBeTruthy()
 
   await page.getByRole('button', { name: '城市与系统' }).click()
-  await expect(page.getByRole('option', { name: /青岛市/ })).toBeAttached()
+  await expect(page.getByRole('option', { name: /青岛市/ }).first()).toBeAttached()
   await page.getByRole('button', { name: '新增资源' }).click()
   await page.getByLabel('资源类型').selectOption('country')
-  await page.getByLabel('编码').fill('CN')
-  await page.getByLabel('名称').fill('中国')
+  await page.getByLabel('编码').fill('TST-CN')
+  await page.getByLabel('名称').fill('测试国家')
   await page.getByRole('button', { name: '创建', exact: true }).click()
-  await page.locator('.resource-grid select').first().selectOption({ label: '中国 (CN)' })
+  await page.locator('.resource-grid select').first().selectOption({ label: '测试国家 (TST-CN)' })
   await page.getByRole('button', { name: '新增资源' }).click()
   await page.getByLabel('资源类型').selectOption('province')
   await page.getByLabel('编码').fill('SD')
@@ -95,7 +95,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: '显式拒绝' }).click()
   await expect(page.getByText('角色 · 执行员')).toBeVisible()
   await page.getByRole('button', { name: 'AI 工作台' }).click()
-  await page.getByLabel('任务描述').fill('青岛市 社保系统 增员')
+  await page.getByLabel('任务描述').fill('测试港市 社保系统 增员')
   await page.getByRole('button', { name: '生成计划' }).click()
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '规划结果' })).toBeVisible()

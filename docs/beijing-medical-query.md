@@ -1,6 +1,6 @@
 # 北京医保人员查询与下载：配置和执行
 
-本地开发库执行 `bash scripts/seed-development.sh` 后，会有“中国 → 北京市 → 北京市 → 北京医保业务系统（待配置地址） → 人员信息查询与下载”目录。脚本可重复运行；不会预置真实政务网址、账号、凭据、客户信息或可直接执行的工作流。生产环境应由管理员在资源管理页面创建同样的目录。
+更新并重启 API 后，默认资源初始化会自动提供“中国 → 北京市 → 北京市 → 北京医保业务系统 → 人员信息查询与下载”目录，开发和生产环境均可见。初始化可重复执行；不会预置真实政务网址、账号、凭据、客户信息或可直接执行的工作流。完整目录和关联说明参见 [默认资源与工作流配置](default-resources-and-workflows.md)。
 
 1. **确认接入条件。** 取得目标系统的正式入口、业务授权、测试环境与稳定的输入框/下载按钮定位；确认要用的网络区域、登录方式和 UKey。客户数据须获合法授权；不要把账号、密码、身份证明文件、验证码写进工作流 JSON、日志或 URL。
 2. **配置资源与权限。** 在“资源管理”确认北京城市、医保系统和人员查询功能；在“权限中心”为操作者授予该城市/系统/功能的 Execute 权限。如需审批敏感操作，同时设置对应步骤的 requiredAction，并配置独立审批角色。
@@ -17,7 +17,7 @@
     "personId": { "type": "string", "required": true, "sensitive": true, "maxLength": 64 }
   },
   "steps": [
-    { "id": "open", "type": "Navigate", "config": { "url": "https://AUTHORIZED-TEST-SYSTEM.example/login" } },
+    { "id": "open", "type": "Navigate", "config": { "url": "{{systemBaseUrl}}" } },
     { "id": "login", "type": "HumanTask" },
     { "id": "input-person", "type": "Input", "config": { "selector": "[data-testid=person-id]", "value": "{{personId}}" } },
     { "id": "query", "type": "Click", "config": { "selector": "[data-testid=query]" } },

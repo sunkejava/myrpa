@@ -170,10 +170,22 @@ public sealed class BusinessResourcesController(AgentRpaDbContext db) : Controll
         await db.SaveChangesAsync(ct);
         return Ok(new { system.Id, system.Enabled });
     }
+
+    [Authorize(Roles = "Admin"), HttpPut("systems/{systemId:guid}/base-url")]
+    public async Task<IActionResult> SetSystemBaseUrl(Guid systemId, UpdateSystemBaseUrlRequest request, CancellationToken ct)
+    {
+        var system = await db.BusinessSystems.FindAsync([systemId], ct);
+        if (system is null) return NotFound();
+        try { system.SetBaseUrl(request.BaseUrl); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        await db.SaveChangesAsync(ct);
+        return Ok(new { system.Id, system.BaseUrl });
+    }
 }
 
 public sealed record CreateCityRequest(string Code, string Name, Guid? ProvinceId = null);
 public sealed record CreateRegionRequest(string Code, string Name);
 public sealed record CreateSystemRequest(string Code, string Name, string? BaseUrl);
+public sealed record UpdateSystemBaseUrlRequest(string? BaseUrl);
 public sealed record CreateFunctionRequest(string Code, string Name);
 public sealed record SetEnabledRequest(bool Enabled);

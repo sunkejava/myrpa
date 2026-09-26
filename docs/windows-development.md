@@ -25,6 +25,8 @@ dotnet run --project .\src\backend\AgentRPA.Api\AgentRPA.Api.csproj --no-launch-
 
 等待 `Now listening on: http://127.0.0.1:5000`。浏览 `http://127.0.0.1:5000/swagger`。`appsettings.Development.json` 在 Development 环境预置 `admin / 123456`。账户仅在第一次连接到该数据库时创建；重复启动**不会重置已有 admin 密码**。生产环境不能使用该演示密码。
 
+API 正常启动时会自动补齐国家/省/市/区、社保/医保/公积金及业务功能的默认目录。旧库升级后须重启 API；资源目录及工作流配置见 [默认资源与工作流配置](default-resources-and-workflows.md)。
+
 默认连接 `Data Source=agentrpa.db`，相对路径由 API **进程工作目录**决定；从仓库根目录与 API 项目目录运行可能连到不同库。建议固定启动目录或指定绝对路径，例如在运行 API 前设置：
 
 ```powershell
