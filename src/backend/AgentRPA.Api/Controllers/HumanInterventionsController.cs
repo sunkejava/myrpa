@@ -165,6 +165,7 @@ public sealed class HumanInterventionsController(
                                select new { Execution = current, Item = item, Task = task })
             .SingleOrDefaultAsync(ct);
         if (execution is null || execution.Execution.Status != ExecutionStatus.WaitingForHuman || !execution.Execution.NodeId.HasValue ||
+            await db.HumanInterventions.AnyAsync(x => x.ExecutionId == executionId && x.Status == InterventionStatus.Opened, ct) ||
             !await db.Workflows.AsNoTracking().AnyAsync(x => x.Id == execution.Task.WorkflowId && x.Status == WorkflowStatus.Published, ct))
             return;
 

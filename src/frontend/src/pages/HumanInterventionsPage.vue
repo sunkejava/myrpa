@@ -3,9 +3,9 @@ import { onMounted, ref } from 'vue'
 import HumanInterventionPanel from '../components/task/HumanInterventionPanel.vue'
 import type { Intervention } from '../types/intervention'
 
-const props = defineProps<{ token: string }>()
+const props = defineProps<{ token: string; initialExecutionId?: string }>()
 const rows = ref<Intervention[]>([])
-const executionId = ref('')
+const executionId = ref(props.initialExecutionId || '')
 const title = ref('')
 const type = ref('ManualApproval')
 const issuedToken = ref('')

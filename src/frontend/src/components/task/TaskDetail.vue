@@ -10,6 +10,7 @@ type Task = { id: string; name: string; status: string; approvalStatus?: string 
 type Checkpoint = { stepId: string; sequence: number; eventType: string; metadataJson?: string | null }
 type Artifact = { id: string; fileName: string; artifactType: string; contentType?: string | null; size: number; sha256?: string | null; expiresAt?: string | null }
 const props = defineProps<{ taskId: string; token: string }>()
+const emit = defineEmits<{ intervention: [executionId: string] }>()
 const task = ref<Task | null>(null)
 const checkpoints = ref<Checkpoint[]>([])
 const logs = ref<Log[]>([])
@@ -68,6 +69,7 @@ onMounted(load)
     <p v-if="task" class="muted">状态：{{ task.status }}{{ task.approvalStatus ? ` · 审批：${task.approvalStatus}` : '' }}</p>
     <TaskItemTable v-if="task" :items="task.items" @inspect="chooseExecution" />
     <template v-if="executionId">
+      <button v-if="task?.status === 'WaitingForHuman'" class="action-btn primary" @click="emit('intervention', executionId)">处理此执行的人工介入</button>
       <TaskTimeline :timeline="timeline" />
       <h3>Step 检查点</h3>
       <p class="muted">只有“开始”而没有“完成”的提交步骤须先核验外部系统状态，不能直接重跑。</p>

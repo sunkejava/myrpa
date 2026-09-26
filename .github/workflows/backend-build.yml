@@ -40,7 +40,9 @@ jobs:
           python3 - <<'PY'
           import sqlite3
           with sqlite3.connect('src/backend/AgentRPA.Api/seed-ci.db') as db:
-              for table, code in [('cities', 'DEMO-QD'), ('business_systems', 'DEMO-SOCIAL'), ('business_functions', 'DEMO-QUERY')]:
+              for table, code in [('cities', 'DEMO-QD'), ('business_systems', 'DEMO-SOCIAL'), ('business_functions', 'DEMO-QUERY'),
+                                  ('countries', 'CN'), ('provinces', 'BJ'), ('cities', 'CN-BJ'),
+                                  ('business_systems', 'BJ-MEDICAL'), ('business_functions', 'PERSON-QUERY')]:
                   assert db.execute(f'SELECT count(*) FROM {table} WHERE Code = ?', (code,)).fetchone()[0] == 1
               assert db.execute('SELECT count(*) FROM user_accounts WHERE UserName = ?', ('admin',)).fetchone()[0] == 1
           PY

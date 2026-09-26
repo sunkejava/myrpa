@@ -124,7 +124,14 @@ public sealed class NodeAgentWorker(
                 await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token, e.StepType);
                 if (e.Artifact is not null)
                     await connection.InvokeAsync("ReportArtifact", new ExecutionArtifactReport(command.ExecutionId, command.NodeId, command.WorkerSlotId, e.Artifact.ArtifactType, e.Artifact.FileName, e.Artifact.StorageKey, e.Artifact.ContentType, e.Artifact.Size, e.Artifact.Hash, DateTimeOffset.UtcNow), linked.Token);
-                if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase)) await resumeSignal.Task.WaitAsync(linked.Token);
+                if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!humanResumes.TryGetValue(command.ExecutionId, out var pending))
+                        throw new InvalidOperationException("人工介入等待状态丢失。");
+                    await pending.Task.WaitAsync(linked.Token);
+                    // 每个 HumanTask 都要单独确认，不能沿用上一节点已经完成的信号。
+                    humanResumes[command.ExecutionId] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
             }, linked.Token);
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested) { await ReportAsync(connection, command, "Cancelled", null, null, "执行已取消", CancellationToken.None); }

@@ -6,6 +6,7 @@ import { useLocale } from '../locales'
 import { listTasks, taskAction, type TaskListItem as Task } from '../api/modules/tasks'
 
 const props = defineProps<{ token: string }>()
+const emit = defineEmits<{ intervention: [executionId: string] }>()
 const tasks = ref<Task[]>([])
 const selectedTaskId = ref('')
 const error = ref('')
@@ -34,7 +35,7 @@ onMounted(loadTasks)
   <p v-if="error" class="error" role="alert">{{ error }}</p>
   <template v-if="selectedTaskId">
     <div class="page-toolbar"><button class="action-btn" @click="selectedTaskId = ''">{{ t('task.backToList') }}</button><span class="muted">{{ t('task.details') }}</span></div>
-    <TaskDetail :key="selectedTaskId" :task-id="selectedTaskId" :token="token" />
+    <TaskDetail :key="selectedTaskId" :task-id="selectedTaskId" :token="token" @intervention="emit('intervention', $event)" />
   </template>
   <template v-else>
     <div class="page-toolbar"><div><h2>{{ t('task.myTasks') }}</h2><p class="muted">{{ t('task.queue') }}</p></div><button class="action-btn" @click="loadTasks">{{ t('common.refresh') }}</button></div>

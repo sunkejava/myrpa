@@ -23,6 +23,8 @@ import { useLocale } from './locales'
 const { token, userName, admin, checking, setSession, clearSession, validateSession } = useSession()
 const { t } = useLocale()
 const page = ref('planner')
+const interventionExecutionId = ref('')
+function openIntervention(executionId: string) { interventionExecutionId.value = executionId; page.value = 'interventions' }
 const pages = { planner: PlannerPage, tasks: TasksPage, resources: BusinessResources, interventions: HumanInterventionsPage,
   usage: LlmUsagePage, permissions: PermissionCenter, approvals: TaskApprovalCenter, reconciliation: TaskReconciliationCenter,
   workflows: WorkflowDesigner, nodes: NodeManagementPage, pools: NodePoolsPage, capabilities: NodeCapabilitiesPage,
@@ -35,6 +37,6 @@ onMounted(validateSession)
   <ControlLayout :logged-in="!!token && !checking" :admin="admin" :user-name="userName" :page="page" @navigate="page = $event" @logout="clearSession">
     <p v-if="checking" role="status">{{ t('common.loading') }}</p>
     <LoginPage v-else-if="!token" @authenticated="setSession" />
-    <component :is="selected" v-else :key="page" :token="token" :admin="admin" @submitted="page = 'tasks'" />
+    <component :is="selected" v-else :key="page" :token="token" :admin="admin" :initial-execution-id="interventionExecutionId" @intervention="openIntervention" @submitted="page = 'tasks'" />
   </ControlLayout>
 </template>

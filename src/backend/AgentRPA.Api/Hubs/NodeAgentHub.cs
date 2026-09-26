@@ -33,6 +33,12 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == request.NodeId, cancellationToken);
         if (node is null) throw new HubException("Node 不存在。");
         if (!string.Equals(node.AgentKey, request.AgentKey, StringComparison.Ordinal)) throw new HubException("Node 身份认证失败。");
+        // 失联和异常状态由监控产生；通过身份验证的 Agent 重连可恢复，管理员停用/排空状态保持不变。
+        if (node.Status is NodeStatus.Offline or NodeStatus.Unhealthy)
+        {
+            node.RegisterHeartbeat(request.AgentVersion, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync(cancellationToken);
+        }
         if (node.Status is not NodeStatus.Online) throw new HubException($"Node 当前状态为 {node.Status}，未获准建立执行会话。");
         connections.Bind(request.NodeId, Context.ConnectionId);
         Context.Items["NodeId"] = request.NodeId;
@@ -48,7 +54,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
                  execution.Status == ExecutionStatus.Paused || execution.Status == ExecutionStatus.WaitingForHuman)
             select execution.Id).ToListAsync(cancellationToken);
         foreach (var executionId in disabledExecutions) await Clients.Caller.CancelAsync(executionId);
-        var resumableExecutionIds = await (from execution in db.Executions join intervention in db.HumanInterventions on execution.Id equals intervention.ExecutionId where execution.NodeId == request.NodeId && execution.Status == ExecutionStatus.WaitingForHuman && intervention.Status == InterventionStatus.Completed select execution.Id).Distinct().ToListAsync(cancellationToken);
+        var resumableExecutionIds = await (from execution in db.Executions join intervention in db.HumanInterventions on execution.Id equals intervention.ExecutionId where execution.NodeId == request.NodeId && execution.Status == ExecutionStatus.WaitingForHuman && intervention.Status == InterventionStatus.Completed && !db.HumanInterventions.Any(x => x.ExecutionId == execution.Id && x.Status == InterventionStatus.Opened) select execution.Id).Distinct().ToListAsync(cancellationToken);
         foreach (var executionId in resumableExecutionIds.Except(disabledExecutions)) await Clients.Caller.ResumeAsync(executionId);
     }
 
@@ -102,7 +108,17 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         if (item is not null)
         {
             if (status == ExecutionStatus.Running) item.Start();
-            else if (status == ExecutionStatus.WaitingForHuman) task?.SetStatus(DomainTaskStatus.WaitingForHuman);
+            else if (status == ExecutionStatus.WaitingForHuman)
+            {
+                task?.SetStatus(DomainTaskStatus.WaitingForHuman);
+                if (task?.SubjectId is Guid ownerId && !await db.HumanInterventions.AnyAsync(x => x.ExecutionId == execution.Id && x.Status == InterventionStatus.Opened, cancellationToken))
+                {
+                    var intervention = new HumanIntervention(execution.Id, ownerId, InterventionType.ManualApproval,
+                        $"流程步骤 {progress.StepId ?? "HumanTask"} 等待人工确认", DateTimeOffset.UtcNow.AddMinutes(30));
+                    intervention.Open(null);
+                    db.HumanInterventions.Add(intervention);
+                }
+            }
             else if (status == ExecutionStatus.Succeeded) item.Succeed(safeMessage);
             else if (status == ExecutionStatus.Failed)
             {
