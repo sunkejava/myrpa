@@ -15,5 +15,6 @@ export async function apiRequest<T>(path: string, token: string | null, init: Re
     throw new ApiError(response.status, details ? `${message}：${details}` : message)
   }
   if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
+  const content = await response.text()
+  return (content ? JSON.parse(content) : undefined) as T
 }
