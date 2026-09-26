@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import NestedWorkflowSteps from './NestedWorkflowSteps.vue'
 
-type Step = { id?: string; type?: string; config?: Record<string, unknown>; timeoutMs?: number; retryCount?: number; requiredAction?: string }
-const props = defineProps<{ step: Step; index: number; total: number }>()
+export type Step = { id?: string; type?: string; config?: Record<string, unknown>; timeoutMs?: number; retryCount?: number; requiredAction?: string }
+const props = withDefaults(defineProps<{ step: Step; index: number; total: number; depth?: number }>(), { depth: 0 })
 const emit = defineEmits<{ update: [index: number, step: Step]; remove: [index: number]; move: [from: number, to: number] }>()
 const configText = ref('{}')
 const error = ref('')
@@ -27,6 +28,9 @@ watch(() => props.step, step => { configText.value = JSON.stringify(step.config 
 function update(patch: Partial<Step>) { emit('update', props.index, { ...props.step, ...patch }) }
 function updateField(key: string, value: string, numeric?: boolean) {
   update({ config: { ...(props.step.config || {}), [key]: numeric ? Number(value) : value } })
+}
+function updateBranch(branch: string, value: Step[]) {
+  update({ config: { ...(props.step.config || {}), [branch]: value } })
 }
 function saveConfig() {
   try {
@@ -54,6 +58,12 @@ const safeRetry = ['navigate', 'waitforelement', 'assert', 'extract']
     </div>
     <p v-if="step.type === 'Extract'" class="muted">提取结果在任务详情中显示，后续步骤可使用字段名变量引用。</p>
     <p v-if="step.type === 'HumanTask'" class="muted">支持 Captcha、UKeyConfirmation、FaceAuthentication、ManualApproval。任务所有人确认后在原浏览器会话继续。</p>
+    <template v-if="depth < 8">
+      <NestedWorkflowSteps v-if="step.type === 'Condition'" title="条件成立时" :steps="step.config?.then" :depth="depth + 1" @update="updateBranch('then', $event)" />
+      <NestedWorkflowSteps v-if="step.type === 'Condition'" title="条件不成立时" :steps="step.config?.else" :depth="depth + 1" @update="updateBranch('else', $event)" />
+      <NestedWorkflowSteps v-if="step.type === 'Loop' || step.type === 'SubWorkflow'" title="内层步骤" :steps="step.config?.steps" :depth="depth + 1" @update="updateBranch('steps', $event)" />
+    </template>
+    <p v-else-if="['Condition', 'Loop', 'SubWorkflow'].includes(step.type || '')" class="error">嵌套深度达到 8 层上限，不能继续添加分支。</p>
     <label>节点配置 JSON（selector、url、value、path、steps 等）<textarea v-model="configText" rows="6" spellcheck="false" @blur="saveConfig" /></label>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div class="actions">

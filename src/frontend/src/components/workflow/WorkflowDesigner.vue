@@ -30,7 +30,7 @@ const pendingTemplate = ref<WorkflowTemplate | null>(null)
 type Step = { id?: string; type?: string; config?: Record<string, unknown>; timeoutMs?: number; retryCount?: number; requiredAction?: string }
 const defaultDefinition = () => JSON.stringify({ version: 1, riskLevel: 'Low', requiresApproval: false, steps: [{ id: 'step-1', type: 'End' }] }, null, 2)
 const definitionJson = ref(defaultDefinition())
-const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'HumanTask', 'Assert', 'End']
+const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'SubWorkflow', 'HumanTask', 'Assert', 'End']
 const currentWorkflow = computed(() => workflows.value.find(x => x.id === workflowId.value))
 const parsedDefinition = computed(() => {
   try {
@@ -99,7 +99,8 @@ function addStep(type: string) {
   if (!parsedDefinition.value) { error.value = t('workflow.invalidJson'); return }
   const next = [...steps.value]
   const endIndex = next.findIndex(step => step.type?.toLowerCase() === 'end')
-  next.splice(endIndex < 0 ? next.length : endIndex, 0, { id: `step-${crypto.randomUUID().slice(0, 8)}`, type, config: {} })
+  const config = type === 'Loop' || type === 'SubWorkflow' ? { steps: [] } : type === 'Condition' ? { then: [], else: [] } : {}
+  next.splice(endIndex < 0 ? next.length : endIndex, 0, { id: `step-${crypto.randomUUID().slice(0, 8)}`, type, config })
   updateDefinition({ steps: next })
 }
 function editStep(index: number, step: Step) { const next = [...steps.value]; next[index] = step; updateDefinition({ steps: next }) }
