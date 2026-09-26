@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
+import NodeDetailPage from './NodeDetailPage.vue'
 
 type Node = { id: string; name: string; nodeKind: string; osPlatform: string; status: string; networkZone: string | null;
   lastHeartbeatAt: string | null; capabilities: Array<{ code: string }> }
@@ -11,6 +12,7 @@ const slots = ref<Slot[]>([])
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const selectedNodeId = ref('')
 
 async function call<T>(path: string, method = 'GET', data?: object): Promise<T> {
   const response = await fetch(`/api/${path}`, { method, headers: { Authorization: `Bearer ${props.token}`,
@@ -50,12 +52,13 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
+  <NodeDetailPage v-if="selectedNodeId" :key="selectedNodeId" :token="token" :node-id="selectedNodeId" @back="selectedNodeId = ''" />
+  <section v-else class="panel">
     <div class="panel-title"><span>节点管理</span><button class="action-btn" @click="load">刷新</button></div>
     <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="muted" role="status">{{ notice }}</p>
     <div class="table-wrap"><table><thead><tr><th>节点</th><th>环境与能力</th><th>Worker 槽位</th><th>状态</th><th>操作</th></tr></thead>
       <tbody><tr v-for="node in nodes" :key="node.id">
-        <td><strong>{{ node.name }}</strong><small>{{ node.id }}</small><small>最后心跳：{{ node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</small></td>
+        <td><button class="action-btn" @click="selectedNodeId = node.id">{{ node.name }} · 查看详情</button><small>{{ node.id }}</small><small>最后心跳：{{ node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</small></td>
         <td>{{ node.nodeKind }} · {{ node.osPlatform }}<small>{{ node.networkZone || '默认网络区' }} / {{ node.capabilities.map(c => c.code).join('、') || '无能力' }}</small></td>
         <td><div v-for="slot in slots.filter(x => x.nodeId === node.id)" :key="slot.id">{{ slot.slotName }} · {{ slot.executionId ? '执行中' : slot.enabled ? '空闲' : '禁用' }}
           <button class="action-btn" :disabled="busy || !!slot.executionId" @click="setSlot(slot)">{{ slot.enabled ? '禁用' : '启用' }}</button></div></td>

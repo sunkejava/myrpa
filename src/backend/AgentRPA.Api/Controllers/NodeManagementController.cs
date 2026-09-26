@@ -23,7 +23,15 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
         if (node is null) return NotFound();
         var slots = await db.WorkerSlots.AsNoTracking().Where(x => x.NodeId == id).Select(x => new { x.Id, x.SlotName, x.Enabled, x.ExecutionId, x.LeaseExpiresAt }).ToListAsync(ct);
         var capabilities = await db.NodeCapabilities.AsNoTracking().Where(x => x.NodeId == id).Select(x => new { x.Id, x.Code, x.Version, x.Enabled, x.MetadataJson }).ToListAsync(ct);
-        return Ok(new { node.Id, node.Name, node.AgentKey, NodeKind = node.NodeKind.ToString(), OsPlatform = node.OsPlatform.ToString(), Status = node.Status.ToString(), node.Architecture, node.NodePoolId, node.NetworkZone, node.AgentVersion, node.LastHeartbeatAt, capabilities, slots });
+        var executionCounts = await db.Executions.AsNoTracking().Where(x => x.NodeId == id).GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() }).ToListAsync(ct);
+        // SQLite 对 DateTimeOffset 不支持 LINQ 排序；UTC 创建时间在持久化时使用可排序文本。
+        var recentExecutions = await db.Executions.FromSqlInterpolated(
+            $"SELECT * FROM \"Executions\" WHERE \"NodeId\" = {id} ORDER BY \"CreatedAt\" DESC LIMIT 20")
+            .AsNoTracking().ToListAsync(ct);
+        return Ok(new { node.Id, node.Name, NodeKind = node.NodeKind.ToString(), OsPlatform = node.OsPlatform.ToString(), Status = node.Status.ToString(), node.Architecture, node.NodePoolId, node.NetworkZone, node.AgentVersion, node.LastHeartbeatAt,
+            capabilities, slots, executionCounts = executionCounts.Select(x => new { status = x.Status.ToString(), x.Count }),
+            recentExecutions = recentExecutions.Select(x => new { x.Id, x.TaskItemId, status = x.Status.ToString(), x.CreatedAt, x.Error }) });
     }
 
     [HttpGet("pools")]
