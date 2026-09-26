@@ -57,6 +57,9 @@ jobs:
             if ! kill -0 "$api_pid" 2>/dev/null; then exit 1; fi
             sleep 1
           done
+          # A 307/308 from the API would redirect Vite's HTTP proxy to HTTPS and break login preflight.
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/auth/me)
+          test "$status" = 401
           npm run test:e2e
           # Keep one enrolled employee and a receipt while the API process is restarted.
           curl -fsS -c mock-cookies.txt -d 'username=demo&password=Demo123!' \
