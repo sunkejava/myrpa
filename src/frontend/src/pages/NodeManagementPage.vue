@@ -5,6 +5,7 @@ import NodeDetailPage from './NodeDetailPage.vue'
 import RobotStatusCard from '../components/robot/RobotStatusCard.vue'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
 import DataTable from '../components/table/DataTable.vue'
+import ConfirmAction from '../components/common/ConfirmAction.vue'
 import { nodeRequest, type ManagedNode, type WorkerSlot } from '../api/modules/nodes'
 import { useLocale } from '../locales'
 
@@ -37,7 +38,6 @@ async function load() {
   catch (e) { error.value = e instanceof Error ? e.message : t('nodes.loadFailed') }
 }
 async function change(node: ManagedNode, action: 'approve' | 'reject' | 'revoke' | 'drain' | 'restore') {
-  if (action === 'revoke' && !window.confirm(t('nodes.revokeConfirm').replace('{name}', node.name))) return
   busy.value = true; error.value = ''; notice.value = ''
   try {
     await call(`nodes/${node.id}/${action === 'restore' ? 'status' : action}`, 'POST', action === 'restore' ? { status: 'Online' } : undefined)
@@ -70,7 +70,7 @@ onMounted(load)
         <button v-if="(row as ManagedNode).status === 'PendingApproval'" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'reject')">{{ t('nodes.reject') }}</button>
         <button v-if="(row as ManagedNode).status === 'Online'" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'drain')">{{ t('nodes.drain') }}</button>
         <button v-if="['Draining', 'Disabled', 'Offline'].includes((row as ManagedNode).status)" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'restore')">{{ t('nodes.restore') }}</button>
-        <button v-if="(row as ManagedNode).status !== 'Revoked' && !slots.some(slot => slot.nodeId === (row as ManagedNode).id && !!slot.executionId)" class="action-btn" :disabled="busy" @click="change(row as ManagedNode, 'revoke')">{{ t('nodes.revoke') }}</button></div></template>
+        <ConfirmAction v-if="(row as ManagedNode).status !== 'Revoked' && !slots.some(slot => slot.nodeId === (row as ManagedNode).id && !!slot.executionId)" :label="t('nodes.revoke')" :title="t('nodes.revoke')" :message="t('nodes.revokeConfirm').replace('{name}', (row as ManagedNode).name)" :disabled="busy" :busy="busy" @confirmed="change(row as ManagedNode, 'revoke')" /></div></template>
     </DataTable></section>
     <details v-if="nodes.length" class="panel node-status"><summary class="panel-title">{{ t('nodes.live') }}</summary><div class="robot-grid"><RobotStatusCard v-for="node in nodes" :key="node.id" :name="node.name" :status="node.status" :network-zone="node.networkZone" :available-slots="node.reportedAvailableSlots" :cpu-usage="node.cpuUsage" :memory-mi-b="node.memoryUsage" /></div></details>
   </template>
