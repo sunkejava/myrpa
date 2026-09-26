@@ -5,6 +5,7 @@ import { useLocale } from '../../locales'
 const { settings, persist } = useTheme()
 const { language, t, setLanguage, importLanguagePack } = useLocale()
 const error = ref('')
+const open = ref(false)
 async function loadPack(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
@@ -15,9 +16,9 @@ async function loadPack(event: Event) {
 </script>
 
 <template>
-  <details class="theme-settings">
-    <summary class="action-btn">{{ t('common.theme') }}</summary>
-    <div class="theme-settings-panel" @change="persist">
+  <div class="theme-settings">
+    <button type="button" class="action-btn" :aria-expanded="open" @click="open = !open">{{ t('common.theme') }}</button>
+    <div v-if="open" class="theme-settings-panel" @change="persist">
       <label>{{ t('common.language') }}<select :value="language" @change="setLanguage(($event.target as HTMLSelectElement).value as 'zh' | 'en' | 'custom')"><option value="zh">简体中文</option><option value="en">English</option><option value="custom">Custom</option></select></label>
       <label>{{ t('common.customPack') }}<input type="file" accept="application/json,.json" @change="loadPack" /></label>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -33,5 +34,5 @@ async function loadPack(event: Event) {
       <label>动效 / Motion<select v-model="settings.motion"><option :value="true">On</option><option :value="false">Off</option></select></label>
       <label>科技元素 / Tech accents<select v-model="settings.tech"><option value="none">None</option><option value="subtle">Subtle</option><option value="strong">Strong</option></select></label>
     </div>
-  </details>
+  </div>
 </template>

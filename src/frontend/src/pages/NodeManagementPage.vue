@@ -2,6 +2,8 @@
 import { onMounted, ref } from 'vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import NodeDetailPage from './NodeDetailPage.vue'
+import RobotStatusCard from '../components/robot/RobotStatusCard.vue'
+import DetailDrawer from '../components/common/DetailDrawer.vue'
 
 type Node = { id: string; name: string; nodeKind: string; osPlatform: string; status: string; networkZone: string | null;
   lastHeartbeatAt: string | null; cpuUsage: number | null; memoryUsage: number | null; reportedAvailableSlots: number | null; capabilities: Array<{ code: string }> }
@@ -52,10 +54,10 @@ onMounted(load)
 </script>
 
 <template>
-  <NodeDetailPage v-if="selectedNodeId" :key="selectedNodeId" :token="token" :node-id="selectedNodeId" @back="selectedNodeId = ''" />
-  <section v-else class="panel">
+  <section class="panel">
     <div class="panel-title"><span>节点管理</span><button class="action-btn" @click="load">刷新</button></div>
     <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="muted" role="status">{{ notice }}</p>
+    <div class="robot-grid"><RobotStatusCard v-for="node in nodes" :key="node.id" :name="node.name" :status="node.status" :network-zone="node.networkZone" :available-slots="node.reportedAvailableSlots" :cpu-usage="node.cpuUsage" :memory-mi-b="node.memoryUsage" /></div>
     <div class="table-wrap"><table><thead><tr><th>节点</th><th>环境与能力</th><th>Worker 槽位</th><th>状态</th><th>操作</th></tr></thead>
       <tbody><tr v-for="node in nodes" :key="node.id">
         <td><button class="action-btn" @click="selectedNodeId = node.id">{{ node.name }} · 查看详情</button><small>{{ node.id }}</small><small>最后心跳：{{ node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</small></td>
@@ -70,4 +72,5 @@ onMounted(load)
           <button v-if="node.status !== 'Revoked' && !slots.some(x => x.nodeId === node.id && !!x.executionId)" class="action-btn" :disabled="busy" @click="change(node, 'revoke')">吊销</button></td>
       </tr></tbody></table><p v-if="nodes.length === 0" class="muted empty">暂无节点，启动 NodeAgent 并等待注册申请。</p></div>
   </section>
+  <DetailDrawer :open="!!selectedNodeId" title="节点详情" @close="selectedNodeId = ''"><NodeDetailPage v-if="selectedNodeId" :key="selectedNodeId" :token="token" :node-id="selectedNodeId" @back="selectedNodeId = ''" /></DetailDrawer>
 </template>

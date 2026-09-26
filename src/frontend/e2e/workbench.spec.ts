@@ -92,6 +92,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: '提交任务' }).click()
   await expect(page.getByRole('heading', { name: '任务中心' })).toBeVisible()
   await expect(page.getByText('Agent: Execute')).toBeVisible()
+  await expect(page.getByRole('progressbar').first()).toBeVisible()
   await page.getByRole('button', { name: '查看详情' }).first().click()
   await expect(page.getByText('任务详情', { exact: false })).toBeVisible()
   const riskyWorkflow = await (await request.post(`${api}/api/workflows`, {
@@ -118,6 +119,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('combobox', { name: 'Workflow 风险级别' }).selectOption('High')
   await page.getByRole('button', { name: '创建并发布新版本' }).click()
   await expect(page.getByRole('status')).toContainText('已发布')
+  await expect(page.getByRole('region', { name: 'Workflow 步骤预览' }).getByRole('button', { name: /End/ })).toBeVisible()
 })
 
 test('theme switch and mobile layout', async ({ page, isMobile }) => {

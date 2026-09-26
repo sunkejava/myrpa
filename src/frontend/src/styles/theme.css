@@ -10,9 +10,7 @@
 .app-shell[data-tech='strong'] .brand-mark { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent), transparent 75%); }
 .app-shell[data-motion='off'] *, .app-shell[data-motion='off'] *::before, .app-shell[data-motion='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 .theme-settings { position: relative; }
-.theme-settings > summary { list-style: none; }
-.theme-settings > summary::-webkit-details-marker { display: none; }
-.theme-settings[open] > .theme-settings-panel { position: absolute; right: 0; top: 44px; width: min(340px, 90vw); max-height: min(70vh, 620px); overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow); z-index: 30; display: grid; gap: 12px; }
+.theme-settings > .theme-settings-panel { position: absolute; right: 0; top: 44px; width: min(340px, 90vw); max-height: min(70vh, 620px); overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow); z-index: 30; display: grid; gap: 12px; }
 .theme-settings-panel label { display: grid; gap: 5px; font-size: 13px; color: var(--muted); }
 .theme-settings-panel input, .theme-settings-panel select { width: 100%; padding: 7px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); border-radius: 6px; }
 .theme-settings-panel input[type='color'] { height: 38px; cursor: pointer; }
@@ -26,3 +24,22 @@
 .data-table[data-density='compact'] th, .data-table[data-density='compact'] td { padding: 8px 10px; }
 .data-table[data-density='comfortable'] th, .data-table[data-density='comfortable'] td { padding: 18px 20px; }
 .search-form > .actions { margin-bottom: 16px; }
+.robot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; padding: 16px; }
+.robot-card { display: grid; gap: 8px; align-content: start; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface2); padding: 16px; }
+.robot-card h3 { margin: 4px 0; overflow-wrap: anywhere; }
+.robot-card .status-badge { justify-self: start; }
+.workflow-canvas { margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface2); }
+.workflow-track { display: flex; gap: 12px; overflow-x: auto; padding: 8px 0; }
+.workflow-node { min-width: 155px; max-width: 220px; display: grid; gap: 8px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 14px; cursor: pointer; }
+.workflow-node.selected { border-color: var(--accent); }
+.workflow-node strong, .workflow-node small { overflow-wrap: anywhere; }
+.workflow-node small { color: var(--muted); }
+.workflow-step-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.dialog-backdrop { position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(2, 9, 20, .65); z-index: 60; padding: 16px; }
+.form-dialog { width: min(520px, 100%); padding: 24px; color: var(--text); }
+.form-dialog form { display: grid; gap: 16px; margin-top: 16px; }
+.form-dialog label { display: grid; gap: 6px; color: var(--muted); }
+.form-dialog input, .form-dialog select, .form-dialog textarea { padding: 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface2); }
+.detail-drawer { margin-left: auto; height: 100%; width: min(850px, 100%); overflow: auto; border-left: 1px solid var(--line); color: var(--text); background: var(--bg); }
+.detail-drawer > .panel { margin: 16px; }
+.detail-drawer > .panel-title { align-items: center; }

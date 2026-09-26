@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import FormDialog from '../components/common/FormDialog.vue'
+import ConfirmAction from '../components/common/ConfirmAction.vue'
+import DataTable from '../components/table/DataTable.vue'
 
 type Pool = { id: string; name: string; description: string | null; enabled: boolean; nodeCount: number }
 type Node = { id: string; name: string; status: string; nodePoolId: string | null }
@@ -11,6 +14,11 @@ const description = ref('')
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
+const renameTarget = ref<Pool | null>(null)
+const nextName = ref('')
+const columns = [{ key: 'name', label: '节点池', sortable: true, filterable: true },
+  { key: 'description', label: '说明' }, { key: 'nodeCount', label: '节点数', sortable: true },
+  { key: 'enabled', label: '状态', format: (value: unknown) => value ? '启用' : '停用' }]
 
 async function call<T>(path: string, method = 'GET', data?: object): Promise<T> {
   const response = await fetch(`/api/node-management/${path}`, { method,
@@ -42,13 +50,14 @@ async function update(pool: Pool, enabled: boolean) {
   await run(async () => { await call(`pools/${pool.id}`, 'PUT', { name: pool.name, description: pool.description, enabled }) },
     enabled ? '节点池已启用。' : '节点池已停用；其中节点不再参与新任务调度。')
 }
-async function rename(pool: Pool) {
-  const next = window.prompt('节点池名称', pool.name)
-  if (!next || next.trim() === pool.name) return
-  await run(async () => { await call(`pools/${pool.id}`, 'PUT', { name: next.trim(), description: pool.description, enabled: pool.enabled }) }, '节点池已重命名。')
+async function rename() {
+  const pool = renameTarget.value
+  if (!pool || !nextName.value.trim() || nextName.value.trim() === pool.name) { renameTarget.value = null; return }
+  await run(async () => { await call(`pools/${pool.id}`, 'PUT', { name: nextName.value.trim(), description: pool.description, enabled: pool.enabled }) }, '节点池已重命名。')
+  if (!error.value) renameTarget.value = null
 }
+function edit(pool: Pool) { renameTarget.value = pool; nextName.value = pool.name }
 async function remove(pool: Pool) {
-  if (!window.confirm(`删除空节点池「${pool.name}」？`)) return
   await run(async () => { await call(`pools/${pool.id}`, 'DELETE') }, '节点池已删除。')
 }
 async function assign(node: Node, poolId: string) {
@@ -63,7 +72,8 @@ onMounted(load)
     <p class="muted">停用节点池会阻止其中节点接收新任务；进行中的执行继续完成。节点归属由管理员设置，Agent 重连不会覆盖。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="muted" role="status">{{ notice }}</p>
     <form @submit.prevent="create"><div class="resource-grid"><label>节点池名称<input v-model.trim="name" required maxlength="128" /></label><label>说明<input v-model.trim="description" /></label></div><button class="action-btn primary" :disabled="busy">创建节点池</button></form>
-    <div class="table-wrap"><table><thead><tr><th>节点池</th><th>节点数</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="pool in pools" :key="pool.id"><td>{{ pool.name }}<small>{{ pool.description || pool.id }}</small></td><td>{{ pool.nodeCount }}</td><td>{{ pool.enabled ? '启用' : '停用' }}</td><td><button class="action-btn" :disabled="busy" @click="rename(pool)">重命名</button><button class="action-btn" :disabled="busy" @click="update(pool, !pool.enabled)">{{ pool.enabled ? '停用' : '启用' }}</button><button class="action-btn" :disabled="busy || pool.nodeCount > 0" @click="remove(pool)">删除</button></td></tr></tbody></table><p v-if="!pools.length" class="muted empty">暂无节点池。</p></div>
+    <DataTable :rows="pools" :columns="columns" :loading="busy" empty-label="暂无节点池。" filename="node-pools.csv" @refresh="load"><template #actions="{ row }"><button class="action-btn" :disabled="busy" @click="edit(row as Pool)">重命名</button><button class="action-btn" :disabled="busy" @click="update(row as Pool, !(row as Pool).enabled)">{{ (row as Pool).enabled ? '停用' : '启用' }}</button><ConfirmAction label="删除" title="删除节点池" :message="`删除空节点池「${(row as Pool).name}」？`" :disabled="busy || (row as Pool).nodeCount > 0" @confirmed="remove(row as Pool)" /></template></DataTable>
+    <FormDialog :open="!!renameTarget" title="重命名节点池" :busy="busy" @close="renameTarget = null" @submit="rename"><label>节点池名称<input v-model.trim="nextName" required maxlength="128" /></label></FormDialog>
     <h3>节点归属</h3>
     <div class="table-wrap"><table><thead><tr><th>节点</th><th>状态</th><th>所属节点池</th></tr></thead><tbody><tr v-for="node in nodes" :key="node.id"><td>{{ node.name }}<small>{{ node.id }}</small></td><td>{{ node.status }}</td><td><select :aria-label="`节点池归属 ${node.id}`" :value="node.nodePoolId || ''" :disabled="busy" @change="assign(node, ($event.target as HTMLSelectElement).value)"><option value="">不指定节点池</option><option v-for="pool in pools" :key="pool.id" :value="pool.id" :disabled="!pool.enabled && pool.id !== node.nodePoolId">{{ pool.name }}{{ pool.enabled ? '' : '（停用）' }}</option></select></td></tr></tbody></table></div>
   </section>

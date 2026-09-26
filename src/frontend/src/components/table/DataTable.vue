@@ -46,7 +46,7 @@ function exportCsv() {
 
 <template>
   <section class="data-table" :data-density="density" :aria-busy="loading">
-    <div class="data-table-toolbar actions"><button class="action-btn" type="button" :disabled="loading" @click="emit('refresh')">{{ t('common.refresh') }}</button><button class="action-btn" type="button" :disabled="!filtered.length" @click="exportCsv">{{ t('common.export') }}</button>
+    <div class="data-table-toolbar actions"><button class="action-btn" type="button" :disabled="loading" @click="emit('refresh')">{{ t('common.refreshTable') }}</button><button class="action-btn" type="button" :disabled="!filtered.length" @click="exportCsv">{{ t('common.export') }}</button>
       <button v-if="selectable && selected.length" class="action-btn" type="button" @click="emit('bulkAction', selected)">{{ t('common.bulk') }}（{{ selected.length }}）</button>
       <details><summary class="action-btn">{{ t('common.columns') }}</summary><div class="column-picker"><label v-for="column in columns" :key="column.key"><input type="checkbox" :checked="!hidden.includes(column.key)" @change="hidden = hidden.includes(column.key) ? hidden.filter(key => key !== column.key) : [...hidden, column.key]" />{{ column.label }}</label></div></details>
     </div>

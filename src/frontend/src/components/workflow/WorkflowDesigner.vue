@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import WorkflowCanvas from './WorkflowCanvas.vue'
 
 type Resource = { id: string; code: string; name: string; enabled?: boolean }
 type Workflow = { id: string; name: string; businessFunctionId: string; status: string }
@@ -140,6 +141,7 @@ onMounted(async () => {
       <label>审批门禁<select :value="parsedDefinition?.requiresApproval ? 'true' : 'false'" @change="updateDefinition({ requiresApproval: ($event.target as HTMLSelectElement).value === 'true' })"><option value="false">按风险级别自动判定</option><option value="true">必须审批</option></select></label></div>
       <div class="actions"><button v-for="type in stepTypes" :key="type" type="button" class="action-btn" @click="addStep(type)">＋ {{ type }}</button></div>
       <p class="muted">步骤：{{ steps.map(step => `${step.id || '未命名'} (${step.type || '未知'})`).join(' → ') || '无' }}。编辑下方 JSON 可配置 selector、参数、嵌套步骤、timeoutMs 和 retryCount。</p>
+      <WorkflowCanvas :steps="steps" />
       <label>Definition JSON<textarea v-model="definitionJson" class="workflow-json" spellcheck="false" /></label>
       <div class="actions"><button type="button" class="action-btn primary" :disabled="busy || !parsedDefinition" @click="publishVersion">创建并发布新版本</button><button v-if="currentWorkflow?.status === 'Published'" type="button" class="action-btn" :disabled="busy" @click="disableWorkflow">停用 Workflow</button></div>
     </template>
