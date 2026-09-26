@@ -17,7 +17,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByRole('button', { name: '人工介入' }).click()
   await expect(page.getByRole('button', { name: '创建人工介入' })).toBeVisible()
   await page.getByRole('button', { name: '审计记录' }).click()
-  await expect(page.getByRole('heading', { name: '审计记录' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '审计记录', level: 2 })).toBeVisible()
   await page.getByRole('button', { name: 'AI 工作台' }).click()
   const token = (await (await request.post(`${api}/api/auth/login`, {
     data: { userName: 'admin', password }
