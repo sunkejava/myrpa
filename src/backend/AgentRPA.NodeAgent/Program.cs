@@ -9,7 +9,7 @@ builder.Services.Configure<NodeAgentOptions>(builder.Configuration.GetSection("N
 builder.Services.AddHttpClient("AgentRPA.Server", client =>
 {
     client.BaseAddress = new Uri(serverUrl.TrimEnd('/') + "/");
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromMinutes(5);
 });
 builder.Services.AddSingleton<IWorkflowSiteAdapter, DirectWorkflowSiteAdapter>();
 builder.Services.AddSingleton<IWorkflowSiteAdapter, QingdaoSocialSecuritySiteAdapter>();
