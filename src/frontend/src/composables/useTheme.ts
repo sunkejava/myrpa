@@ -5,12 +5,12 @@ export type ThemeOptions = {
   card: 'raised' | 'flat' | 'outlined'; radius: number; shadow: number;
   density: 'compact' | 'standard' | 'comfortable'; motion: boolean; tech: 'none' | 'subtle' | 'strong'
 }
-const defaults: ThemeOptions = { mode: 'dark', primary: '#63a9ff', secondary: '#5ec6b1', background: '',
-  card: 'raised', radius: 12, shadow: 8, density: 'standard', motion: true, tech: 'subtle' }
+const defaults: ThemeOptions = { mode: 'light', primary: '#2563eb', secondary: '#0891b2', background: '',
+  card: 'raised', radius: 10, shadow: 4, density: 'standard', motion: true, tech: 'subtle' }
 function restored(): ThemeOptions {
   try {
     const stored = JSON.parse(localStorage.getItem('agentrpa-theme-options') || '{}') as Partial<ThemeOptions>
-    return { ...defaults, ...stored, mode: stored.mode || (localStorage.getItem('agentrpa-theme') === 'light' ? 'light' : 'dark') }
+    return { ...defaults, ...stored, mode: stored.mode || (localStorage.getItem('agentrpa-theme') === 'dark' ? 'dark' : 'light') }
   } catch { return { ...defaults } }
 }
 const settings = reactive<ThemeOptions>(restored())

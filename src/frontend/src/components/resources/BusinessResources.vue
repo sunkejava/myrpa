@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useLocale } from '../../locales'
 import { resourceRequest, type City, type Region, type BusinessSystem as System, type BusinessFunction } from '../../api/modules/resources'
 import DataTable from '../table/DataTable.vue'
+import FormDialog from '../common/FormDialog.vue'
 
 const props = defineProps<{ token: string; admin: boolean }>()
 const { t } = useLocale()
@@ -21,6 +22,7 @@ const newCode = ref('')
 const newName = ref('')
 const error = ref('')
 const busy = ref(false)
+const creating = ref(false)
 type RegionRow = Region & { kind: string; scope: 'countries' | 'provinces' }
 const regionRows = computed<RegionRow[]>(() => [
   ...countries.value.map(item => ({ ...item, kind: t('resources.country'), scope: 'countries' as const })),
@@ -127,6 +129,7 @@ async function create() {
     }
     newCode.value = ''
     newName.value = ''
+    creating.value = false
   } catch (e) { error.value = e instanceof Error ? e.message : t('resources.createFailed') }
   finally { busy.value = false }
 }
@@ -134,9 +137,8 @@ onMounted(refreshRegions)
 </script>
 
 <template>
+  <div class="page-toolbar"><div><h2>{{ t('resources.title') }}</h2><p class="muted">{{ t('resources.help') }}</p></div><button v-if="admin" class="action-btn primary" @click="creating = true">{{ t('resources.createResource') }}</button></div>
   <section class="panel form-panel resource-panel">
-    <h2>{{ t('resources.title') }}</h2>
-    <p class="muted">{{ t('resources.help') }}</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div class="resource-grid">
       <label>{{ t('resources.country') }}<select :value="countryId" @change="chooseCountry(($event.target as HTMLSelectElement).value)"><option value="">{{ t('resources.chooseCountry') }}</option><option v-for="item in countries" :key="item.id" :value="item.id">{{ item.name }} ({{ item.code }}){{ item.enabled ? '' : t('resources.disabledSuffix') }}</option></select></label>
@@ -144,15 +146,13 @@ onMounted(refreshRegions)
       <label>{{ t('resources.city') }}<select :value="cityId" @change="chooseCity(($event.target as HTMLSelectElement).value)"><option value="">{{ t('resources.chooseCity') }}</option><option v-for="city in cities.filter(x => !provinceId || x.provinceId === provinceId)" :key="city.id" :value="city.id">{{ city.name }} ({{ city.code }}){{ city.enabled ? '' : t('resources.disabledSuffix') }}</option></select></label>
       <label>{{ t('resources.system') }}<select :value="systemId" :disabled="!cityId" @change="chooseSystem(($event.target as HTMLSelectElement).value)"><option value="">{{ t('resources.chooseSystem') }}</option><option v-for="system in systems" :key="system.id" :value="system.id">{{ system.name }} ({{ system.code }}){{ system.enabled ? '' : t('resources.disabledSuffix') }}</option></select></label>
     </div>
-    <div v-if="admin"><h3>{{ t('resources.regionStatus') }}</h3><DataTable :rows="regionRows" :columns="regionColumns" :loading="busy" :empty-label="t('common.empty')" filename="regions.csv" @refresh="refreshRegions"><template #actions="{ row }"><button type="button" class="action-btn" :disabled="busy" @click="setEnabled(`${(row as RegionRow).scope}/${(row as RegionRow).id}/enabled`, !(row as RegionRow).enabled)">{{ (row as RegionRow).enabled ? t('resources.disabled') : t('resources.enabled') }}</button></template></DataTable></div>
     <div v-if="cityId" class="table-wrap"><h3>{{ t('resources.district') }}</h3><table><thead><tr><th>{{ t('resources.code') }}</th><th>{{ t('resources.name') }}</th><th>{{ t('resources.status') }}</th><th v-if="admin">{{ t('resources.actions') }}</th></tr></thead><tbody><tr v-for="item in districts" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.enabled ? t('resources.enabled') : t('resources.disabled') }}</td><td v-if="admin"><button type="button" :disabled="busy" @click="setEnabled(`districts/${item.id}/enabled`, !item.enabled)">{{ item.enabled ? t('resources.disabled') : t('resources.enabled') }}</button></td></tr></tbody></table><p v-if="!districts.length" class="muted empty">{{ t('resources.emptyDistricts') }}</p></div>
     <div v-if="systemId" class="table-wrap"><table><thead><tr><th>{{ t('resources.functionCode') }}</th><th>{{ t('resources.functionName') }}</th></tr></thead><tbody><tr v-for="item in functions" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td></tr></tbody></table><p v-if="!functions.length" class="muted empty">{{ t('resources.emptyFunctions') }}</p></div>
-    <form v-if="admin" @submit.prevent="create">
-      <h3>{{ t('resources.createResource') }}</h3>
+  </section>
+  <section v-if="admin" class="panel"><div class="panel-title"><h3>{{ t('resources.regionStatus') }}</h3></div><DataTable :rows="regionRows" :columns="regionColumns" :loading="busy" :empty-label="t('common.empty')" filename="regions.csv" @refresh="refreshRegions"><template #actions="{ row }"><button type="button" class="action-btn" :disabled="busy" @click="setEnabled(`${(row as RegionRow).scope}/${(row as RegionRow).id}/enabled`, !(row as RegionRow).enabled)">{{ (row as RegionRow).enabled ? t('resources.disabled') : t('resources.enabled') }}</button></template></DataTable></section>
+  <FormDialog :open="creating" :title="t('resources.createResource')" :submit-label="t('resources.create')" :busy="busy" @close="creating = false" @submit="create">
       <label>{{ t('resources.resourceType') }}<select v-model="target"><option value="country">{{ t('resources.country') }}</option><option value="province">{{ t('resources.province') }}</option><option value="city">{{ t('resources.city') }}</option><option value="district">{{ t('resources.district') }}</option><option value="system">{{ t('resources.businessSystem') }}</option><option value="function">{{ t('resources.businessFunction') }}</option></select></label>
       <label>{{ t('resources.code') }}<input v-model="newCode" required maxlength="64" /></label>
       <label>{{ t('resources.name') }}<input v-model="newName" required maxlength="128" /></label>
-      <button class="action-btn primary" :disabled="busy">{{ t('resources.create') }}</button>
-    </form>
-  </section>
+    </FormDialog>
 </template>

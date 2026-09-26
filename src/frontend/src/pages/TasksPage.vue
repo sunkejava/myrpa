@@ -32,8 +32,13 @@ onMounted(loadTasks)
 
 <template>
   <p v-if="error" class="error" role="alert">{{ error }}</p>
-  <div class="panel-title"><span>{{ t('task.myTasks') }}</span><button class="action-btn" @click="loadTasks">{{ t('common.refresh') }}</button></div>
-  <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" :cancel="cancelTask" :inspect="id => selectedTaskId = id" />
-  <TaskDetail v-if="selectedTaskId" :key="selectedTaskId" :task-id="selectedTaskId" :token="token" />
-  <p v-if="tasks.length === 0" class="muted empty">{{ t('task.empty') }}</p>
+  <template v-if="selectedTaskId">
+    <div class="page-toolbar"><button class="action-btn" @click="selectedTaskId = ''">{{ t('task.backToList') }}</button><span class="muted">{{ t('task.details') }}</span></div>
+    <TaskDetail :key="selectedTaskId" :task-id="selectedTaskId" :token="token" />
+  </template>
+  <template v-else>
+    <div class="page-toolbar"><div><h2>{{ t('task.myTasks') }}</h2><p class="muted">{{ t('task.queue') }}</p></div><button class="action-btn" @click="loadTasks">{{ t('common.refresh') }}</button></div>
+    <TaskOverview :tasks="taskRows" :queue="queueTask" :retry="retryTask" :cancel="cancelTask" :inspect="id => selectedTaskId = id" />
+    <p v-if="tasks.length === 0" class="muted empty">{{ t('task.empty') }}</p>
+  </template>
 </template>

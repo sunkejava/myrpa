@@ -51,11 +51,13 @@ test('login, resource setup, natural language planning and task submission', asy
 
   await page.getByRole('button', { name: '城市与系统' }).click()
   await expect(page.getByRole('option', { name: /青岛市/ })).toBeAttached()
+  await page.getByRole('button', { name: '新增资源' }).click()
   await page.getByLabel('资源类型').selectOption('country')
   await page.getByLabel('编码').fill('CN')
   await page.getByLabel('名称').fill('中国')
   await page.getByRole('button', { name: '创建', exact: true }).click()
   await page.locator('.resource-grid select').first().selectOption({ label: '中国 (CN)' })
+  await page.getByRole('button', { name: '新增资源' }).click()
   await page.getByLabel('资源类型').selectOption('province')
   await page.getByLabel('编码').fill('SD')
   await page.getByLabel('名称').fill('山东省')
@@ -95,6 +97,9 @@ test('login, resource setup, natural language planning and task submission', asy
   await expect(page.getByRole('progressbar').first()).toBeVisible()
   await page.getByRole('button', { name: '查看详情' }).first().click()
   await expect(page.getByText('任务详情', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: '返回任务列表' })).toBeVisible()
+  await page.getByRole('button', { name: '返回任务列表' }).click()
+  await expect(page.getByRole('button', { name: '查看详情' }).first()).toBeVisible()
   const riskyWorkflow = await (await request.post(`${api}/api/workflows`, {
     headers, data: { businessFunctionId: businessFunction.id, name: '审批演示', description: '高风险审批' }
   })).json() as { id: string }
