@@ -41,7 +41,7 @@
 | `Select` | `selector`, `value` | 按 HTML `option` 的 value 选择；不是自定义下拉框的通用方案。 |
 | `Wait` | `milliseconds`（默认 500） | 延迟 0–120000 毫秒，仍受步骤超时约束。 |
 | `WaitForElement` | `selector`, 可选 `timeout` | 等待元素出现；适合查询结果加载。 |
-| `Extract` | `selector`, `output` | 将文本保存为结构化结果字段，并允许后续步骤使用 `{{字段名}}`；结果只在任务所属用户的任务详情中返回，不写入执行进度日志。单字段最多 16384 字符。 |
+| `Extract` | `selector`, `output` | 将文本保存为结构化结果字段，并允许后续步骤使用 `{{字段名}}`；结果只在任务所属用户的任务详情中返回，不写入执行进度日志。单字段最多 16384 字符。输出字段不能覆盖任务参数或受控的 `systemBaseUrl`。 |
 | `Assert` | `selector`, `contains` | 元素文本不包含期望值时失败；仅作为只读断言。 |
 | `Screenshot` | `path`（默认 `artifacts/{id}.png`）, `fullPage`（默认 true） | 节点生成截图后上传到服务端产物存储，校验 SHA256 和长度；任务所属用户可下载，单文件最大 50 MiB。 |
 | `Download` | `selector`, `path`, 可选 `timeout` | 等待点击产生浏览器下载，并保存到节点文件路径；属于有副作用的步骤，禁止自动重试。 |

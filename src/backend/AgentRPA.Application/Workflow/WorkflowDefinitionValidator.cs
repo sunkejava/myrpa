@@ -35,13 +35,16 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 (risk.ValueKind != JsonValueKind.String || !new[] { "Low", "Medium", "High", "Critical" }.Contains(risk.GetString(), StringComparer.OrdinalIgnoreCase)))
                 errors.Add("riskLevel 必须是 Low、Medium、High 或 Critical。");
             if (!root.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array) return [.. errors, "Workflow 必须包含 steps 数组。"];
-            ValidateSteps(steps, errors, "", 0);
+            var reservedOutputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "systemBaseUrl" };
+            if (root.TryGetProperty("parameters", out var parameters) && parameters.ValueKind == JsonValueKind.Object)
+                foreach (var parameter in parameters.EnumerateObject()) reservedOutputs.Add(parameter.Name);
+            ValidateSteps(steps, errors, "", 0, reservedOutputs);
             return errors;
         }
         catch (JsonException ex) { return [$"Workflow JSON 无效：{ex.Message}"]; }
     }
 
-    private static void ValidateSteps(JsonElement steps, List<string> errors, string path, int depth)
+    private static void ValidateSteps(JsonElement steps, List<string> errors, string path, int depth, IReadOnlySet<string> reservedOutputs)
     {
         if (depth > 8 || steps.GetArrayLength() > 1000) { errors.Add("Workflow 嵌套深度或步骤数超过限制。"); return; }
         var index = 0;
@@ -84,6 +87,8 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 (!HasString(config, "output") || config.GetProperty("output").GetString() is not { } output ||
                  output.Length > 64 || !char.IsLetter(output[0]) || output.Any(c => !char.IsLetterOrDigit(c) && c != '_')))
                 errors.Add($"{location} 的 config.output 必须是以字母开头、最多 64 位的字段名。");
+            else if (stepType == WorkflowStepType.Extract && reservedOutputs.Contains(config.GetProperty("output").GetString()!))
+                errors.Add($"{location} 的 config.output 不能覆盖任务参数或 systemBaseUrl。");
             if (stepType == WorkflowStepType.HumanTask && config.TryGetProperty("interventionType", out var interventionType) &&
                 (interventionType.ValueKind != JsonValueKind.String ||
                  !new[] { "Captcha", "FaceAuthentication", "UKeyConfirmation", "ManualApproval" }.Contains(interventionType.GetString(), StringComparer.OrdinalIgnoreCase)))
@@ -101,7 +106,7 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             {
                 if (!config.TryGetProperty(key, out var nested)) continue;
                 if (nested.ValueKind != JsonValueKind.Array) { errors.Add($"{location}.{key} 必须是 Step 数组。"); continue; }
-                ValidateSteps(nested, errors, $"{location}.{key}.", depth + 1);
+                ValidateSteps(nested, errors, $"{location}.{key}.", depth + 1, reservedOutputs);
             }
         }
         if (steps.GetArrayLength() == 0) errors.Add("Workflow 至少需要一个 Step。");

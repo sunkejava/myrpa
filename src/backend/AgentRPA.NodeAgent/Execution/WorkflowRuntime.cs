@@ -47,15 +47,17 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
         var page = await browser.NewPageAsync();
         var variables = parameters.ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+        var protectedNames = parameters.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        protectedNames.Add("systemBaseUrl");
         try
         {
-            await ExecuteStepsAsync(page, steps, variables, report, cancellationToken, adapter, 0);
+            await ExecuteStepsAsync(page, steps, variables, protectedNames, report, cancellationToken, adapter, 0);
             await report(new("Succeeded", null, 100, "Workflow 执行完成。"));
         }
         finally { await browser.CloseAsync(); }
     }
 
-    private static async Task ExecuteStepsAsync(IPage page, IReadOnlyList<JsonElement> steps, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, int depth)
+    private static async Task ExecuteStepsAsync(IPage page, IReadOnlyList<JsonElement> steps, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, int depth)
     {
         if (depth > 8) throw new InvalidOperationException("Workflow 嵌套深度超过安全限制。");
         for (var index = 0; index < steps.Count; index++)
@@ -100,6 +102,7 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
                 case "extract":
                     var value = await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Extract 缺少 selector。"), parameters))).InnerTextAsync();
                     var outputKey = GetString(config, "output") ?? throw new InvalidOperationException("Extract 缺少 config.output。");
+                    if (protectedNames.Contains(outputKey)) throw new InvalidOperationException("提取结果不能覆盖任务参数或系统地址。");
                     if (value.Length > 16_384) throw new InvalidOperationException("提取结果超过 16384 字符限制。");
                     if (parameters is not Dictionary<string, string?> variables) throw new InvalidOperationException("Workflow 变量上下文无效。");
                     variables[outputKey] = value;
@@ -109,11 +112,11 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
                     await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Upload 缺少 selector。"), parameters))).SetInputFilesAsync(uploadPath);
                     if (File.Exists(uploadPath)) await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已完成文件上传", await BuildArtifactAsync("Upload", uploadPath, null)));
                     break;
-                case "condition": await ExecuteConditionAsync(page, config, parameters, report, cancellationToken, adapter, depth); break;
-                case "loop": await ExecuteLoopAsync(page, config, parameters, report, cancellationToken, adapter, depth); break;
+                case "condition": await ExecuteConditionAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, depth); break;
+                case "loop": await ExecuteLoopAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, depth); break;
                 case "subworkflow":
                     var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-                    await ExecuteStepsAsync(page, nested, parameters, report, cancellationToken, adapter, depth + 1); break;
+                    await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, depth + 1); break;
                 case "end": return;
                 case "script": throw new InvalidOperationException("Script Step 默认被禁止，必须通过受控 Script Provider 执行。 ");
                 case "humantask":
@@ -142,7 +145,7 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         }
     }
 
-    private static async Task ExecuteConditionAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, int depth)
+    private static async Task ExecuteConditionAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, int depth)
     {
         var selector = adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Condition 缺少 selector。"), parameters));
         var actual = await page.Locator(selector).InnerTextAsync();
@@ -150,14 +153,14 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         var matched = actual.Contains(expected, StringComparison.Ordinal);
         var property = matched ? "then" : "else";
         if (config.TryGetProperty(property, out var branch) && branch.ValueKind == JsonValueKind.Array)
-            await ExecuteStepsAsync(page, branch.EnumerateArray().ToArray(), parameters, report, cancellationToken, adapter, depth + 1);
+            await ExecuteStepsAsync(page, branch.EnumerateArray().ToArray(), parameters, protectedNames, report, cancellationToken, adapter, depth + 1);
     }
 
-    private static async Task ExecuteLoopAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, int depth)
+    private static async Task ExecuteLoopAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, int depth)
     {
         var count = Math.Clamp(GetInt(config, "count") ?? 1, 0, 1000);
         var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, report, cancellationToken, adapter, depth + 1); }
+        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, depth + 1); }
     }
 
     private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string target, int timeoutMs, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter)

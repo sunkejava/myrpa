@@ -17,6 +17,16 @@ public sealed class WorkflowDefinitionValidatorTests
         Assert.Contains(errors, x => x.Contains("type", StringComparison.OrdinalIgnoreCase)); Assert.Contains(errors, x => x.Contains("required", StringComparison.OrdinalIgnoreCase));
     }
     [Fact] public void Valid_parameter_schema_is_accepted() => Assert.Empty(_validator.Validate("{\"parameters\":{\"employeeId\":{\"type\":\"string\",\"required\":true,\"sensitive\":false}},\"steps\":[{\"type\":\"End\"}]}"));
+    [Fact] public void Extract_cannot_overwrite_system_base_url()
+    {
+        const string definition = """{"steps":[{"type":"Extract","config":{"selector":"#url","output":"SystemBaseUrl"}}]}""";
+        Assert.Contains(_validator.Validate(definition), x => x.Contains("systemBaseUrl", StringComparison.OrdinalIgnoreCase));
+    }
+    [Fact] public void Nested_extract_cannot_overwrite_declared_task_parameter()
+    {
+        const string definition = """{"parameters":{"personId":{"type":"string"}},"steps":[{"type":"Loop","config":{"steps":[{"type":"Extract","config":{"selector":"#id","output":"PersonId"}}]}}]}""";
+        Assert.Contains(_validator.Validate(definition), x => x.Contains("不能覆盖任务参数", StringComparison.Ordinal));
+    }
     [Fact] public void Unsupported_nested_action_cannot_be_published()
     {
         const string definition = """{"steps":[{"type":"Condition","config":{"then":[{"type":"Click","requiredAction":"SuperAdmin","config":{"selector":"#submit"}}]}}]}""";
