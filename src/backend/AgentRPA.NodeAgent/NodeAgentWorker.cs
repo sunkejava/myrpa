@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AgentRPA.Application.Abstractions;
 
 namespace AgentRPA.NodeAgent;
 
@@ -30,6 +31,7 @@ public sealed class NodeAgentWorker(
     IHttpClientFactory httpClientFactory,
     IOptions<NodeAgentOptions> options,
     IWorkflowRuntime runtime,
+    IHardwareCredentialProvider hardwareProvider,
     ILogger<NodeAgentWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> executions = new();
@@ -168,7 +170,15 @@ public sealed class NodeAgentWorker(
         {
             if (string.IsNullOrWhiteSpace(config.RegistrationKey)) throw new InvalidOperationException("NodeAgent:RegistrationKey 未配置，拒绝进行节点注册。");
             var client = httpClientFactory.CreateClient("AgentRPA.Server");
-            var request = new RegisterNodeRequest(config.AgentKey, config.Name, config.NodeKind, config.OsPlatform, config.Architecture, config.AgentVersion, config.NetworkZone, config.NodePoolId, config.Capabilities, config.WorkerSlots);
+            var capabilities = config.Capabilities.Where(x => !x.Code.StartsWith("Certificate:", StringComparison.OrdinalIgnoreCase)).ToList();
+            try
+            {
+                foreach (var device in await hardwareProvider.DiscoverAsync(cancellationToken))
+                    if (device.DeviceId.StartsWith("cert:", StringComparison.OrdinalIgnoreCase))
+                        capabilities.Add(new NodeCapabilityDto("Certificate:" + device.DeviceId[5..]));
+            }
+            catch (Exception ex) { logger.LogWarning(ex, "Windows certificate discovery failed; certificate capability will not be advertised"); }
+            var request = new RegisterNodeRequest(config.AgentKey, config.Name, config.NodeKind, config.OsPlatform, config.Architecture, config.AgentVersion, config.NetworkZone, config.NodePoolId, capabilities, config.WorkerSlots);
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/nodes/register") { Content = JsonContent.Create(request) };
             httpRequest.Headers.Add("X-Node-Registration-Key", config.RegistrationKey);
             using var response = await client.SendAsync(httpRequest, cancellationToken);

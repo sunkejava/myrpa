@@ -27,6 +27,14 @@ public sealed class WorkflowDefinitionValidatorTests
         const string definition = """{"parameters":{"personId":{"type":"string"}},"steps":[{"type":"Loop","config":{"steps":[{"type":"Extract","config":{"selector":"#id","output":"PersonId"}}]}}]}""";
         Assert.Contains(_validator.Validate(definition), x => x.Contains("不能覆盖任务参数", StringComparison.Ordinal));
     }
+    [Fact] public void Certificate_signing_requires_task_approval_and_matching_node_capability()
+    {
+        const string thumbprint = "0123456789ABCDEF0123456789ABCDEF01234567";
+        const string step = """{"type":"UKeySign","config":{"certificateThumbprint":"0123456789ABCDEF0123456789ABCDEF01234567","digestSelector":"#digest","signatureSelector":"#signature"}}""";
+        Assert.Contains(_validator.Validate("{\"steps\":[" + step + "]}"), x => x.Contains("审批", StringComparison.Ordinal));
+        Assert.Contains(_validator.Validate("{\"requiresApproval\":true,\"steps\":[" + step + "]}"), x => x.Contains("Certificate:" + thumbprint, StringComparison.Ordinal));
+        Assert.Empty(_validator.Validate("{\"requiresApproval\":true,\"executionRequirement\":{\"requiredCapabilities\":[\"Certificate:" + thumbprint + "\"]},\"steps\":[" + step + "]}"));
+    }
     [Fact] public void Unsupported_nested_action_cannot_be_published()
     {
         const string definition = """{"steps":[{"type":"Condition","config":{"then":[{"type":"Click","requiredAction":"SuperAdmin","config":{"selector":"#submit"}}]}}]}""";

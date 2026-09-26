@@ -14,5 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="../AgentRPA.Application/AgentRPA.Application.csproj" />
     <ProjectReference Include="../AgentRPA.Contracts/AgentRPA.Contracts.csproj" />
+    <ProjectReference Include="../AgentRPA.Infrastructure/AgentRPA.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

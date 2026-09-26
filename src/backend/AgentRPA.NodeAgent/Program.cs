@@ -3,6 +3,8 @@ using AgentRPA.NodeAgent.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AgentRPA.Contracts.Nodes;
+using AgentRPA.Application.Abstractions;
+using AgentRPA.Infrastructure.Hardware;
 
 var builder = Host.CreateApplicationBuilder(args);
 var serverUrl = builder.Configuration["NodeAgent:ServerUrl"] ?? "https://localhost:5001";
@@ -26,5 +28,6 @@ builder.Services.AddSingleton<IWorkflowSiteAdapter, DirectWorkflowSiteAdapter>()
 builder.Services.AddSingleton<IWorkflowSiteAdapter, QingdaoSocialSecuritySiteAdapter>();
 foreach (var adapter in siteAdapters) builder.Services.AddSingleton<IWorkflowSiteAdapter>(adapter);
 builder.Services.AddSingleton<IWorkflowRuntime, PlaywrightWorkflowRuntime>();
+builder.Services.AddSingleton<IHardwareCredentialProvider, WindowsCertificateHardwareProvider>();
 builder.Services.AddHostedService<NodeAgentWorker>();
 await builder.Build().RunAsync();

@@ -21,7 +21,8 @@ const fields: Record<string, { key: string; label: string; hint: string; numeric
   Screenshot: [{ key: 'path', label: '截图路径', hint: 'artifacts/screen.png' }],
   Condition: [{ key: 'selector', label: '判断元素', hint: '[data-testid=status]' }, { key: 'contains', label: '分支匹配文字', hint: '通过' }],
   Loop: [{ key: 'count', label: '重复次数', hint: '1', numeric: true }],
-  HumanTask: [{ key: 'interventionType', label: '介入类型', hint: 'Captcha / UKeyConfirmation / ManualApproval' }, { key: 'title', label: '提示标题', hint: '请插入 UKey 并完成授权' }]
+  HumanTask: [{ key: 'interventionType', label: '介入类型', hint: 'Captcha / UKeyConfirmation / ManualApproval' }, { key: 'title', label: '提示标题', hint: '请插入 UKey 并完成授权' }],
+  UKeySign: [{ key: 'certificateThumbprint', label: '证书指纹', hint: '证书 SHA-1 指纹' }, { key: 'digestSelector', label: '页面 SHA-256 摘要', hint: '@signature.digest' }, { key: 'signatureSelector', label: '签名输入框', hint: '@signature.value' }]
 }
 const simpleFields = computed(() => fields[props.step.type || ''] || [])
 watch(() => props.step, step => { configText.value = JSON.stringify(step.config || {}, null, 2); error.value = '' }, { immediate: true })
@@ -58,6 +59,7 @@ const safeRetry = ['navigate', 'waitforelement', 'assert', 'extract']
     </div>
     <p v-if="step.type === 'Extract'" class="muted">提取结果在任务详情中显示，后续步骤可使用字段名变量引用。</p>
     <p v-if="step.type === 'HumanTask'" class="muted">支持 Captcha、UKeyConfirmation、FaceAuthentication、ManualApproval。任务所有人确认后在原浏览器会话继续。</p>
+    <p v-if="step.type === 'UKeySign'" class="muted">需要任务级审批、Certificate:证书指纹能力，并由用户确认后在 Windows 节点调用证书私钥。</p>
     <template v-if="depth < 8">
       <NestedWorkflowSteps v-if="step.type === 'Condition'" title="条件成立时" :steps="step.config?.then" :depth="depth + 1" @update="updateBranch('then', $event)" />
       <NestedWorkflowSteps v-if="step.type === 'Condition'" title="条件不成立时" :steps="step.config?.else" :depth="depth + 1" @update="updateBranch('else', $event)" />

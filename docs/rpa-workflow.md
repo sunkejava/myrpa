@@ -50,6 +50,7 @@
 | `Loop` | `count`（0–1000）, `steps` 数组 | 将内嵌步骤重复指定次数；不支持基于表格行的自动遍历。 |
 | `SubWorkflow` | `steps` 数组 | 执行本定义中的内联步骤；**尚不支持**按其他 Workflow ID 跨工作流调用。 |
 | `HumanTask` | 可为空；`interventionType` 可选 Captcha、FaceAuthentication、UKeyConfirmation、ManualApproval；`title` 可选 | 报告 `WaitingForHuman`，服务端生成相应类型待处理记录；所有者确认后在**原浏览器会话**继续。该确认流程不执行厂商 UKey 签名，也不提供远端浏览器可视接管或验证码自动识别。 |
+| `UKeySign` | `certificateThumbprint`、`digestSelector`、`signatureSelector` | 必须设置根级 `requiresApproval:true` 和 `executionRequirement.requiredCapabilities` 中的 `Certificate:证书指纹`。用户确认后从网页读取 Base64 编码的 32 字节 SHA-256 摘要，以 Windows 节点证书私钥签名并填回页面；不自动提交。依赖驱动支持交互式授权，尚需目标设备验收。 |
 | `End` | 可为空 | 结束当前级别的步骤数组；作为末尾节点使用。 |
 | `Script` | — | 发布校验会拒绝，受控脚本 Provider 尚未实现。 |
 

@@ -1,7 +1,7 @@
 using AgentRPA.Domain.Common;
 namespace AgentRPA.Domain.Workflow;
 public enum WorkflowStatus { Draft = 0, Published = 1, Disabled = 2 }
-public enum WorkflowStepType { Navigate, Click, Input, Select, Wait, WaitForElement, Extract, Upload, Download, Screenshot, Script, Condition, Loop, SubWorkflow, HumanTask, Assert, End }
+public enum WorkflowStepType { Navigate, Click, Input, Select, Wait, WaitForElement, Extract, Upload, Download, Screenshot, Script, Condition, Loop, SubWorkflow, HumanTask, Assert, End, UKeySign }
 public sealed class Workflow : Entity
 {
     private readonly List<WorkflowVersion> _versions = [];

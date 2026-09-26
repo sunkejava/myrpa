@@ -38,13 +38,19 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             var reservedOutputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "systemBaseUrl" };
             if (root.TryGetProperty("parameters", out var parameters) && parameters.ValueKind == JsonValueKind.Object)
                 foreach (var parameter in parameters.EnumerateObject()) reservedOutputs.Add(parameter.Name);
-            ValidateSteps(steps, errors, "", 0, reservedOutputs);
+            var requiredCapabilities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("executionRequirement", out var executionRequirement) && executionRequirement.ValueKind == JsonValueKind.Object &&
+                executionRequirement.TryGetProperty("requiredCapabilities", out var required) && required.ValueKind == JsonValueKind.Array)
+                foreach (var item in required.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { } capability) requiredCapabilities.Add(capability);
+            var hasApproval = root.TryGetProperty("requiresApproval", out var approvalGate) && approvalGate.ValueKind == JsonValueKind.True;
+            ValidateSteps(steps, errors, "", 0, reservedOutputs, requiredCapabilities, hasApproval);
             return errors;
         }
         catch (JsonException ex) { return [$"Workflow JSON 无效：{ex.Message}"]; }
     }
 
-    private static void ValidateSteps(JsonElement steps, List<string> errors, string path, int depth, IReadOnlySet<string> reservedOutputs)
+    private static void ValidateSteps(JsonElement steps, List<string> errors, string path, int depth, IReadOnlySet<string> reservedOutputs, IReadOnlySet<string> requiredCapabilities, bool hasApproval)
     {
         if (depth > 8 || steps.GetArrayLength() > 1000) { errors.Add("Workflow 嵌套深度或步骤数超过限制。"); return; }
         var index = 0;
@@ -70,7 +76,7 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 (requiredAction.ValueKind != JsonValueKind.String || !WorkflowPermissionPreflight.IsAllowedAction(requiredAction.GetString() ?? string.Empty)))
                 errors.Add($"{location} 的 requiredAction 无效。");
             var hasConfig = step.TryGetProperty("config", out var config) && config.ValueKind == JsonValueKind.Object;
-            if (stepType is WorkflowStepType.Navigate or WorkflowStepType.Click or WorkflowStepType.Input or WorkflowStepType.Select or WorkflowStepType.WaitForElement or WorkflowStepType.Extract or WorkflowStepType.Upload or WorkflowStepType.Assert)
+            if (stepType is WorkflowStepType.Navigate or WorkflowStepType.Click or WorkflowStepType.Input or WorkflowStepType.Select or WorkflowStepType.WaitForElement or WorkflowStepType.Extract or WorkflowStepType.Upload or WorkflowStepType.Assert or WorkflowStepType.UKeySign)
                 if (!hasConfig) errors.Add($"第 {index} 个 {type} Step 缺少 config。");
             if ((stepType is WorkflowStepType.Condition or WorkflowStepType.Loop or WorkflowStepType.SubWorkflow) && !hasConfig)
                 errors.Add($"{location} 缺少嵌套 config。");
@@ -83,6 +89,17 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 errors.Add($"{location} 缺少 config.selector。");
             if (stepType == WorkflowStepType.Upload && !HasString(config, "path"))
                 errors.Add($"{location} 缺少 config.path。");
+            if (stepType == WorkflowStepType.UKeySign)
+            {
+                var thumbprint = HasString(config, "certificateThumbprint") ? config.GetProperty("certificateThumbprint").GetString()! : string.Empty;
+                if (thumbprint.Length is not (40 or 64) || !thumbprint.All(Uri.IsHexDigit))
+                    errors.Add($"{location} 的 certificateThumbprint 必须是证书 SHA-1 或 SHA-256 指纹。");
+                if (!HasString(config, "digestSelector") || !HasString(config, "signatureSelector"))
+                    errors.Add($"{location} 缺少 digestSelector 或 signatureSelector。");
+                if (!hasApproval) errors.Add($"{location} 的 UKeySign 必须要求任务级审批。");
+                if (thumbprint.Length is 40 or 64 && !requiredCapabilities.Contains("Certificate:" + thumbprint))
+                    errors.Add($"{location} 必须声明 Certificate:{thumbprint} 节点能力。");
+            }
             if (stepType == WorkflowStepType.Extract &&
                 (!HasString(config, "output") || config.GetProperty("output").GetString() is not { } output ||
                  output.Length > 64 || !char.IsLetter(output[0]) || output.Any(c => !char.IsLetterOrDigit(c) && c != '_')))
@@ -106,7 +123,7 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             {
                 if (!config.TryGetProperty(key, out var nested)) continue;
                 if (nested.ValueKind != JsonValueKind.Array) { errors.Add($"{location}.{key} 必须是 Step 数组。"); continue; }
-                ValidateSteps(nested, errors, $"{location}.{key}.", depth + 1, reservedOutputs);
+                ValidateSteps(nested, errors, $"{location}.{key}.", depth + 1, reservedOutputs, requiredCapabilities, hasApproval);
             }
         }
         if (steps.GetArrayLength() == 0) errors.Add("Workflow 至少需要一个 Step。");

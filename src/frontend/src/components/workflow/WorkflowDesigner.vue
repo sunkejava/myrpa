@@ -30,7 +30,7 @@ const pendingTemplate = ref<WorkflowTemplate | null>(null)
 type Step = { id?: string; type?: string; config?: Record<string, unknown>; timeoutMs?: number; retryCount?: number; requiredAction?: string }
 const defaultDefinition = () => JSON.stringify({ version: 1, riskLevel: 'Low', requiresApproval: false, steps: [{ id: 'step-1', type: 'End' }] }, null, 2)
 const definitionJson = ref(defaultDefinition())
-const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'SubWorkflow', 'HumanTask', 'Assert', 'End']
+const stepTypes = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Upload', 'Download', 'Screenshot', 'Condition', 'Loop', 'SubWorkflow', 'HumanTask', 'UKeySign', 'Assert', 'End']
 const currentWorkflow = computed(() => workflows.value.find(x => x.id === workflowId.value))
 const parsedDefinition = computed(() => {
   try {

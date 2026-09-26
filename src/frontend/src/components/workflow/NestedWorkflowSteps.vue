@@ -5,7 +5,7 @@ import type { Step } from './WorkflowStepEditor.vue'
 
 const props = defineProps<{ title: string; steps?: unknown; depth: number }>()
 const emit = defineEmits<{ update: [steps: Step[]] }>()
-const types = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Assert', 'Download', 'Upload', 'Screenshot', 'Condition', 'Loop', 'SubWorkflow', 'HumanTask', 'End']
+const types = ['Navigate', 'Click', 'Input', 'Select', 'Wait', 'WaitForElement', 'Extract', 'Assert', 'Download', 'Upload', 'Screenshot', 'Condition', 'Loop', 'SubWorkflow', 'HumanTask', 'UKeySign', 'End']
 const selectedType = ref('WaitForElement')
 const items = computed<Step[]>(() => Array.isArray(props.steps) ? props.steps as Step[] : [])
 
