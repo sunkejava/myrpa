@@ -12,6 +12,36 @@ namespace AgentRPA.Api.Controllers;
 [ApiController, Route("api/executions"), Authorize]
 public sealed class ExecutionEvidenceController(AgentRpaDbContext db, IArtifactStorage artifactStorage) : ControllerBase
 {
+    /// <summary>单次执行的派发、步骤及终态事件，并附带当前租约快照。</summary>
+    [HttpGet("{executionId:guid}/timeline")]
+    public async Task<IActionResult> Timeline(Guid executionId, CancellationToken ct = default)
+    {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId)) return Unauthorized();
+        var execution = await db.Executions.AsNoTracking().Where(x => x.Id == executionId)
+            .Join(db.TaskItems, x => x.TaskItemId, x => x.Id, (x, item) => new { Execution = x, item.TaskId })
+            .Join(db.Tasks, x => x.TaskId, x => x.Id, (x, task) => new { x.Execution, task.SubjectId })
+            .SingleOrDefaultAsync(ct);
+        if (execution is null || execution.SubjectId != subjectId) return NotFound();
+
+        var logs = await db.ExecutionLogs.AsNoTracking().Where(x => x.ExecutionId == executionId)
+            .OrderBy(x => x.Sequence).Select(x => new { x.Sequence, x.Level, x.EventType, x.StepId, x.Message, x.Sensitive, x.CreatedAt })
+            .ToListAsync(ct);
+        var leases = await db.NodeLeases.AsNoTracking().Where(x => x.ExecutionId == executionId).ToListAsync(ct);
+        var lease = leases.OrderBy(x => x.Released).ThenByDescending(x => x.ExpiresAt).FirstOrDefault();
+        return Ok(new
+        {
+            executionId,
+            status = execution.Execution.Status.ToString(),
+            execution.Execution.NodeId,
+            execution.Execution.WorkerSlotId,
+            execution.Execution.Error,
+            execution.Execution.CreatedAt,
+            lease = lease is null ? null : new { lease.NodeId, lease.WorkerSlotId, lease.Released, lease.ExpiresAt, lease.LastHeartbeatAt },
+            events = logs.Select(x => new { x.Sequence, level = x.Level.ToString(), eventType = x.EventType.ToString(), x.StepId,
+                message = x.Sensitive ? "敏感信息已隐藏" : x.Message, x.CreatedAt })
+        });
+    }
+
     /// <summary>按序查看 Step 开始与完成事件；未完成的写入步骤必须先在外部系统人工核验。</summary>
     [HttpGet("{executionId:guid}/checkpoints")]
     public async Task<IActionResult> Checkpoints(Guid executionId, CancellationToken ct = default)

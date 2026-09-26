@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace AgentRPA.Api.Controllers;
 
@@ -98,6 +99,11 @@ public sealed class ExecutionDispatchController(
 
         e.Dispatch(assignment.NodeId, assignment.WorkerSlotId);
         task.Queue();
+        var dispatchSequence = (await db.ExecutionLogs.Where(x => x.ExecutionId == e.Id)
+            .Select(x => (long?)x.Sequence).MaxAsync(ct) ?? -1) + 1;
+        db.ExecutionLogs.Add(new ExecutionLog(e.Id, dispatchSequence, ExecutionLogLevel.Information,
+            ExecutionLogEventType.System, "用户指定节点的派发已完成资源校验。", metadataJson:
+                JsonSerializer.Serialize(new { assignment.NodeId, assignment.WorkerSlotId })));
         await db.SaveChangesAsync(ct);
 
         if (!connections.TryGet(assignment.NodeId, out var cid) || cid is null)
@@ -105,6 +111,8 @@ public sealed class ExecutionDispatchController(
             // 派发瞬间 NodeAgent 掉线：Execution 回到 Pending，租约释放，由后台队列重新调度。
             e.SetStatus(ExecutionStatus.Pending, "NodeAgent 未连接，等待重新调度。");
             task.SetStatus(AgentRPA.Domain.Tasks.TaskStatus.WaitingForResource);
+            db.ExecutionLogs.Add(new ExecutionLog(e.Id, dispatchSequence + 1, ExecutionLogLevel.Warning,
+                ExecutionLogEventType.System, "NodeAgent 未连接，租约已释放，等待重新调度。"));
             await db.SaveChangesAsync(ct);
             await leaseService.ReleaseAsync(assignment.LeaseId, ct);
             return Accepted(new { e.Id, e.Status, message = "NodeAgent 暂时离线，已回到等待资源状态。" });

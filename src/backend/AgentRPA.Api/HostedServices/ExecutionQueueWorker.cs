@@ -5,6 +5,7 @@ using AgentRPA.Application.Permission;
 using AgentRPA.Application.Scheduling;
 using AgentRPA.Contracts.Nodes;
 using AgentRPA.Domain.Tasks;
+using AgentRPA.Domain.Execution;
 using AgentRPA.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -117,12 +118,19 @@ public sealed class ExecutionQueueWorker(IServiceScopeFactory scopes, NodeAgentC
 
             execution.Dispatch(assignment.NodeId, assignment.WorkerSlotId);
             task.Queue();
+            var dispatchSequence = (await db.ExecutionLogs.Where(x => x.ExecutionId == execution.Id)
+                .Select(x => (long?)x.Sequence).MaxAsync(cancellationToken) ?? -1) + 1;
+            db.ExecutionLogs.Add(new ExecutionLog(execution.Id, dispatchSequence, ExecutionLogLevel.Information,
+                ExecutionLogEventType.System, "调度器已分配执行节点和 WorkerSlot。", metadataJson:
+                    JsonSerializer.Serialize(new { assignment.NodeId, assignment.WorkerSlotId })));
             await db.SaveChangesAsync(cancellationToken);
             if (!connections.TryGet(assignment.NodeId, out var connectionId) || connectionId is null)
             {
                 // NodeAgent 在派发瞬间掉线：恢复 TaskItem/Task 的等待状态，释放资源后由下一轮重新选择节点。
                 execution.SetStatus(ExecutionStatus.Pending, "NodeAgent 未连接，等待重新调度。");
                 task.SetStatus(DomainTaskStatus.WaitingForResource);
+                db.ExecutionLogs.Add(new ExecutionLog(execution.Id, dispatchSequence + 1, ExecutionLogLevel.Warning,
+                    ExecutionLogEventType.System, "NodeAgent 未连接，租约已释放，等待重新调度。"));
                 await db.SaveChangesAsync(cancellationToken);
                 await leaseService.ReleaseAsync(assignment.LeaseId, cancellationToken);
                 continue;

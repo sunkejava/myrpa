@@ -127,6 +127,20 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
       ]))
     }
     await verifyTask(task.id)
+    const completed = await (await request.get(`${api}/api/tasks/${task.id}`, { headers: operatorHeaders })).json() as { items: Array<{ executions: Array<{ id: string }> }> }
+    const timelineUrl = `${api}/api/executions/${completed.items[0].executions[0].id}/timeline`
+    const timelineResponse = await request.get(timelineUrl, { headers: operatorHeaders })
+    expect(timelineResponse.ok()).toBeTruthy()
+    const timeline = await timelineResponse.json() as { status: string; nodeId: string; lease: { released: boolean }; events: Array<{ eventType: string; message: string }> }
+    expect(timeline.status).toBe('Succeeded')
+    expect(timeline.nodeId).toBe(node.nodeId)
+    expect(timeline.lease.released).toBeTruthy()
+    expect(timeline.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'System', message: expect.stringContaining('调度器已分配') }),
+      expect.objectContaining({ eventType: 'StepStarted' }),
+      expect.objectContaining({ eventType: 'StepCompleted' })
+    ]))
+    expect((await request.get(timelineUrl, { headers: admin })).status()).toBe(404)
     const mockSession = await request.post(`${api}/mock/qd-social-security/login`, { form: { username: 'demo', password: 'Demo123!' } })
     expect(mockSession.ok()).toBeTruthy()
     const employeeStatusUrl = `${api}/mock/qd-social-security/employees/status?idNumber=110105194912310038`
