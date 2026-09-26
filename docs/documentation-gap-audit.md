@@ -11,7 +11,7 @@
 | `agent-task-flow.md` | 自然语言规划、权限检查、任务提交和队列 | 计划版本持久化、多轮澄清、业务级结构化结果与跨批次校验 |
 | `permission-model.md` | 精确城市/系统/功能 Allow/Deny、节点动作预检、任务级审批 | 跨层级授权继承、租户边界、逐步和批量审批 |
 | `node-scheduling.md` | 节点注册、能力和槽位匹配、租约、离线监测 | 所有系统/任务约束合并、跨区域大规模调度、高可用恢复 |
-| `integration-capabilities.md` | OpenAI 兼容模型、一次性 QR 令牌、验证码/UKey 类型人工确认及恢复 | 厂商 UKey 签名/验证码 Provider、人脸接管、通知推送和凭据托管 |
+| `integration-capabilities.md` | OpenAI 兼容模型、一次性 QR 令牌、验证码/UKey 类型人工确认及恢复；Windows 证书型 RSA/ECDSA 摘要签名和获批后 UKeySign 工作流步骤 | 厂商 UKey SDK/设备验收、验证码 Provider 运行时接入、人脸接管、通知推送和凭据托管 |
 | `security.md` | JWT、角色校验、部分脱敏、执行节点身份检查 | mTLS/轮换、机密管理、跨客户数据隔离、数据生命周期策略验收 |
 | `ui-requirements.md` | 布局、主题、模块化页面、基础通用表格/表单和工作流预览 | 完整 i18n、逐页组件复用、远程预览、移动交互和键盘操作验收 |
 | `ui-implementation-status.md` | 持续更新的前端验收对照 | 标记“进行中”的条目仍需完成 |
