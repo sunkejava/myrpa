@@ -167,7 +167,7 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await page.getByRole('button', { name: '登录', exact: true }).click()
     const uiNodeKey = `ui-node-${randomUUID()}`
     const uiNode = await request.post(`${api}/api/nodes/register`, { headers: { 'X-Node-Registration-Key': registrationKey },
-      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点' } })
+      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点', capabilities: [{ code: 'Browser:Edge' }] } })
     expect(uiNode.ok()).toBeTruthy()
     const uiNodeId = (await uiNode.json() as { nodeId: string }).nodeId
     await page.getByRole('button', { name: '节点管理' }).click()
@@ -186,13 +186,25 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await page.getByRole('combobox', { name: `节点池归属 ${uiNodeId}` }).selectOption(pool!.id)
     await expect(page.getByRole('status')).toContainText('归属已更新')
     const reRegistered = await request.post(`${api}/api/nodes/register`, { headers: { 'X-Node-Registration-Key': registrationKey },
-      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点' } })
+      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点', capabilities: [{ code: 'Browser:Edge' }] } })
     expect(reRegistered.ok()).toBeTruthy()
     const persistedNode = await (await request.get(`${api}/api/node-management/nodes/${uiNodeId}`, { headers: admin })).json() as { nodePoolId: string }
     expect(persistedNode.nodePoolId).toBe(pool!.id)
     const poolRow = page.locator('table').first().locator('tbody tr').filter({ hasText: poolName })
     await poolRow.getByRole('button', { name: '停用' }).click()
     await expect(poolRow).toContainText('停用')
+    await page.getByRole('button', { name: '节点能力' }).click()
+    await page.getByRole('combobox', { name: '选择执行节点' }).selectOption(uiNodeId)
+    const capabilityRow = page.locator('tr').filter({ hasText: 'Browser:Edge' })
+    await capabilityRow.getByRole('button', { name: '禁用' }).click()
+    await expect(capabilityRow).toContainText('禁用')
+    const capabilityReconnect = await request.post(`${api}/api/nodes/register`, { headers: { 'X-Node-Registration-Key': registrationKey },
+      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点', capabilities: [{ code: 'Browser:Edge' }] } })
+    expect(capabilityReconnect.ok()).toBeTruthy()
+    await page.getByRole('button', { name: '刷新' }).click()
+    await expect(capabilityRow).toContainText('禁用')
+    await capabilityRow.getByRole('button', { name: '启用' }).click()
+    await expect(capabilityRow).toContainText('启用')
     await page.getByRole('button', { name: '节点管理' }).click()
     page.once('dialog', dialog => dialog.accept())
     await uiRow.getByRole('button', { name: '吊销' }).click()

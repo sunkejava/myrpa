@@ -73,6 +73,16 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
         return Ok(new { node.Id, node.NodePoolId });
     }
 
+    [HttpPost("nodes/{id:guid}/capabilities/{capabilityId:guid}/enabled")]
+    public async Task<IActionResult> SetCapabilityEnabled(Guid id, Guid capabilityId, SetNodeCapabilityEnabledRequest request, CancellationToken ct)
+    {
+        var capability = await db.NodeCapabilities.SingleOrDefaultAsync(x => x.Id == capabilityId && x.NodeId == id, ct);
+        if (capability is null) return NotFound();
+        capability.SetEnabled(request.Enabled);
+        await db.SaveChangesAsync(ct);
+        return Ok(new { capability.Id, capability.NodeId, capability.Code, capability.Enabled });
+    }
+
     [HttpPost("slots/{id:guid}/enabled")]
     public async Task<IActionResult> SetSlotEnabled(Guid id, SetWorkerSlotEnabledRequest request, CancellationToken ct)
     {
@@ -92,3 +102,4 @@ public sealed record CreateNodePoolRequest(string Name, string? Description);
 public sealed record UpdateNodePoolRequest(string Name, string? Description, bool Enabled = true);
 public sealed record SetWorkerSlotEnabledRequest(bool Enabled);
 public sealed record SetNodePoolRequest(Guid? PoolId);
+public sealed record SetNodeCapabilityEnabledRequest(bool Enabled);

@@ -51,8 +51,9 @@ public sealed class NodeCapability : Entity
     public bool Enabled { get; private set; } = true;
     public string? MetadataJson { get; private set; }
     public void Refresh(string? version, string? metadataJson)
-    { Version = version; MetadataJson = metadataJson; Enabled = true; }
+    { Version = version; MetadataJson = metadataJson; }
     public void Disable() => Enabled = false;
+    public void SetEnabled(bool enabled) => Enabled = enabled;
 }
 
 /// <summary>节点池，用于按地域、网络、环境等维度组织执行资源。</summary>
