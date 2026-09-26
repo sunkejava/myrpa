@@ -19,7 +19,7 @@
 | `rpa-workflow.md` | 本轮按运行时重写为节点字段、模板展示、版本与使用指南 | 在线逐步调试、跨工作流调用、结构化结果、真实平台适配 |
 | `default-resources-and-workflows.md` | 启动时幂等初始化目录，系统地址注入 Workflow | 完整全国地区库、真实平台地址和可运行流程由实际业务授权决定 |
 | `beijing-medical-query.md` | 示例参数/节点和接入步骤 | 真实页面定位、登录、授权及生产环境验收 |
-| `examples/README.md` 与 `examples/*.json` | 开发模拟站点增减员真实浏览器用例 | 无法作为真实社保系统的可直接使用模板；实际生产凭据和页面适配待完成 |
+| `examples/README.md` 与 `examples/*.json` | 开发模拟站点增减员真实浏览器用例；NodeAgent 支持按本地配置映射目标站点地址与语义选择器 | 无法作为真实社保系统的可直接使用模板；授权测试站点定位、真实登录与业务回执验收待完成 |
 | `windows-development.md` | .NET/Vite 本地启动、8666 代理登录排查 | 真实 Windows 节点/UKey 环境下的最终验收仍需目标机器 |
 | `deployment.md` | Windows/Linux 发布包和下载启动说明 | 多实例、对象存储、数据库与监控的生产部署方案 |
 
