@@ -1,46 +1,53 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import DataTable from '../components/table/DataTable.vue'
+import { nodeRequest, type ManagedNodeDetail } from '../api/modules/nodes'
+import { useLocale } from '../locales'
 
-type Detail = { id: string; name: string; status: string; nodeKind: string; osPlatform: string; architecture: string;
-  networkZone?: string | null; agentVersion?: string | null; lastHeartbeatAt?: string | null;
-  cpuUsage: number | null; memoryUsage: number | null; reportedAvailableSlots: number | null;
-  capabilities: Array<{ id: string; code: string; version?: string | null; enabled: boolean }>;
-  slots: Array<{ id: string; slotName: string; enabled: boolean; executionId?: string | null; leaseExpiresAt?: string | null }>;
-  executionCounts: Array<{ status: string; count: number }>;
-  recentExecutions: Array<{ id: string; taskItemId: string; status: string; createdAt: string; error?: string | null }> }
 const props = defineProps<{ token: string; nodeId: string }>()
-defineEmits<{ back: [] }>()
-const detail = ref<Detail | null>(null)
+const emit = defineEmits<{ back: [] }>()
+const { t } = useLocale()
+const detail = ref<ManagedNodeDetail | null>(null)
+const tab = ref<'overview' | 'capabilities' | 'slots' | 'executions'>('overview')
 const error = ref('')
 const busy = ref(false)
+const capabilities = computed(() => [{ key: 'code', label: t('nodes.capabilities'), sortable: true, filterable: true },
+  { key: 'version', label: t('nodes.version') }, { key: 'enabled', label: t('nodes.status'), format: (value: unknown) => t(value ? 'nodes.enabled' : 'nodes.disabled') }])
+const slots = computed(() => [{ key: 'slotName', label: t('nodes.slots'), sortable: true, filterable: true },
+  { key: 'executionId', label: t('nodes.executionId') },
+  { key: 'leaseExpiresAt', label: t('nodes.lease'), format: (value: unknown) => value ? new Date(String(value)).toLocaleString() : '—' }])
+const executions = computed(() => [{ key: 'createdAt', label: t('nodes.createdAt'), sortable: true, format: (value: unknown) => new Date(String(value)).toLocaleString() },
+  { key: 'id', label: t('nodes.executionId') }, { key: 'status', label: t('nodes.status') }, { key: 'error', label: t('nodes.error') }])
+const counts = computed(() => [{ key: 'status', label: t('nodes.status') }, { key: 'count', label: t('nodes.count') }])
 async function load() {
   busy.value = true; error.value = ''
-  try {
-    const response = await fetch(`/api/node-management/nodes/${props.nodeId}`, { headers: { Authorization: `Bearer ${props.token}` } })
-    if (!response.ok) throw new Error(`节点详情加载失败 (${response.status})`)
-    detail.value = await response.json() as Detail
-  } catch (e) { error.value = e instanceof Error ? e.message : '节点详情加载失败' }
+  try { detail.value = await nodeRequest<ManagedNodeDetail>(props.token, `node-management/nodes/${props.nodeId}`) }
+  catch (e) { error.value = e instanceof Error ? e.message : t('nodes.detailFailed') }
   finally { busy.value = false }
 }
 onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
-    <div class="panel-title"><span>节点详情 · {{ detail?.name || nodeId }}</span><div><button class="action-btn" @click="$emit('back')">返回节点列表</button><button class="action-btn" :disabled="busy" @click="load">刷新</button></div></div>
+  <section class="panel node-detail">
+    <div class="panel-title"><h3>{{ t('nodes.details') }} · {{ detail?.name || nodeId }}</h3><div class="actions"><button class="action-btn" @click="emit('back')">{{ t('nodes.back') }}</button><button class="action-btn" :disabled="busy" @click="load">{{ t('common.refresh') }}</button></div></div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <template v-if="detail">
-      <p class="muted">{{ detail.status }} · {{ detail.nodeKind }} · {{ detail.osPlatform }} / {{ detail.architecture }} · 网络区：{{ detail.networkZone || '默认' }}</p>
-      <p class="muted">Agent 版本：{{ detail.agentVersion || '未上报' }} · 最后心跳：{{ detail.lastHeartbeatAt ? new Date(detail.lastHeartbeatAt).toLocaleString('zh-CN') : '未连接' }}</p>
-      <p class="muted">Agent 进程 CPU：{{ detail.cpuUsage === null ? '未上报' : `${detail.cpuUsage}%` }} · 进程常驻内存：{{ detail.memoryUsage === null ? '未上报' : `${detail.memoryUsage} MiB` }} · 心跳可用槽位：{{ detail.reportedAvailableSlots ?? '未上报' }}</p>
-      <h3>能力</h3>
-      <div class="table-wrap"><table><thead><tr><th>能力</th><th>版本</th><th>状态</th></tr></thead><tbody><tr v-for="capability in detail.capabilities" :key="capability.id"><td>{{ capability.code }}</td><td>{{ capability.version || '—' }}</td><td>{{ capability.enabled ? '启用' : '禁用' }}</td></tr></tbody></table><p v-if="!detail.capabilities.length" class="muted empty">暂无能力。</p></div>
-      <h3>WorkerSlot</h3>
-      <div class="table-wrap"><table><thead><tr><th>槽位</th><th>状态</th><th>执行 ID</th><th>租约到期</th></tr></thead><tbody><tr v-for="slot in detail.slots" :key="slot.id"><td>{{ slot.slotName }}</td><td>{{ slot.executionId ? '执行中' : slot.enabled ? '空闲' : '禁用' }}</td><td>{{ slot.executionId || '—' }}</td><td>{{ slot.leaseExpiresAt ? new Date(slot.leaseExpiresAt).toLocaleString('zh-CN') : '—' }}</td></tr></tbody></table><p v-if="!detail.slots.length" class="muted empty">暂无槽位。</p></div>
-      <h3>执行状态统计</h3>
-      <div class="table-wrap"><table><thead><tr><th>状态</th><th>数量</th></tr></thead><tbody><tr v-for="item in detail.executionCounts" :key="item.status"><td>{{ item.status }}</td><td>{{ item.count }}</td></tr></tbody></table><p v-if="!detail.executionCounts.length" class="muted empty">暂无执行。</p></div>
-      <h3>最近 20 次节点执行</h3>
-      <div class="table-wrap"><table><thead><tr><th>创建时间</th><th>执行 ID</th><th>状态</th><th>错误</th></tr></thead><tbody><tr v-for="execution in detail.recentExecutions" :key="execution.id"><td>{{ new Date(execution.createdAt).toLocaleString('zh-CN') }}</td><td>{{ execution.id }}</td><td>{{ execution.status }}</td><td>{{ execution.error || '—' }}</td></tr></tbody></table><p v-if="!detail.recentExecutions.length" class="muted empty">暂无节点执行记录。</p></div>
+      <div class="page-tabs" role="tablist" :aria-label="t('nodes.details')">
+        <button v-for="item in (['overview', 'capabilities', 'slots', 'executions'] as const)" :key="item" class="action-btn" role="tab" :aria-selected="tab === item" @click="tab = item">{{ t(`nodes.${item}`) }}</button>
+      </div>
+      <dl v-if="tab === 'overview'" class="node-facts">
+        <div><dt>{{ t('nodes.status') }}</dt><dd>{{ detail.status }}</dd></div><div><dt>{{ t('nodes.environment') }}</dt><dd>{{ detail.nodeKind }} · {{ detail.osPlatform }} / {{ detail.architecture }}</dd></div>
+        <div><dt>{{ t('nodes.networkZone') }}</dt><dd>{{ detail.networkZone || t('nodes.defaultZone') }}</dd></div><div><dt>{{ t('nodes.agentVersion') }}</dt><dd>{{ detail.agentVersion || t('nodes.unreported') }}</dd></div>
+        <div><dt>{{ t('nodes.lastHeartbeat') }}</dt><dd>{{ detail.lastHeartbeatAt ? new Date(detail.lastHeartbeatAt).toLocaleString() : t('nodes.disconnected') }}</dd></div>
+        <div><dt>{{ t('nodes.cpu') }}</dt><dd>{{ detail.cpuUsage === null ? t('nodes.unreported') : `${detail.cpuUsage}%` }}</dd></div>
+        <div><dt>{{ t('nodes.memory') }}</dt><dd>{{ detail.memoryUsage === null ? t('nodes.unreported') : `${detail.memoryUsage} MiB` }}</dd></div>
+        <div><dt>{{ t('nodes.availableSlots') }}</dt><dd>{{ detail.reportedAvailableSlots ?? t('nodes.unreported') }}</dd></div>
+      </dl>
+      <DataTable v-else-if="tab === 'capabilities'" :rows="detail.capabilities" :columns="capabilities" :empty-label="t('nodes.emptyCapabilities')" filename="node-capabilities.csv" @refresh="load" />
+      <DataTable v-else-if="tab === 'slots'" :rows="detail.slots" :columns="slots" :empty-label="t('nodes.emptySlots')" filename="node-slots.csv" @refresh="load" />
+      <template v-else><h3 class="node-section-title">{{ t('nodes.counts') }}</h3><DataTable :rows="detail.executionCounts" :columns="counts" row-key="status" :empty-label="t('nodes.emptyExecutions')" filename="execution-counts.csv" @refresh="load" />
+        <h3 class="node-section-title">{{ t('nodes.recent') }}</h3><DataTable :rows="detail.recentExecutions" :columns="executions" :empty-label="t('nodes.emptyExecutions')" filename="node-executions.csv" @refresh="load" /></template>
     </template>
   </section>
 </template>
