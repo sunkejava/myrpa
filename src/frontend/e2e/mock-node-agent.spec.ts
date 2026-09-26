@@ -175,6 +175,25 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
     await expect(uiRow).toContainText('PendingApproval')
     await uiRow.getByRole('button', { name: '批准' }).click()
     await expect(uiRow).toContainText('Online')
+    await page.getByRole('button', { name: '节点池', exact: true }).click()
+    const poolName = `浏览器节点池-${Date.now()}`
+    await page.getByLabel('节点池名称').fill(poolName)
+    await page.getByRole('button', { name: '创建节点池' }).click()
+    await expect(page.getByRole('status')).toContainText('节点池已创建')
+    const pools = await (await request.get(`${api}/api/node-management/pools`, { headers: admin })).json() as Array<{ id: string, name: string }>
+    const pool = pools.find(x => x.name === poolName)
+    expect(pool).toBeDefined()
+    await page.getByRole('combobox', { name: `节点池归属 ${uiNodeId}` }).selectOption(pool!.id)
+    await expect(page.getByRole('status')).toContainText('归属已更新')
+    const reRegistered = await request.post(`${api}/api/nodes/register`, { headers: { 'X-Node-Registration-Key': registrationKey },
+      data: { ...applicantRequest.data, agentKey: uiNodeKey, name: '页面审核节点' } })
+    expect(reRegistered.ok()).toBeTruthy()
+    const persistedNode = await (await request.get(`${api}/api/node-management/nodes/${uiNodeId}`, { headers: admin })).json() as { nodePoolId: string }
+    expect(persistedNode.nodePoolId).toBe(pool!.id)
+    const poolRow = page.locator('table').first().locator('tbody tr').filter({ hasText: poolName })
+    await poolRow.getByRole('button', { name: '停用' }).click()
+    await expect(poolRow).toContainText('停用')
+    await page.getByRole('button', { name: '节点管理' }).click()
     page.once('dialog', dialog => dialog.accept())
     await uiRow.getByRole('button', { name: '吊销' }).click()
     await expect(uiRow).toContainText('Revoked')

@@ -14,13 +14,14 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
         if (node is null)
         {
             node = new ExecutionNode(registration.AgentKey, registration.Name, registration.NodeKind, registration.OsPlatform, registration.Architecture);
+            node.SetPool(registration.NodePoolId);
             db.ExecutionNodes.Add(node);
         }
         else if (node.Status == NodeStatus.Revoked)
             throw new InvalidOperationException("该节点身份已吊销，必须更换 AgentKey 重新申请。");
         else if (node.Status == NodeStatus.Rejected)
             node.SetStatus(NodeStatus.PendingApproval);
-        node.SetPool(registration.NodePoolId);
+        // 已注册节点由管理员分配节点池，Agent 重新注册不覆盖控制面配置。
         node.SetNetworkZone(registration.NetworkZone);
         node.RegisterHeartbeat(registration.AgentVersion, DateTimeOffset.UtcNow);
         await ReplaceCapabilitiesInternalAsync(node.Id, registration.Capabilities, cancellationToken);
@@ -72,7 +73,9 @@ public sealed class EfNodeRegistryService(AgentRpaDbContext db) : INodeRegistryS
         var now = DateTimeOffset.UtcNow;
         var timeout = now.AddSeconds(-45);
         var onlineNodes = await db.ExecutionNodes.AsNoTracking().Where(x => x.Status == NodeStatus.Online).ToListAsync(cancellationToken);
-        var nodes = onlineNodes.Where(x => x.LastHeartbeatAt >= timeout).ToList();
+        var enabledPoolIds = await db.NodePools.AsNoTracking().Where(x => x.Enabled).Select(x => x.Id).ToListAsync(cancellationToken);
+        var nodes = onlineNodes.Where(x => x.LastHeartbeatAt >= timeout &&
+            (!x.NodePoolId.HasValue || enabledPoolIds.Contains(x.NodePoolId.Value))).ToList();
         var ids = nodes.Select(x => x.Id).ToArray();
         var capabilities = await db.NodeCapabilities.AsNoTracking().Where(x => ids.Contains(x.NodeId) && x.Enabled).ToListAsync(cancellationToken);
         var slots = await db.WorkerSlots.AsNoTracking().Where(x => ids.Contains(x.NodeId) && x.Enabled).ToListAsync(cancellationToken);

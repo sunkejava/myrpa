@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage.vue'
 import PlannerPage from './pages/PlannerPage.vue'
 import TasksPage from './pages/TasksPage.vue'
 import NodeManagementPage from './pages/NodeManagementPage.vue'
+import NodePoolsPage from './pages/NodePoolsPage.vue'
 import HumanInterventionsPage from './pages/HumanInterventionsPage.vue'
 import AuditPage from './pages/AuditPage.vue'
 import LlmUsagePage from './pages/LlmUsagePage.vue'
@@ -52,6 +53,7 @@ function logout() {
         <button v-if="admin" :class="{ active: nav === '核验中心' }" @click="nav = '核验中心'">核验中心</button>
         <button v-if="admin" :class="{ active: nav === 'Workflow 管理' }" @click="nav = 'Workflow 管理'">Workflow 管理</button>
         <button v-if="admin" :class="{ active: nav === '节点管理' }" @click="nav = '节点管理'">节点管理</button>
+        <button v-if="admin" :class="{ active: nav === '节点池' }" @click="nav = '节点池'">节点池</button>
         <button v-if="admin" :class="{ active: nav === '审计记录' }" @click="nav = '审计记录'">审计记录</button>
         <button v-if="admin" :class="{ active: nav === '账户与角色' }" @click="nav = '账户与角色'">账户与角色</button>
       </nav>
@@ -69,6 +71,7 @@ function logout() {
           <TaskReconciliationCenter v-else-if="nav === '核验中心' && admin" :token="token" />
           <WorkflowDesigner v-else-if="nav === 'Workflow 管理' && admin" :token="token" />
           <NodeManagementPage v-else-if="nav === '节点管理' && admin" :token="token" />
+          <NodePoolsPage v-else-if="nav === '节点池' && admin" :token="token" />
           <HumanInterventionsPage v-else-if="nav === '人工介入'" :token="token" />
           <LlmUsagePage v-else-if="nav === 'LLM 用量'" :token="token" />
           <AuditPage v-else-if="nav === '审计记录' && admin" :token="token" />

@@ -61,6 +61,18 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
     [HttpGet("slots")]
     public async Task<IActionResult> Slots(CancellationToken ct) => Ok(await db.WorkerSlots.AsNoTracking().Select(x => new { x.Id, x.NodeId, x.SlotName, x.Enabled, x.ExecutionId, x.LeaseExpiresAt }).ToListAsync(ct));
 
+    [HttpPost("nodes/{id:guid}/pool")]
+    public async Task<IActionResult> SetNodePool(Guid id, SetNodePoolRequest request, CancellationToken ct)
+    {
+        var node = await db.ExecutionNodes.SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (node is null) return NotFound();
+        if (request.PoolId.HasValue && !await db.NodePools.AnyAsync(x => x.Id == request.PoolId.Value && x.Enabled, ct))
+            return BadRequest(new { message = "节点池不存在或已停用。" });
+        node.SetPool(request.PoolId);
+        await db.SaveChangesAsync(ct);
+        return Ok(new { node.Id, node.NodePoolId });
+    }
+
     [HttpPost("slots/{id:guid}/enabled")]
     public async Task<IActionResult> SetSlotEnabled(Guid id, SetWorkerSlotEnabledRequest request, CancellationToken ct)
     {
@@ -79,3 +91,4 @@ public sealed class NodeManagementController(AgentRpaDbContext db) : ControllerB
 public sealed record CreateNodePoolRequest(string Name, string? Description);
 public sealed record UpdateNodePoolRequest(string Name, string? Description, bool Enabled = true);
 public sealed record SetWorkerSlotEnabledRequest(bool Enabled);
+public sealed record SetNodePoolRequest(Guid? PoolId);
