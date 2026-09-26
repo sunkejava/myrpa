@@ -7,9 +7,10 @@ import * as permission from './permission'
 import * as audit from './audit'
 import * as usage from './usage'
 import * as theme from './theme'
+import * as resources from './resources'
 
-const catalogs = { zh: { common: common.zh, system: system.zh, task: task.zh, workflow: workflow.zh, permission: permission.zh, audit: audit.zh, usage: usage.zh, theme: theme.zh },
-  en: { common: common.en, system: system.en, task: task.en, workflow: workflow.en, permission: permission.en, audit: audit.en, usage: usage.en, theme: theme.en } }
+const catalogs = { zh: { common: common.zh, system: system.zh, task: task.zh, workflow: workflow.zh, permission: permission.zh, audit: audit.zh, usage: usage.zh, theme: theme.zh, resources: resources.zh },
+  en: { common: common.en, system: system.en, task: task.en, workflow: workflow.en, permission: permission.en, audit: audit.en, usage: usage.en, theme: theme.en, resources: resources.en } }
 type Language = 'zh' | 'en' | 'custom'
 type Pack = Record<string, Record<string, string>>
 const savedLanguage = localStorage.getItem('agentrpa-language')
