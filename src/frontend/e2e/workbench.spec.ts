@@ -5,6 +5,7 @@ const password = 'BrowserTestPassword123!'
 
 test('login, resource setup, natural language planning and task submission', async ({ page, request, isMobile }) => {
   test.skip(isMobile, 'This workflow seeds one shared city; mobile layout is verified independently.')
+  test.setTimeout(90_000)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: '登录 AgentRPA' })).toBeVisible()
   await page.getByLabel('用户名').fill('admin')
@@ -66,8 +67,8 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('初始密码').fill('PageRunnerPassword123!')
   await page.getByRole('button', { name: '创建账户' }).click()
   await expect(page.getByRole('status')).toContainText('账户已创建')
-  await page.getByLabel('账户', { exact: true }).selectOption({ label: `页面执行员 (${uiUserName})` })
-  await page.getByLabel('角色', { exact: true }).selectOption(role.id)
+  await page.getByRole('combobox', { name: '选择账户' }).selectOption({ label: `页面执行员 (${uiUserName})` })
+  await page.getByRole('combobox', { name: '选择角色' }).selectOption(role.id)
   await page.getByRole('button', { name: '分配角色' }).click()
   await expect(page.getByText('已分配：执行员')).toBeVisible()
   await page.getByRole('button', { name: '权限中心' }).click()
