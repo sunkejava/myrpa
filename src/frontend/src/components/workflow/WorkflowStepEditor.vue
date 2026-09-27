@@ -21,7 +21,7 @@ const fields: Record<string, { key: string; label: string; hint: string; numeric
   Screenshot: [{ key: 'path', label: '截图路径', hint: 'artifacts/screen.png' }],
   Condition: [{ key: 'selector', label: '判断元素', hint: '[data-testid=status]' }, { key: 'contains', label: '分支匹配文字', hint: '通过' }],
   Loop: [{ key: 'count', label: '重复次数', hint: '1', numeric: true }],
-  HumanTask: [{ key: 'interventionType', label: '介入类型', hint: 'Captcha / UKeyConfirmation / ManualApproval' }, { key: 'title', label: '提示标题', hint: '请插入 UKey 并完成授权' }],
+  HumanTask: [{ key: 'interventionType', label: '介入类型', hint: 'Captcha / SmsCode / QrLogin' }, { key: 'title', label: '提示标题', hint: '请使用手机完成扫码' }, { key: 'imageSelector', label: '图片验证码选择器', hint: '#captcha-image' }, { key: 'inputSelector', label: '验证码输入框', hint: '#verification-code' }, { key: 'qrSelector', label: '二维码元素', hint: '#login-qr' }, { key: 'successSelector', label: '扫码登录成功元素', hint: '#dashboard' }],
   UKeySign: [{ key: 'certificateThumbprint', label: '证书指纹', hint: '证书 SHA-1 指纹' }, { key: 'digestSelector', label: '页面 SHA-256 摘要', hint: '@signature.digest' }, { key: 'signatureSelector', label: '签名输入框', hint: '@signature.value' }]
 }
 const simpleFields = computed(() => fields[props.step.type || ''] || [])
@@ -58,7 +58,7 @@ const safeRetry = ['navigate', 'waitforelement', 'assert', 'extract']
       </label>
     </div>
     <p v-if="step.type === 'Extract'" class="muted">提取结果在任务详情中显示，后续步骤可使用字段名变量引用。</p>
-    <p v-if="step.type === 'HumanTask'" class="muted">支持 Captcha、UKeyConfirmation、FaceAuthentication、ManualApproval。任务所有人确认后在原浏览器会话继续。</p>
+    <p v-if="step.type === 'HumanTask'" class="muted">Captcha 填写图片选择器及输入框；如需自动识别，在 JSON 配置写入 "autoRecognize": true 并配置节点 CaptchaEndpoint。SmsCode 填写输入框；QrLogin 填写二维码元素与登录成功元素。扫码和验证码图片仅供任务所有人查看。</p>
     <p v-if="step.type === 'UKeySign'" class="muted">需要任务级审批、Certificate:证书指纹能力，并由用户确认后在 Windows 节点调用证书私钥。</p>
     <template v-if="depth < 8">
       <NestedWorkflowSteps v-if="step.type === 'Condition'" title="条件成立时" :steps="step.config?.then" :depth="depth + 1" @update="updateBranch('then', $event)" />

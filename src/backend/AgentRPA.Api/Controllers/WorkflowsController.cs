@@ -8,6 +8,7 @@ using AgentRPA.Domain.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 namespace AgentRPA.Api.Controllers;
 
 [ApiController, Route("api/workflows"), Authorize]
@@ -30,6 +31,33 @@ public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinition
         return Created($"api/workflows/{e.Id}", new { e.Id });
     }
     [HttpGet("{id:guid}/versions")] public async Task<IActionResult> Versions(Guid id, CancellationToken ct) => Ok(await db.WorkflowVersions.AsNoTracking().Where(x => x.WorkflowId == id).OrderByDescending(x => x.Version).Select(x => new { x.Id, x.Version, x.Published, x.CreatedAt }).ToListAsync(ct));
+    /// <summary>发布前校验草稿和测试数据；仅做静态预检，不执行外部网站操作。</summary>
+    [HttpPost("{id:guid}/test-data/validate")]
+    public async Task<IActionResult> ValidateTestData(Guid id, ValidateWorkflowTestDataRequest request, CancellationToken ct)
+    {
+        if (!await db.Workflows.AsNoTracking().AnyAsync(x => x.Id == id, ct)) return NotFound();
+        if (string.IsNullOrWhiteSpace(request.DefinitionJson) || request.DefinitionJson.Length > 262_144 || request.Items is null || request.Items.Count is < 1 or > 100)
+            return BadRequest(new { message = "流程定义或测试数据数量无效（每批 1 至 100 条）。" });
+        var errors = validator.Validate(request.DefinitionJson).ToList();
+        if (errors.Count == 0)
+        {
+            using var definition = JsonDocument.Parse(request.DefinitionJson);
+            var parameterValidator = new WorkflowParameterSchemaValidator();
+            for (var index = 0; index < request.Items.Count; index++)
+            {
+                if (request.Items[index].Length > 65_536) { errors.Add($"第 {index + 1} 条测试数据超过长度限制。"); continue; }
+                try
+                {
+                    using var item = JsonDocument.Parse(request.Items[index]);
+                    if (item.RootElement.ValueKind != JsonValueKind.Object) { errors.Add($"第 {index + 1} 条测试数据必须是 JSON 对象。"); continue; }
+                    var values = item.RootElement.EnumerateObject().ToDictionary(x => x.Name, x => (object?)x.Value, StringComparer.OrdinalIgnoreCase);
+                    errors.AddRange(parameterValidator.ValidateParameters(definition.RootElement, values).Select(x => $"第 {index + 1} 条：{x}"));
+                }
+                catch (JsonException) { errors.Add($"第 {index + 1} 条测试数据不是有效 JSON。"); }
+            }
+        }
+        return Ok(new { valid = errors.Count == 0, errors, count = request.Items.Count, mode = "static-validation" });
+    }
     [Authorize(Roles = "Admin"), HttpPost("{id:guid}/versions")] public async Task<IActionResult> CreateVersion(Guid id, CreateWorkflowVersionRequest request, CancellationToken ct)
     {
         if (!await db.Workflows.AnyAsync(x => x.Id == id, ct)) return NotFound();
@@ -86,3 +114,4 @@ public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinition
 }
 public sealed record CreateWorkflowRequest(Guid BusinessFunctionId, string Name, string? Description);
 public sealed record CreateWorkflowVersionRequest(string DefinitionJson);
+public sealed record ValidateWorkflowTestDataRequest(string DefinitionJson, IReadOnlyList<string> Items);

@@ -111,8 +111,20 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 errors.Add($"{location} 的 config.output 不能覆盖任务参数或 systemBaseUrl。");
             if (stepType == WorkflowStepType.HumanTask && config.TryGetProperty("interventionType", out var interventionType) &&
                 (interventionType.ValueKind != JsonValueKind.String ||
-                 !new[] { "Captcha", "FaceAuthentication", "UKeyConfirmation", "ManualApproval" }.Contains(interventionType.GetString(), StringComparer.OrdinalIgnoreCase)))
-                errors.Add($"{location} 的 config.interventionType 仅支持 Captcha、FaceAuthentication、UKeyConfirmation、ManualApproval。");
+                 !new[] { "Captcha", "SmsCode", "QrLogin", "FaceAuthentication", "UKeyConfirmation", "ManualApproval" }.Contains(interventionType.GetString(), StringComparer.OrdinalIgnoreCase)))
+                errors.Add($"{location} 的 config.interventionType 无效。");
+            if (stepType == WorkflowStepType.HumanTask && hasConfig)
+            {
+                var intervention = config.TryGetProperty("interventionType", out var kind) && kind.ValueKind == JsonValueKind.String ? kind.GetString() : "ManualApproval";
+                if ((intervention is "Captcha" or "SmsCode") && !HasString(config, "inputSelector"))
+                    errors.Add($"{location} 验证码介入缺少 inputSelector。");
+                if (intervention == "QrLogin" && (!HasString(config, "qrSelector") || !HasString(config, "successSelector")))
+                    errors.Add($"{location} 扫码登录缺少 qrSelector 或 successSelector。");
+                if (config.TryGetProperty("autoRecognize", out var recognize) && recognize.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    errors.Add($"{location} 的 autoRecognize 必须是布尔值。");
+                if (intervention == "Captcha" && config.TryGetProperty("autoRecognize", out recognize) && recognize.ValueKind == JsonValueKind.True && !HasString(config, "imageSelector"))
+                    errors.Add($"{location} 自动识别验证码必须配置 imageSelector。");
+            }
             if (stepType == WorkflowStepType.HumanTask && config.TryGetProperty("title", out var title) &&
                 (title.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title.GetString()) || title.GetString()!.Length > 200))
                 errors.Add($"{location} 的 config.title 必须是 1 至 200 字符的标题。");

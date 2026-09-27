@@ -7,6 +7,7 @@ public interface INodeAgentClient
     Task CancelAsync(Guid executionId);
     Task PauseAsync(Guid executionId);
     Task ResumeAsync(Guid executionId);
+    Task ProvideCodeAsync(Guid executionId, string code);
 }
 
 /// <summary>NodeAgent → Server 的连接初始化信息。</summary>

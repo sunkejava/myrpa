@@ -136,10 +136,37 @@ public sealed class HumanInterventionsController(
 
         var intervention = await GetOwnedInterventionAsync(id, subjectId, cancellationToken);
         if (intervention is null) return NotFound();
+        if (intervention.Type is InterventionType.Captcha or InterventionType.SmsCode)
+            return BadRequest(new { message = "验证码必须通过提交验证码接口处理。" });
+        if (intervention.Type == InterventionType.QrLogin && intervention.SecureEntryHash is not null)
+            return BadRequest(new { message = "一次性二维码授权必须消费对应令牌。" });
         intervention.Complete();
         await db.SaveChangesAsync(cancellationToken);
         if (intervention.Status == InterventionStatus.Completed)
             await TryResumeExecutionAsync(intervention.ExecutionId, subjectId, cancellationToken);
+        return Ok(ToDto(intervention));
+    }
+
+    [HttpPost("{id:guid}/answer")]
+    public async Task<ActionResult<HumanInterventionDto>> Answer(Guid id, AnswerHumanInterventionRequest request, CancellationToken cancellationToken)
+    {
+        if (!CurrentUser.TryGetSubjectId(User, out var subjectId))
+            return Unauthorized(new { message = "JWT 缺少有效的用户主体。" });
+        if (string.IsNullOrWhiteSpace(request.Code) || request.Code.Length > 32 || request.Code.Any(char.IsControl))
+            return BadRequest(new { message = "验证码长度必须为 1 至 32 个可见字符。" });
+        var intervention = await GetOwnedInterventionAsync(id, subjectId, cancellationToken);
+        if (intervention is null) return NotFound();
+        if (intervention.Type is not (InterventionType.Captcha or InterventionType.SmsCode) || intervention.Status != InterventionStatus.Opened || intervention.ExpiresAt <= DateTimeOffset.UtcNow)
+            return Conflict(new { message = "验证码介入不存在、已过期或已处理。" });
+        var execution = await GetOwnedExecutionAsync(intervention.ExecutionId, subjectId, cancellationToken);
+        if (execution?.Status != ExecutionStatus.WaitingForHuman || !execution.NodeId.HasValue ||
+            !connections.TryGet(execution.NodeId.Value, out var connectionId) || string.IsNullOrWhiteSpace(connectionId))
+            return Conflict(new { message = "执行节点当前未在线，请稍后重试。" });
+        // 验证码只经现有节点的 SignalR 加密连接传输，绝不进入数据库、日志或任务参数。
+        await hub.Clients.Client(connectionId).ProvideCodeAsync(intervention.ExecutionId, request.Code);
+        intervention.Complete();
+        execution.SetStatus(ExecutionStatus.Running);
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(intervention));
     }
 

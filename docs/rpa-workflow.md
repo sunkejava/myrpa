@@ -91,3 +91,17 @@
 ## 版本与当前限制
 
 工作流每次保存创建新版本，发布后才能创建任务；既有任务固定其创建时版本。停用阻断新任务及未派发任务，在线执行受取消和下一步门禁约束。设计器尚无单步在线调试；调试需在获授权的模拟/测试系统中提交任务，结合任务详情检查点、日志、任务结果 JSON 和产物核对。真实站点适配、UKey/验证码厂商 Provider、组织租户隔离、浏览器可视人工接管、跨工作流引用与生产级回滚仍有未完成任务，详见 [开发计划](development-plan.md)。
+
+## 发布前测试数据与发布后执行
+
+在「工作流管理 → 工作流测试数据」粘贴 JSON 对象数组，或导入 UTF-8 CSV（首行为参数名）、JSON 数组。每次最多 100 条。发布前「校验草稿数据」调用 `/api/workflows/{id}/test-data/validate`：检查当前编辑的流程定义和每条参数 Schema；它不会启动浏览器或访问业务网站。发布后在同一面板选择**已发布版本**并运行：系统重新读取这个已发布版本、校验测试数据、创建最大重试次数为 0 的真实任务并入队。若流程要求管理员审批，需要先到任务审批页批准。查看任务中心中的逐条执行结果、时间线及产物；请使用业务系统的测试账号和测试环境。
+
+## 验证码与扫码节点
+
+`HumanTask` 的 `config.interventionType` 支持：
+
+- `Captcha`：设置 `imageSelector`（验证码图片元素）和 `inputSelector`（输入框）。节点上传验证码图片给任务所有人；用户在「人工介入」提交图片验证码，原浏览器页面自动回填。配置节点环境 `NodeAgent:CaptchaEndpoint`（HTTPS 或 localhost HTTP）和 `"autoRecognize": true` 时，先向该 HTTP OCR 服务发送 `{taskId,type,imageBase64}`，期望返回 `{success,value,errorCode}`；识别失败则转人工。
+- `SmsCode`：设置 `inputSelector`。手机短信发送到用户自己的号码；任务所有人在「人工介入」输入收到的短信码，节点回填到原浏览器。验证码不写入数据库或执行日志。目前不包含第三方短信供应商的自动收信接口，需由持有手机的用户提交。
+- `QrLogin`：设置 `qrSelector`（业务系统展示二维码的元素）和 `successSelector`（登录后才出现的元素）。节点截取二维码作为执行产物，任务所有人在「人工介入」页面查看并使用业务系统手机客户端扫码；点击完成后，节点等待 `successSelector` 出现，否则该步骤失败。二维码介入默认 10 分钟过期，产物按已有存储配置与任务归属权限访问。
+
+示例：`{"type":"HumanTask","config":{"interventionType":"QrLogin","title":"扫描医保平台登录二维码","qrSelector":"#login-qr","successSelector":"#user-home"}}`。后续可用 `WaitForElement`、`Assert` 进一步检查页面业务状态。

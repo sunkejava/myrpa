@@ -7,7 +7,7 @@ namespace AgentRPA.NodeAgent.Execution;
 
 public interface IWorkflowRuntime
 {
-    Task ExecuteAsync(string definitionJson, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken);
+    Task ExecuteAsync(string definitionJson, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken);
 }
 
 /// <summary>Workflow Runtime 事件；Artifact 仅携带受控本地产物的元数据，不携带文件内容。</summary>
@@ -32,9 +32,9 @@ public sealed record WorkflowRuntimeArtifact(
     string? Hash);
 
 /// <summary>基于 Playwright 的确定性浏览器 Workflow Runtime。</summary>
-public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> adapters, IHardwareCredentialProvider hardwareProvider) : IWorkflowRuntime
+public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> adapters, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider = null) : IWorkflowRuntime
 {
-    public async Task ExecuteAsync(string definitionJson, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(string definitionJson, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken)
     {
         using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(definitionJson) ? "{}" : definitionJson);
         var root = document.RootElement;
@@ -52,13 +52,13 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         protectedNames.Add("systemBaseUrl");
         try
         {
-            await ExecuteStepsAsync(page, steps, variables, protectedNames, report, cancellationToken, adapter, hardwareProvider, 0);
+            await ExecuteStepsAsync(page, steps, variables, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, 0);
             await report(new("Succeeded", null, 100, "Workflow 执行完成。"));
         }
         finally { await browser.CloseAsync(); }
     }
 
-    private static async Task ExecuteStepsAsync(IPage page, IReadOnlyList<JsonElement> steps, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, int depth)
+    private static async Task ExecuteStepsAsync(IPage page, IReadOnlyList<JsonElement> steps, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, int depth)
     {
         if (depth > 8) throw new InvalidOperationException("Workflow 嵌套深度超过安全限制。");
         for (var index = 0; index < steps.Count; index++)
@@ -113,17 +113,50 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
                     await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Upload 缺少 selector。"), parameters))).SetInputFilesAsync(uploadPath);
                     if (File.Exists(uploadPath)) await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已完成文件上传", await BuildArtifactAsync("Upload", uploadPath, null)));
                     break;
-                case "condition": await ExecuteConditionAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, depth); break;
-                case "loop": await ExecuteLoopAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, depth); break;
+                case "condition": await ExecuteConditionAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth); break;
+                case "loop": await ExecuteLoopAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth); break;
                 case "subworkflow":
                     var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-                    await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, depth + 1); break;
+                    await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth + 1); break;
                 case "end": return;
                 case "script": throw new InvalidOperationException("Script Step 默认被禁止，必须通过受控 Script Provider 执行。 ");
                 case "humantask":
-                    await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。",
-                        InterventionType: GetString(config, "interventionType") ?? "ManualApproval",
+                    var interventionType = GetString(config, "interventionType") ?? "ManualApproval";
+                    if (interventionType.Equals("QrLogin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var qrSelector = adapter.ResolveSelector(Resolve(GetString(config, "qrSelector") ?? throw new InvalidOperationException("扫码登录缺少 qrSelector。"), parameters));
+                        var qrPath = Path.Combine("artifacts", $"qr-{Guid.NewGuid():N}.png");
+                        Directory.CreateDirectory("artifacts");
+                        await page.Locator(qrSelector).ScreenshotAsync(new LocatorScreenshotOptions { Path = qrPath });
+                        await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "登录二维码已转发至执行产物。", await BuildArtifactAsync("QrLogin", qrPath, "image/png")));
+                    }
+                    if (interventionType.Equals("Captcha", StringComparison.OrdinalIgnoreCase) && GetString(config, "imageSelector") is { } imageSelector)
+                    {
+                        var captchaPath = Path.Combine("artifacts", $"captcha-{Guid.NewGuid():N}.png");
+                        Directory.CreateDirectory("artifacts");
+                        await page.Locator(adapter.ResolveSelector(Resolve(imageSelector, parameters))).ScreenshotAsync(new LocatorScreenshotOptions { Path = captchaPath });
+                        await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "验证码图片已转发至执行产物。", await BuildArtifactAsync("Captcha", captchaPath, "image/png")));
+                        if (GetBool(config, "autoRecognize") == true && captchaProvider is not null)
+                        {
+                            var recognized = await captchaProvider.RecognizeAsync(new CaptchaRequest(id, "image", await File.ReadAllBytesAsync(captchaPath, cancellationToken)), cancellationToken);
+                            if (recognized.Success && recognized.Value is { Length: > 0 and <= 32 } code && !code.Any(char.IsControl))
+                            {
+                                await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "inputSelector") ?? throw new InvalidOperationException("验证码缺少 inputSelector。"), parameters))).FillAsync(code);
+                                await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "验证码已自动识别并回填。"));
+                                break;
+                            }
+                        }
+                    }
+                    var suppliedCode = await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "Workflow 等待人工介入。",
+                        InterventionType: interventionType,
                         InterventionTitle: GetString(config, "title") ?? $"流程步骤 {id} 等待人工确认"));
+                    if (interventionType.Equals("Captcha", StringComparison.OrdinalIgnoreCase) || interventionType.Equals("SmsCode", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (string.IsNullOrWhiteSpace(suppliedCode)) throw new InvalidOperationException("验证码未提供，流程无法继续。");
+                        await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "inputSelector") ?? throw new InvalidOperationException("验证码缺少 inputSelector。"), parameters))).FillAsync(suppliedCode);
+                    }
+                    if (interventionType.Equals("QrLogin", StringComparison.OrdinalIgnoreCase))
+                        await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "successSelector") ?? throw new InvalidOperationException("扫码登录缺少 successSelector。"), parameters))).WaitForAsync(new LocatorWaitForOptions { Timeout = timeoutMs });
                     break;
                 case "ukeysign":
                     await report(new("WaitingForHuman", id, (index * 100) / Math.Max(1, steps.Count), "等待用户确认本次证书签名。",
@@ -161,7 +194,7 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         }
     }
 
-    private static async Task ExecuteConditionAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, int depth)
+    private static async Task ExecuteConditionAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, int depth)
     {
         var selector = adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Condition 缺少 selector。"), parameters));
         var actual = await page.Locator(selector).InnerTextAsync();
@@ -169,14 +202,14 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         var matched = actual.Contains(expected, StringComparison.Ordinal);
         var property = matched ? "then" : "else";
         if (config.TryGetProperty(property, out var branch) && branch.ValueKind == JsonValueKind.Array)
-            await ExecuteStepsAsync(page, branch.EnumerateArray().ToArray(), parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, depth + 1);
+            await ExecuteStepsAsync(page, branch.EnumerateArray().ToArray(), parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth + 1);
     }
 
-    private static async Task ExecuteLoopAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, int depth)
+    private static async Task ExecuteLoopAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, int depth)
     {
         var count = Math.Clamp(GetInt(config, "count") ?? 1, 0, 1000);
         var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, depth + 1); }
+        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth + 1); }
     }
 
     private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string target, int timeoutMs, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter)

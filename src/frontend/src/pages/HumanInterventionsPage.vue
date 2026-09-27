@@ -14,6 +14,8 @@ const qrInput = ref('')
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
+const evidence = ref<Record<string, string>>({})
+const answers = ref<Record<string, string>>({})
 
 async function call<T>(path: string, method = 'GET', data?: object): Promise<T> {
   const response = await fetch(`/api/human-interventions${path}`, { method,
@@ -26,8 +28,29 @@ async function call<T>(path: string, method = 'GET', data?: object): Promise<T> 
   return body as T
 }
 async function load() {
-  try { rows.value = await call<Intervention[]>('') }
+  try {
+    rows.value = await call<Intervention[]>('')
+    Object.values(evidence.value).forEach(URL.revokeObjectURL)
+    evidence.value = {}
+    for (const row of rows.value.filter(x => x.status === 'Opened' && ['Captcha', 'QrLogin'].includes(x.type))) {
+      const response = await fetch(`/api/executions/${row.executionId}/artifacts`, { headers: { Authorization: `Bearer ${props.token}` } })
+      if (!response.ok) continue
+      const artifacts = await response.json() as { id: string; artifactType: string }[]
+      const image = artifacts.filter(x => x.artifactType === row.type).at(-1)
+      if (!image) continue
+      const content = await fetch(`/api/executions/${row.executionId}/artifacts/${image.id}/content`, { headers: { Authorization: `Bearer ${props.token}` } })
+      if (content.ok) evidence.value[row.id] = URL.createObjectURL(await content.blob())
+    }
+  }
   catch (e) { error.value = e instanceof Error ? e.message : '人工介入加载失败' }
+}
+async function answer(row: Intervention) {
+  busy.value = true; error.value = ''; notice.value = ''
+  try {
+    await call(`/${row.id}/answer`, 'POST', { code: answers.value[row.id] || '' })
+    delete answers.value[row.id]; await load(); notice.value = '验证码已送至执行节点并填入原浏览器页面。'
+  } catch (e) { error.value = e instanceof Error ? e.message : '提交验证码失败' }
+  finally { busy.value = false }
 }
 async function create() {
   busy.value = true; error.value = ''; notice.value = ''; issuedToken.value = ''
@@ -75,6 +98,13 @@ onMounted(load)
       <label>一次性令牌<input v-model.trim="qrInput" required autocomplete="off" /></label>
       <button class="action-btn" :disabled="busy || !qrId">确认扫码完成</button>
     </form>
+    <div v-for="row in rows.filter(x => x.status === 'Opened' && ['Captcha', 'SmsCode', 'QrLogin'].includes(x.type))" :key="row.id" class="verification-panel">
+      <h3>{{ row.title }}</h3>
+      <img v-if="evidence[row.id]" :src="evidence[row.id]" :alt="row.type === 'QrLogin' ? '业务系统登录二维码' : '业务系统验证码图片'" class="verification-image" />
+      <p v-if="row.type === 'QrLogin'" class="muted">使用业务系统手机客户端扫描图片，登录成功后点击下方完成；节点将核对登录成功元素。</p>
+      <form v-else @submit.prevent="answer(row)"><label>{{ row.type === 'SmsCode' ? '手机收到的短信验证码' : '图片验证码' }}<input v-model.trim="answers[row.id]" required maxlength="32" autocomplete="one-time-code" /></label><button class="action-btn primary" :disabled="busy">提交并回填</button></form>
+    </div>
     <HumanInterventionPanel :rows="rows" :busy="busy" @complete="action($event, 'complete')" @cancel="action($event, 'cancel')" />
   </section>
 </template>
+<style scoped>.verification-panel{margin:12px 0;padding:14px;border:1px solid var(--border-color,#d4dce7);border-radius:10px}.verification-image{display:block;max-width:min(100%,360px);max-height:360px;object-fit:contain;margin:12px 0}</style>

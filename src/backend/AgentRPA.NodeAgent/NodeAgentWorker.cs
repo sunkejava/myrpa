@@ -35,7 +35,7 @@ public sealed class NodeAgentWorker(
     ILogger<NodeAgentWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> executions = new();
-    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<bool>> humanResumes = new();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<string?>> humanResumes = new();
     private TimeSpan? lastCpuTime;
     private long lastCpuSample;
 
@@ -88,6 +88,7 @@ public sealed class NodeAgentWorker(
         connection.On<Guid>("CancelAsync", CancelExecutionAsync);
         connection.On<Guid>("PauseAsync", _ => Task.CompletedTask);
         connection.On<Guid>("ResumeAsync", ResumeExecutionAsync);
+        connection.On<Guid, string>("ProvideCodeAsync", ProvideCodeAsync);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -117,7 +118,7 @@ public sealed class NodeAgentWorker(
     {
         if (!executions.TryAdd(command.ExecutionId, CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))) return;
         var linked = executions[command.ExecutionId];
-        var resumeSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resumeSignal = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         humanResumes[command.ExecutionId] = resumeSignal;
         var extracted = new Dictionary<string, string>(StringComparer.Ordinal);
         try
@@ -134,10 +135,12 @@ public sealed class NodeAgentWorker(
                 {
                     if (!humanResumes.TryGetValue(command.ExecutionId, out var pending))
                         throw new InvalidOperationException("人工介入等待状态丢失。");
-                    await pending.Task.WaitAsync(linked.Token);
+                    var answer = await pending.Task.WaitAsync(linked.Token);
                     // 每个 HumanTask 都要单独确认，不能沿用上一节点已经完成的信号。
-                    humanResumes[command.ExecutionId] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    humanResumes[command.ExecutionId] = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    return answer;
                 }
+                return null;
             }, linked.Token);
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested) { await ReportAsync(connection, command, "Cancelled", null, null, "执行已取消", CancellationToken.None); }
@@ -146,7 +149,13 @@ public sealed class NodeAgentWorker(
     }
 
     private Task CancelExecutionAsync(Guid executionId) { if (executions.TryGetValue(executionId, out var source)) source.Cancel(); if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetCanceled(); return Task.CompletedTask; }
-    private Task ResumeExecutionAsync(Guid executionId) { if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetResult(true); return Task.CompletedTask; }
+    private Task ResumeExecutionAsync(Guid executionId) { if (humanResumes.TryGetValue(executionId, out var resume)) resume.TrySetResult(null); return Task.CompletedTask; }
+    private Task ProvideCodeAsync(Guid executionId, string code)
+    {
+        if (!humanResumes.TryGetValue(executionId, out var resume) || !resume.TrySetResult(code))
+            throw new InvalidOperationException("执行未等待验证码或介入已处理。");
+        return Task.CompletedTask;
+    }
     private static Task ReportAsync(HubConnection connection, ExecutionCommand command, string status, string? stepId, int? percent, string? message, CancellationToken cancellationToken, string? stepType = null, string? resultJson = null, string? interventionType = null, string? interventionTitle = null) => connection.InvokeAsync("ReportProgress", new ExecutionProgress(command.ExecutionId, command.NodeId, command.WorkerSlotId, status, stepId, percent, message, DateTimeOffset.UtcNow, stepType, resultJson, interventionType, interventionTitle), cancellationToken);
 
     private async Task UploadArtifactAsync(ExecutionCommand command, WorkflowRuntimeArtifact artifact, CancellationToken cancellationToken)

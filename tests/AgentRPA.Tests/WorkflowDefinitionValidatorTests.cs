@@ -7,6 +7,21 @@ public sealed class WorkflowDefinitionValidatorTests
 {
     private readonly WorkflowDefinitionValidator _validator = new();
 
+    [Fact] public void Captcha_and_sms_code_require_input_selector()
+    {
+        foreach (var type in new[] { "Captcha", "SmsCode" })
+        {
+            Assert.Contains(_validator.Validate("{\"steps\":[{\"type\":\"HumanTask\",\"config\":{\"interventionType\":\"" + type + "\"}}]}"), x => x.Contains("inputSelector", StringComparison.Ordinal));
+            Assert.Empty(_validator.Validate("{\"steps\":[{\"type\":\"HumanTask\",\"config\":{\"interventionType\":\"" + type + "\",\"inputSelector\":\"#code\"}}]}"));
+        }
+    }
+
+    [Fact] public void Qr_login_requires_qr_and_success_selectors()
+    {
+        Assert.Contains(_validator.Validate("""{"steps":[{"type":"HumanTask","config":{"interventionType":"QrLogin","qrSelector":"#qr"}}]}"""), x => x.Contains("successSelector", StringComparison.Ordinal));
+        Assert.Empty(_validator.Validate("""{"steps":[{"type":"HumanTask","config":{"interventionType":"QrLogin","qrSelector":"#qr","successSelector":"#home"}}]}"""));
+    }
+
     [Fact] public void Empty_definition_is_rejected() => Assert.NotEmpty(_validator.Validate(string.Empty));
     [Fact] public void Definition_without_steps_is_rejected() => Assert.Contains(_validator.Validate("{\"name\":\"demo\"}"), x => x.Contains("steps", StringComparison.OrdinalIgnoreCase));
     [Fact] public void Unknown_step_type_is_rejected() => Assert.NotEmpty(_validator.Validate("{\"steps\":[{\"type\":\"Unknown\",\"config\":{}}]}"));

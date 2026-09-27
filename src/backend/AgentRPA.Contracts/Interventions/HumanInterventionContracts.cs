@@ -16,3 +16,4 @@ public sealed record HumanInterventionDto(
     string? QrToken = null);
 
 public sealed record ConsumeQrTokenRequest(string Token);
+public sealed record AnswerHumanInterventionRequest(string Code);

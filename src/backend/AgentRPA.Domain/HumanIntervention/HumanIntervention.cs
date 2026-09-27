@@ -2,7 +2,7 @@ using AgentRPA.Domain.Common;
 
 namespace AgentRPA.Domain.HumanIntervention;
 
-public enum InterventionType { Captcha, QrLogin, FaceAuthentication, UKeyConfirmation, ManualApproval }
+public enum InterventionType { Captcha, QrLogin, FaceAuthentication, UKeyConfirmation, ManualApproval, SmsCode }
 public enum InterventionStatus { Pending, Opened, Completed, Expired, Cancelled }
 
 /// <summary>执行过程中的人工介入请求，例如扫码登录、人脸认证、验证码和 UKey 确认。</summary>

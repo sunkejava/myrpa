@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import WorkflowCanvas from './WorkflowCanvas.vue'
 import WorkflowTemplateGallery from './WorkflowTemplateGallery.vue'
 import WorkflowStepEditor from './WorkflowStepEditor.vue'
+import WorkflowTestPanel from './WorkflowTestPanel.vue'
 import type { WorkflowTemplate } from '../../data/workflow-templates/catalog'
 import FormDialog from '../common/FormDialog.vue'
 import { workflowRequest, type WorkflowResource as Resource, type WorkflowItem as Workflow, type WorkflowVersion as Version } from '../../api/modules/workflows'
@@ -212,6 +213,7 @@ onMounted(async () => {
       <WorkflowCanvas :steps="steps" />
       <section class="workflow-step-list"><h3>逐节点配置</h3><WorkflowStepEditor v-for="(step, index) in steps" :key="`${step.id || step.type}-${index}`" :step="step" :index="index" :total="steps.length" @update="editStep" @remove="removeStep" @move="moveStep" /></section>
       <details class="workflow-tools"><summary class="action-btn">{{ t('workflow.jsonEditor') }}</summary><label>{{ t('workflow.definitionJson') }}<textarea v-model="definitionJson" class="workflow-json" spellcheck="false" /></label></details>
+      <WorkflowTestPanel :key="workflowId" :token="token" :workflow-id="workflowId" :definition-json="definitionJson" :published-versions="versions.filter(item => item.published).map(item => item.version)" />
       <div class="actions"><button type="button" class="action-btn primary" :disabled="busy || !parsedDefinition" @click="publishVersion">{{ t('workflow.publish') }}</button><button v-if="currentWorkflow?.status === 'Published'" type="button" class="action-btn" :disabled="busy" @click="disableWorkflow">{{ t('workflow.disable') }}</button><button v-if="currentWorkflow?.status === 'Disabled' && versions.some(version => version.published)" type="button" class="action-btn" :disabled="busy" @click="enableWorkflow">{{ t('workflow.reenable') }}</button></div>
     </template>
   </section>
