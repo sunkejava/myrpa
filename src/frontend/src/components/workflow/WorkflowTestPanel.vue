@@ -40,7 +40,15 @@ async function importFile(event: Event) {
     if (lines.length < 2 || lines.length > 101) throw new Error('CSV 需要标题行及 1 至 100 条数据。')
     const headers = lines.shift()!.map(x => x.trim().replace(/^\uFEFF/, ''))
     if (headers.some(x => !x) || new Set(headers).size !== headers.length || lines.some(row => row.length !== headers.length)) throw new Error('CSV 标题不能为空或重复，且各行列数必须一致。')
-    rows.value = JSON.stringify(lines.map(row => Object.fromEntries(headers.map((header, index) => [header, row[index]]))), null, 2)
+    const schema = (JSON.parse(props.definitionJson) as { parameters?: Record<string, { type?: string }> }).parameters || {}
+    const convert = (key: string, value: string): unknown => {
+      if (value === '') return null
+      if (schema[key]?.type === 'integer' && /^-?\d+$/.test(value)) return Number(value)
+      if (schema[key]?.type === 'number' && Number.isFinite(Number(value))) return Number(value)
+      if (schema[key]?.type === 'boolean' && /^(true|false)$/i.test(value)) return value.toLowerCase() === 'true'
+      return value
+    }
+    rows.value = JSON.stringify(lines.map(row => Object.fromEntries(headers.map((header, index) => [header, convert(header, row[index])]))), null, 2)
   } catch (e) { report.value = e instanceof Error ? e.message : '导入失败' }
   finally { (event.target as HTMLInputElement).value = '' }
 }

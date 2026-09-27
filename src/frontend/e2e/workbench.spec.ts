@@ -43,6 +43,12 @@ test('login, resource setup, natural language planning and task submission', asy
   const version = await (await request.post(`${api}/api/workflows/${workflow.id}/versions`, {
     headers, data: { definitionJson: '{"steps":[{"type":"End"}]}' }
   })).json() as { version: number }
+  const preview = await (await request.post(`${api}/api/workflows/${workflow.id}/test-data/validate`, {
+    headers, data: { definitionJson: '{"parameters":{"personId":{"type":"string","required":true}},"steps":[{"type":"End"}]}', items: ['{"personId":"TEST001"}', '{}'] }
+  })).json() as { valid: boolean; errors: string[]; count: number }
+  expect(preview.valid).toBe(false)
+  expect(preview.count).toBe(2)
+  expect(preview.errors).toContain('第 2 条：缺少必填参数：personId。')
   expect((await request.post(`${api}/api/workflows/${workflow.id}/versions/${version.version}/publish`, { headers, data: {} })).ok()).toBeTruthy()
   expect((await request.post(`${api}/api/permission-policies`, {
     headers, data: { subjectId: (await (await request.get(`${api}/api/auth/me`, { headers })).json()).userId,
@@ -131,6 +137,10 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByLabel('功能').selectOption(businessFunction.id)
   await page.getByLabel('名称').fill('可发布流程')
   await page.getByRole('button', { name: '创建 Workflow' }).click()
+  await expect(page.getByRole('heading', { name: '工作流测试数据' })).toBeVisible()
+  await page.getByRole('textbox', { name: '测试数据（JSON 数组）' }).fill('[{}]')
+  await page.getByRole('button', { name: '校验草稿数据' }).click()
+  await expect(page.getByText('草稿和 1 条测试数据静态校验通过；尚未运行浏览器。')).toBeVisible()
   await page.getByRole('combobox', { name: 'Workflow 风险级别' }).selectOption('High')
   await page.getByText('高级 JSON 编辑').click()
   await expect(page.getByLabel('Definition JSON')).toBeVisible()
