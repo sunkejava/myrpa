@@ -22,6 +22,12 @@ public sealed class WorkflowDefinitionValidatorTests
         Assert.Empty(_validator.Validate("""{"steps":[{"type":"HumanTask","config":{"interventionType":"QrLogin","qrSelector":"#qr","successSelector":"#home"}}]}"""));
     }
 
+    [Fact] public void Automatic_captcha_recognition_requires_image_selector()
+    {
+        Assert.Contains(_validator.Validate("""{"steps":[{"type":"HumanTask","config":{"interventionType":"Captcha","inputSelector":"#code","autoRecognize":true}}]}"""), x => x.Contains("imageSelector", StringComparison.Ordinal));
+        Assert.Empty(_validator.Validate("""{"steps":[{"type":"HumanTask","config":{"interventionType":"Captcha","inputSelector":"#code","imageSelector":"#image","autoRecognize":true}}]}"""));
+    }
+
     [Fact] public void Empty_definition_is_rejected() => Assert.NotEmpty(_validator.Validate(string.Empty));
     [Fact] public void Definition_without_steps_is_rejected() => Assert.Contains(_validator.Validate("{\"name\":\"demo\"}"), x => x.Contains("steps", StringComparison.OrdinalIgnoreCase));
     [Fact] public void Unknown_step_type_is_rejected() => Assert.NotEmpty(_validator.Validate("{\"steps\":[{\"type\":\"Unknown\",\"config\":{}}]}"));
