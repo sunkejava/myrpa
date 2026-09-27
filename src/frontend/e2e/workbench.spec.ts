@@ -145,7 +145,7 @@ test('login, resource setup, natural language planning and task submission', asy
   await page.getByText('高级 JSON 编辑').click()
   await expect(page.getByLabel('Definition JSON')).toBeVisible()
   await page.getByRole('button', { name: '创建并发布新版本' }).click()
-  await expect(page.getByRole('status')).toContainText('已发布')
+  await expect(page.getByRole('status').filter({ hasText: '已发布' })).toContainText('已发布')
   await expect(page.getByRole('region', { name: 'Workflow 步骤预览' }).getByRole('button', { name: /End/ })).toBeVisible()
   await page.getByRole('button', { name: '停用 Workflow' }).click()
   await expect(page.getByRole('button', { name: '重新启用 Workflow' })).toBeVisible()
