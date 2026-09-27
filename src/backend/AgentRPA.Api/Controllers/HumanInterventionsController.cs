@@ -159,7 +159,13 @@ public sealed class HumanInterventionsController(
         if (intervention.Type is not (InterventionType.Captcha or InterventionType.SmsCode) || intervention.Status != InterventionStatus.Opened || intervention.ExpiresAt <= DateTimeOffset.UtcNow)
             return Conflict(new { message = "验证码介入不存在、已过期或已处理。" });
         var execution = await GetOwnedExecutionAsync(intervention.ExecutionId, subjectId, cancellationToken);
-        if (execution?.Status != ExecutionStatus.WaitingForHuman || !execution.NodeId.HasValue ||
+        if (execution is null || execution.Status != ExecutionStatus.WaitingForHuman || !execution.NodeId.HasValue ||
+            !await (from version in db.WorkflowVersions.AsNoTracking()
+                    join workflow in db.Workflows.AsNoTracking() on version.WorkflowId equals workflow.Id
+                    join item in db.TaskItems.AsNoTracking() on execution.TaskItemId equals item.Id
+                    join task in db.Tasks.AsNoTracking() on item.TaskId equals task.Id
+                    where version.Id == execution.WorkflowVersionId && workflow.Status == WorkflowStatus.Published && task.Status != DomainTaskStatus.Cancelled
+                    select task.Id).AnyAsync(cancellationToken) ||
             !connections.TryGet(execution.NodeId.Value, out var connectionId) || string.IsNullOrWhiteSpace(connectionId))
             return Conflict(new { message = "执行节点当前未在线，请稍后重试。" });
         // 验证码只经现有节点的 SignalR 加密连接传输，绝不进入数据库、日志或任务参数。
