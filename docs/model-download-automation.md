@@ -98,3 +98,5 @@ npm run test:e2e -- e2e/model-download.spec.ts --project=desktop-chromium
 ```
 
 CI 使用小型 GGUF 测试文件，不冒充真实 27B 权重，不依赖第三方搜索排序，也不下载十几 GB 文件。实际外网验收按上述前端步骤运行默认任务，确认清单字节数和 SHA256 与官方元数据一致。
+
+GitHub Actions 的 Frontend Build 不论成功或失败均保留 `browser-test-results` 产物 14 天，包含此链路成功与失败的 WebM、JSONL 测试附件。可从对应运行的 Artifacts 下载，复查链路现场；这与用户实际部署的长期产物存储独立。

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 
-test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的日志视频', async ({ page, request, isMobile }) => {
+test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的日志视频', async ({ page, request, isMobile }, testInfo) => {
   test.skip(isMobile, '共享节点集成测试仅在桌面运行一次。')
   test.setTimeout(210000)
   const api = 'http://127.0.0.1:5000'
@@ -90,6 +90,7 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
         expect(artifact, type).toBeDefined()
         const content = await request.get(`${api}/api/executions/${executionId}/artifacts/${artifact.id}/content`, { headers })
         expect(content.ok()).toBeTruthy()
+        await testInfo.attach(`model-${expectedStatus}-${type}`, { body: await content.body(), contentType: type === 'Video' ? 'video/webm' : 'application/x-ndjson' })
         if (type === 'Video') expect((await content.body()).subarray(0, 4)).toEqual(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
         else { const events = (await content.text()).trim().split('\n').map(x => JSON.parse(x)); expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ StepType: 'Press' }), expect.objectContaining({ StepType: 'ModelDownload' }), expect.objectContaining({ Status: expectedStatus })])) }
       }
