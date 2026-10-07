@@ -1,3 +1,4 @@
+import modelDownload from './modelscope-gguf-download.json'
 import mockAdd from './qd-social-security-add.json'
 import mockRemove from './qd-social-security-remove.json'
 
@@ -32,6 +33,7 @@ const unitCertificate = {
 }
 
 export const workflowTemplates: WorkflowTemplate[] = [
+  { code: 'modelscope-gguf-download', name: '模型搜索与 GGUF 下载', summary: '从 Bing 进入魔搭，按 Excel 搜索下载模型，并保存日志与视频。', resource: '公共资源 / ModelScope / MODEL-DOWNLOAD', requirements: '在线 NodeAgent 安装浏览器，具备 ModelDownload:ModelScope；配置下载目录及足够磁盘空间；用户需 Execute 和 Download 权限。', definition: modelDownload },
   { code: 'beijing-medical-query', name: '北京医保 · 人员信息查询', summary: '登录接管、按人员查询并下载结果。', resource: '北京 / 医保 / PERSON-QUERY', requirements: '配置系统地址；替换全部 replace-* 选择器；核实登录与下载权限。', definition: personQuery },
   { code: 'unit-certificate', name: '单位参保证明', summary: '按单位识别信息查询并下载证明。', resource: '所选城市 / 社保或医保 / UNIT-CERTIFICATE', requirements: '配置系统地址；替换全部 replace-* 选择器；确认实际平台支持下载。', definition: unitCertificate },
   { code: 'qd-mock-add', name: '青岛社保模拟 · 增员', summary: '对开发环境模拟站点提交增员并检查回执。', resource: '青岛 / 社保 / PERSON-ADD', requirements: '仅开发环境；NodeAgent 需具备 Adapter:qd-social-security；提交 mockBaseUrl 等参数。', definition: mockAdd, developmentOnly: true },

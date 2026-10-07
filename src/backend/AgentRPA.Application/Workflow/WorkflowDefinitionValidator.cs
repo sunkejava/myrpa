@@ -17,6 +17,8 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return ["Workflow 根节点必须是 JSON Object。"];
             var errors = new List<string>(parameterSchemaValidator.ValidateDefinition(root));
+            if (root.TryGetProperty("recordVideo", out var recording) && recording.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                errors.Add("recordVideo 必须是布尔值。");
             if (root.TryGetProperty("adapter", out var adapter))
             {
                 var code = adapter.ValueKind == JsonValueKind.String ? adapter.GetString() : null;
@@ -76,11 +78,22 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 (requiredAction.ValueKind != JsonValueKind.String || !WorkflowPermissionPreflight.IsAllowedAction(requiredAction.GetString() ?? string.Empty)))
                 errors.Add($"{location} 的 requiredAction 无效。");
             var hasConfig = step.TryGetProperty("config", out var config) && config.ValueKind == JsonValueKind.Object;
-            if (stepType is WorkflowStepType.Navigate or WorkflowStepType.Click or WorkflowStepType.Input or WorkflowStepType.Select or WorkflowStepType.WaitForElement or WorkflowStepType.Extract or WorkflowStepType.Upload or WorkflowStepType.Assert or WorkflowStepType.UKeySign)
+            if (stepType is WorkflowStepType.Navigate or WorkflowStepType.Click or WorkflowStepType.Input or WorkflowStepType.Select or WorkflowStepType.WaitForElement or WorkflowStepType.Extract or WorkflowStepType.Upload or WorkflowStepType.Assert or WorkflowStepType.UKeySign or WorkflowStepType.Press or WorkflowStepType.ModelDownload)
                 if (!hasConfig) errors.Add($"第 {index} 个 {type} Step 缺少 config。");
             if ((stepType is WorkflowStepType.Condition or WorkflowStepType.Loop or WorkflowStepType.SubWorkflow) && !hasConfig)
                 errors.Add($"{location} 缺少嵌套 config。");
             if (!hasConfig) continue;
+            if (stepType == WorkflowStepType.Press && (!HasString(config, "selector") || !HasString(config, "key") ||
+                !new[] { "Enter", "Tab", "Escape", "ArrowDown", "ArrowUp" }.Contains(config.GetProperty("key").GetString())))
+                errors.Add($"{location} 的 Press 需要 selector 和受支持的 key。");
+            if (stepType == WorkflowStepType.ModelDownload)
+            {
+                foreach (var field in new[] { "modelQuery", "repository", "fileName", "revision", "downloadTimeoutSeconds" })
+                    if (!HasString(config, field)) errors.Add($"{location} 的 ModelDownload 缺少 config.{field}。");
+                if (!requiredCapabilities.Contains("ModelDownload:ModelScope"))
+                    errors.Add($"{location} 必须声明 ModelDownload:ModelScope 节点能力。");
+                if (reservedOutputs.Contains("modelDownload")) errors.Add($"{location} 参数不能使用 modelDownload 结果保留名称。");
+            }
             if (stepType == WorkflowStepType.Navigate && !HasString(config, "url"))
                 errors.Add($"{location} 缺少 config.url。");
             if (stepType is WorkflowStepType.Click or WorkflowStepType.Input or WorkflowStepType.Select or

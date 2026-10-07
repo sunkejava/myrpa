@@ -124,6 +124,7 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await IdentityBootstrapper.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>(), app.Configuration, app.Environment.IsDevelopment());
     await AgentRPA.Api.Seeding.DefaultResourceSeedData.SeedAsync(db);
+    await AgentRPA.Api.Seeding.ModelDownloadSeedData.SeedAsync(db);
     if (args.Contains("--seed-only", StringComparer.Ordinal))
     {
         if (!app.Environment.IsDevelopment()) throw new InvalidOperationException("演示数据只允许在 Development 环境初始化。");

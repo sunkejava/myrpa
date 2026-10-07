@@ -4,6 +4,7 @@ import TaskTimeline from './TaskTimeline.vue'
 import ExecutionLog from './ExecutionLog.vue'
 import TaskItemTable from './TaskItemTable.vue'
 import BrowserPreview from './BrowserPreview.vue'
+import VideoPreview from './VideoPreview.vue'
 import type { TaskItem as Item, Timeline, ExecutionEntry as Log } from '../../types/task'
 
 type Task = { id: string; name: string; status: string; approvalStatus?: string | null; items: Item[] }
@@ -27,7 +28,7 @@ async function get<T>(path: string): Promise<T> {
 }
 async function load() {
   busy.value = true; error.value = ''
-  try { task.value = await get<Task>(`tasks/${props.taskId}`) }
+  try { task.value = await get<Task>(`tasks/${props.taskId}`); if (executionId.value) await chooseExecution(executionId.value) }
   catch (e) { error.value = e instanceof Error ? e.message : '加载失败' }
   finally { busy.value = false }
 }
@@ -42,6 +43,13 @@ async function chooseExecution(id: string) {
       checkpoints.value = nextCheckpoints; logs.value = nextLogs; artifacts.value = nextArtifacts; timeline.value = nextTimeline
     }
   } catch (e) { error.value = e instanceof Error ? e.message : '读取执行日志失败' }
+}
+async function moreLogs() {
+  const id = executionId.value
+  try {
+    const next = await get<Log[]>(`executions/${id}/logs?limit=200&afterSequence=${logs.value.at(-1)?.sequence ?? -1}`)
+    if (executionId.value === id) logs.value.push(...next)
+  } catch (e) { error.value = e instanceof Error ? e.message : '日志读取失败' }
 }
 async function download(artifact: Artifact) {
   error.value = ''
@@ -75,8 +83,10 @@ onMounted(load)
       <p class="muted">只有“开始”而没有“完成”的提交步骤须先核验外部系统状态，不能直接重跑。</p>
       <div class="table-wrap"><table><thead><tr><th>序号</th><th>Step ID</th><th>类型</th><th>事件</th></tr></thead><tbody><tr v-for="item in checkpoints" :key="item.sequence"><td>{{ item.sequence }}</td><td>{{ item.stepId }}</td><td>{{ stepType(item.metadataJson) }}</td><td>{{ item.eventType === 'StepStarted' ? '开始' : '完成' }}</td></tr></tbody></table><p v-if="!checkpoints.length" class="muted empty">暂无 Step 检查点。</p></div>
       <ExecutionLog :logs="logs" />
+      <button class="action-btn" @click="moreLogs">加载后续日志</button>
+      <p class="muted">完整日志可在下方 ExecutionLog 产物中下载。模型文件路径及摘要保存在 DownloadManifest 清单和任务结果中。</p>
       <h3>执行产物</h3>
-      <div class="table-wrap"><table><thead><tr><th>文件</th><th>类型</th><th>大小</th><th>有效期</th><th>操作</th></tr></thead><tbody><tr v-for="artifact in artifacts" :key="artifact.id"><td>{{ artifact.fileName }}<small v-if="artifact.sha256">SHA256：{{ artifact.sha256 }}</small></td><td>{{ artifact.artifactType }}</td><td>{{ artifact.size }} B</td><td>{{ artifact.expiresAt ? new Date(artifact.expiresAt).toLocaleString('zh-CN') : '长期' }}</td><td><button class="action-btn" @click="download(artifact)">下载</button><BrowserPreview v-if="artifact.contentType?.startsWith('image/')" :token="token" :execution-id="executionId" :artifact-id="artifact.id" :file-name="artifact.fileName" /></td></tr></tbody></table><p v-if="!artifacts.length" class="muted empty">暂无执行产物。</p></div>
+      <div class="table-wrap"><table><thead><tr><th>文件</th><th>类型</th><th>大小</th><th>有效期</th><th>操作</th></tr></thead><tbody><tr v-for="artifact in artifacts" :key="artifact.id"><td>{{ artifact.fileName }}<small v-if="artifact.sha256">SHA256：{{ artifact.sha256 }}</small></td><td>{{ artifact.artifactType }}</td><td>{{ artifact.size }} B</td><td>{{ artifact.expiresAt ? new Date(artifact.expiresAt).toLocaleString('zh-CN') : '长期' }}</td><td><button class="action-btn" @click="download(artifact)">下载</button><VideoPreview v-if="artifact.artifactType === 'Video'" :token="token" :execution-id="executionId" :artifact-id="artifact.id" /><BrowserPreview v-if="artifact.contentType?.startsWith('image/')" :token="token" :execution-id="executionId" :artifact-id="artifact.id" :file-name="artifact.fileName" /></td></tr></tbody></table><p v-if="!artifacts.length" class="muted empty">暂无执行产物。</p></div>
     </template>
   </section>
 </template>

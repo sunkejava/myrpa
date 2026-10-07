@@ -32,7 +32,7 @@ public sealed record WorkflowRuntimeArtifact(
     string? Hash);
 
 /// <summary>基于 Playwright 的确定性浏览器 Workflow Runtime。</summary>
-public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> adapters, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider = null) : IWorkflowRuntime
+public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> adapters, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider = null, ModelDownloadStep? modelDownload = null) : IWorkflowRuntime
 {
     public async Task ExecuteAsync(string definitionJson, IReadOnlyDictionary<string, string?> parameters, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken)
     {
@@ -44,21 +44,73 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         var adapter = adapters.SingleOrDefault(x => string.Equals(x.Code, adapterCode, StringComparison.OrdinalIgnoreCase))
             ?? throw new NotSupportedException($"NodeAgent 未安装 Workflow Adapter：{adapterCode}");
 
+        var runDirectory = Path.GetFullPath(Path.Combine("artifacts", "runs", Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(runDirectory);
+        var logPath = Path.Combine(runDirectory, "execution.jsonl");
+        var recordVideo = GetBool(root, "recordVideo") == true;
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
-        var page = await browser.NewPageAsync();
+        await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            AcceptDownloads = true,
+            RecordVideoDir = recordVideo ? Path.Combine(runDirectory, "videos") : null,
+            RecordVideoSize = recordVideo ? new RecordVideoSize { Width = 1280, Height = 720 } : null,
+            ViewportSize = new ViewportSize { Width = 1280, Height = 720 }
+        });
+        var page = await context.NewPageAsync();
         var variables = parameters.ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
         var protectedNames = parameters.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         protectedNames.Add("systemBaseUrl");
+        async Task AppendAsync(WorkflowRuntimeEvent e)
+        {
+            // 不保存参数、输入值或提取内容，只保存步骤、时间和已脱敏的诊断信息。
+            var line = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow, e.Status, e.StepId, e.StepType,
+                e.ProgressPercent, message = AgentRPA.Domain.Common.SensitiveTextSanitizer.Sanitize(e.Message),
+                pageUrl = SafePageUrl(page.Url), artifact = e.Artifact?.FileName });
+            await File.AppendAllTextAsync(logPath, line + Environment.NewLine);
+        }
+        async Task<string?> ReportAsync(WorkflowRuntimeEvent e)
+        {
+            await AppendAsync(e);
+            return await report(e);
+        }
+        Exception? failure = null;
         try
         {
-            await ExecuteStepsAsync(page, steps, variables, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, 0);
-            await report(new("Succeeded", null, 100, "Workflow 执行完成。"));
+            await ExecuteStepsAsync(page, steps, variables, protectedNames, ReportAsync, cancellationToken, adapter, hardwareProvider, captchaProvider, modelDownload, 0);
+            await AppendAsync(new("Succeeded", null, 100, "Workflow 执行完成。"));
         }
-        finally { await browser.CloseAsync(); }
+        catch (Exception ex)
+        {
+            failure = ex;
+            await AppendAsync(new(cancellationToken.IsCancellationRequested ? "Cancelled" : "Failed", null, 0, ex.Message));
+            if (!page.IsClosed)
+            {
+                var errorPath = Path.Combine(runDirectory, "failure.png");
+                try
+                {
+                    await SaveScreenshotAsync(page, errorPath, true);
+                    await report(new("Running", null, 0, "已保存失败现场截图。", await BuildArtifactAsync("Screenshot", errorPath, "image/png")));
+                }
+                catch { /* 浏览器崩溃时仍尝试保存其他证据。 */ }
+            }
+        }
+        finally
+        {
+            await context.CloseAsync(); // 关闭 Context 后视频才完整落盘；终态在证据上传后上报。
+        }
+        if (recordVideo)
+            foreach (var video in Directory.EnumerateFiles(Path.Combine(runDirectory, "videos"), "*.webm"))
+                await report(new("Running", null, 99, "已保存浏览器执行视频。", await BuildArtifactAsync("Video", video, "video/webm")));
+        await report(new("Running", null, 99, "已保存完整执行日志。", await BuildArtifactAsync("ExecutionLog", logPath, "application/x-ndjson")));
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        await report(new("Succeeded", null, 100, "Workflow 执行完成，诊断证据已保存。"));
     }
 
-    private static async Task ExecuteStepsAsync(IPage page, IReadOnlyList<JsonElement> steps, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, int depth)
+    private static string SafePageUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http"
+        ? uri.GetLeftPart(UriPartial.Path) : "browser";
+
+    private static async Task ExecuteStepsAsync(IPage page, IReadOnlyList<JsonElement> steps, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, ModelDownloadStep? modelDownload, int depth)
     {
         if (depth > 8) throw new InvalidOperationException("Workflow 嵌套深度超过安全限制。");
         for (var index = 0; index < steps.Count; index++)
@@ -84,6 +136,18 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
             {
                 case "navigate": await page.GotoAsync(adapter.ResolveUrl(Resolve(GetString(config, "url") ?? throw new InvalidOperationException("Navigate 缺少 url。"), parameters), parameters)); break;
                 case "click": await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Click 缺少 selector。"), parameters))).ClickAsync(); break;
+                case "press": await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Press 缺少 selector。"), parameters))).PressAsync(GetString(config, "key") ?? "Enter"); break;
+                case "modeldownload":
+                    if (modelDownload is null) throw new InvalidOperationException("节点未配置模型下载服务。");
+                    var receipt = await modelDownload.ExecuteAsync(page, config, parameters,
+                        async message => { await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), message)); }, cancellationToken);
+                    var receiptJson = JsonSerializer.Serialize(receipt);
+                    var receiptPath = Path.Combine("artifacts", "model-download-" + Guid.NewGuid().ToString("N") + ".json");
+                    Directory.CreateDirectory("artifacts");
+                    await File.WriteAllTextAsync(receiptPath, receiptJson, cancellationToken);
+                    await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "模型保存在执行节点；已上传下载清单。",
+                        await BuildArtifactAsync("DownloadManifest", receiptPath, "application/json"), OutputKey: "modelDownload", OutputValue: receiptJson));
+                    break;
                 case "input": await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Input 缺少 selector。"), parameters))).FillAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
                 case "select": await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Select 缺少 selector。"), parameters))).SelectOptionAsync(Resolve(GetString(config, "value") ?? string.Empty, parameters)); break;
                 case "wait": await Task.Delay(Math.Clamp(GetInt(config, "milliseconds") ?? 500, 0, 120_000), cancellationToken)
@@ -113,11 +177,11 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
                     await page.Locator(adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Upload 缺少 selector。"), parameters))).SetInputFilesAsync(uploadPath);
                     if (File.Exists(uploadPath)) await report(new("Running", id, (index * 100) / Math.Max(1, steps.Count), "已完成文件上传", await BuildArtifactAsync("Upload", uploadPath, null)));
                     break;
-                case "condition": await ExecuteConditionAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth); break;
-                case "loop": await ExecuteLoopAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth); break;
+                case "condition": await ExecuteConditionAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, modelDownload, depth); break;
+                case "loop": await ExecuteLoopAsync(page, config, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, modelDownload, depth); break;
                 case "subworkflow":
                     var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-                    await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth + 1); break;
+                    await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, modelDownload, depth + 1); break;
                 case "end": return;
                 case "script": throw new InvalidOperationException("Script Step 默认被禁止，必须通过受控 Script Provider 执行。 ");
                 case "humantask":
@@ -194,7 +258,7 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         }
     }
 
-    private static async Task ExecuteConditionAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, int depth)
+    private static async Task ExecuteConditionAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, ModelDownloadStep? modelDownload, int depth)
     {
         var selector = adapter.ResolveSelector(Resolve(GetString(config, "selector") ?? throw new InvalidOperationException("Condition 缺少 selector。"), parameters));
         var actual = await page.Locator(selector).InnerTextAsync();
@@ -202,14 +266,14 @@ public sealed class PlaywrightWorkflowRuntime(IEnumerable<IWorkflowSiteAdapter> 
         var matched = actual.Contains(expected, StringComparison.Ordinal);
         var property = matched ? "then" : "else";
         if (config.TryGetProperty(property, out var branch) && branch.ValueKind == JsonValueKind.Array)
-            await ExecuteStepsAsync(page, branch.EnumerateArray().ToArray(), parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth + 1);
+            await ExecuteStepsAsync(page, branch.EnumerateArray().ToArray(), parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, modelDownload, depth + 1);
     }
 
-    private static async Task ExecuteLoopAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, int depth)
+    private static async Task ExecuteLoopAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, IReadOnlySet<string> protectedNames, Func<WorkflowRuntimeEvent, Task<string?>> report, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter, IHardwareCredentialProvider hardwareProvider, ICaptchaProvider? captchaProvider, ModelDownloadStep? modelDownload, int depth)
     {
         var count = Math.Clamp(GetInt(config, "count") ?? 1, 0, 1000);
         var nested = config.TryGetProperty("steps", out var nestedSteps) && nestedSteps.ValueKind == JsonValueKind.Array ? nestedSteps.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
-        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, depth + 1); }
+        for (var i = 0; i < count; i++) { cancellationToken.ThrowIfCancellationRequested(); await ExecuteStepsAsync(page, nested, parameters, protectedNames, report, cancellationToken, adapter, hardwareProvider, captchaProvider, modelDownload, depth + 1); }
     }
 
     private static async Task ExecuteDownloadAsync(IPage page, JsonElement config, IReadOnlyDictionary<string, string?> parameters, string target, int timeoutMs, CancellationToken cancellationToken, IWorkflowSiteAdapter adapter)

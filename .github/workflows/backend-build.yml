@@ -5,12 +5,14 @@ on:
     branches: [ main ]
     paths:
       - 'src/backend/**'
+      - 'docs/examples/model*'
       - '*.sln'
       - 'Directory.Build.props'
       - '.github/workflows/backend-build.yml'
   pull_request:
     paths:
       - 'src/backend/**'
+      - 'docs/examples/model*'
       - '*.sln'
       - 'Directory.Build.props'
       - '.github/workflows/backend-build.yml'

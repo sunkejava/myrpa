@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using AgentRPA.Application.Batch;
 using AgentRPA.Application.Workflow;
 using AgentRPA.Domain.Workflow;
 using AgentRPA.Infrastructure.Persistence;
@@ -14,7 +15,7 @@ namespace AgentRPA.Api.Controllers;
 [ApiController, Route("api/workflows"), Authorize]
 public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinitionValidator validator,
     NodeAgentConnectionRegistry connections, IHubContext<NodeAgentHub, INodeAgentClient> hub,
-    ILogger<WorkflowsController> logger) : ControllerBase
+    ILogger<WorkflowsController> logger, ISpreadsheetImportService spreadsheetImport) : ControllerBase
 {
     [HttpGet] public async Task<IActionResult> List(CancellationToken ct) => Ok(await db.Workflows.AsNoTracking().OrderBy(x => x.Name).Select(x => new { x.Id, x.Name, x.BusinessFunctionId, Status = x.Status.ToString() }).ToListAsync(ct));
     [Authorize(Roles = "Admin"), HttpPost] public async Task<IActionResult> Create(CreateWorkflowRequest request, CancellationToken ct)
@@ -31,6 +32,23 @@ public sealed class WorkflowsController(AgentRpaDbContext db, WorkflowDefinition
         return Created($"api/workflows/{e.Id}", new { e.Id });
     }
     [HttpGet("{id:guid}/versions")] public async Task<IActionResult> Versions(Guid id, CancellationToken ct) => Ok(await db.WorkflowVersions.AsNoTracking().Where(x => x.WorkflowId == id).OrderByDescending(x => x.Version).Select(x => new { x.Id, x.Version, x.Published, x.CreatedAt }).ToListAsync(ct));
+    [HttpPost("{id:guid}/test-data/import"), RequestSizeLimit(2_000_000)]
+    public async Task<IActionResult> ImportTestData(Guid id, IFormFile file, CancellationToken ct)
+    {
+        if (!await db.Workflows.AsNoTracking().AnyAsync(x => x.Id == id, ct)) return NotFound();
+        if (file is null || file.Length is < 1 or > 1_000_000) return BadRequest(new { message = "文件须为 1 MB 以内的 XLSX 或 CSV。" });
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var rows = await spreadsheetImport.ReadAsync(stream, file.FileName, ct);
+            if (rows.Count is < 1 or > 100) return BadRequest(new { message = "每批需要 1 至 100 条数据。" });
+            return Ok(new { rows, count = rows.Count });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or System.Xml.XmlException or System.Text.DecoderFallbackException)
+        {
+            return BadRequest(new { message = "表格解析失败：" + ex.Message });
+        }
+    }
     /// <summary>发布前校验草稿和测试数据；仅做静态预检，不执行外部网站操作。</summary>
     [HttpPost("{id:guid}/test-data/validate")]
     public async Task<IActionResult> ValidateTestData(Guid id, ValidateWorkflowTestDataRequest request, CancellationToken ct)

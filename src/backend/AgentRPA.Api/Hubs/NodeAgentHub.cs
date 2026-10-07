@@ -164,7 +164,7 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
         var level = status == ExecutionStatus.Failed ? ExecutionLogLevel.Error : ExecutionLogLevel.Information;
         var eventType = started ? ExecutionLogEventType.StepStarted : completed ? ExecutionLogEventType.StepCompleted : ExecutionLogEventType.Execution;
         db.ExecutionLogs.Add(new ExecutionLog(execution.Id, nextSequence, level, eventType,
-            started || completed ? safeMessage ?? $"Step {progress.StepId}" : $"NodeAgent 报告执行状态：{status}",
+            started || completed ? safeMessage ?? $"Step {progress.StepId}" : $"NodeAgent 报告执行状态：{status}；{safeMessage}",
             progress.StepId, JsonSerializer.Serialize(new { progressPercent = progress.ProgressPercent, stepType = progress.StepType })));
         await db.SaveChangesAsync(cancellationToken);
         if (lease is not null && terminal) await leases.ReleaseAsync(lease.Id, cancellationToken);
@@ -172,6 +172,16 @@ public sealed class NodeAgentHub(NodeAgentConnectionRegistry connections, INodeR
 
     public Task ReportArtifact(ExecutionArtifactReport report) =>
         throw new HubException("请通过节点产物上传接口传送文件内容并校验哈希。");
+
+    /// <summary>大型下载及人工等待期间持续续租，不改变执行状态或重复写入业务日志。</summary>
+    public async Task RenewExecution(Guid executionId)
+    {
+        if (!Context.Items.TryGetValue("NodeId", out var value) || value is not Guid nodeId) throw new HubException("Node 身份校验失败。");
+        var execution = await db.Executions.AsNoTracking().SingleOrDefaultAsync(x => x.Id == executionId && x.NodeId == nodeId, Context.ConnectionAborted);
+        if (execution is null || execution.Status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.Cancelled) return;
+        var lease = await db.NodeLeases.AsNoTracking().SingleOrDefaultAsync(x => x.ExecutionId == executionId && !x.Released, Context.ConnectionAborted);
+        if (lease is not null) await leases.RenewAsync(lease.Id, executionId, Context.ConnectionAborted);
+    }
 
     public override Task OnDisconnectedAsync(Exception? exception)
     {

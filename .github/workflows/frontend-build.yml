@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - 'src/frontend/**'
+      - 'docs/examples/model*'
       - 'src/backend/**'
       - '.github/workflows/frontend-build.yml'
   pull_request:
     paths:
       - 'src/frontend/**'
+      - 'docs/examples/model*'
       - 'src/backend/**'
       - '.github/workflows/frontend-build.yml'
 

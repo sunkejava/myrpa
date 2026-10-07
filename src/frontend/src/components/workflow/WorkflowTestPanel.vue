@@ -1,9 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { workflowRequest } from '../../api/modules/workflows'
 
 const props = defineProps<{ token: string; workflowId: string; definitionJson: string; publishedVersions: number[] }>()
 const rows = ref<string>('[]')
+const isModelDownload = computed(() => props.definitionJson.includes('"ModelDownload"'))
+function fillDefaults() {
+  try {
+    const schema = (JSON.parse(props.definitionJson) as { parameters?: Record<string, { default?: unknown }> }).parameters || {}
+    rows.value = JSON.stringify([Object.fromEntries(Object.entries(schema).filter(([, value]) => value.default !== undefined).map(([key, value]) => [key, value.default]))], null, 2)
+  } catch { report.value = '流程 JSON 无效。' }
+}
+async function downloadTemplate() {
+  const response = await fetch('/api/model-downloads/template', { headers: { Authorization: `Bearer ${props.token}` } })
+  if (!response.ok) { report.value = '下载 Excel 模板失败。'; return }
+  const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a')
+  link.href = url; link.download = 'model-download-template.xlsx'; link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
 const busy = ref(false)
 const report = ref('')
 const version = ref<number | null>(null)
@@ -20,9 +34,16 @@ async function importFile(event: Event) {
   report.value = ''
   if (file.size > 1_000_000) { report.value = '文件不能超过 1 MB。'; return }
   try {
+    if (file.name.toLowerCase().endsWith('.xlsx')) {
+      const form = new FormData(); form.append('file', file)
+      const response = await fetch(`/api/workflows/${props.workflowId}/test-data/import`, { method: 'POST', headers: { Authorization: `Bearer ${props.token}` }, body: form })
+      const result = await response.json() as { rows?: unknown[]; message?: string }
+      if (!response.ok) throw new Error(result.message || 'Excel 导入失败。')
+      rows.value = JSON.stringify(result.rows, null, 2); parseRows(); report.value = `已导入 ${result.rows?.length} 条数据，请校验后运行。`; return
+    }
     const content = await file.text()
     if (file.name.toLowerCase().endsWith('.json')) { rows.value = JSON.stringify(JSON.parse(content), null, 2); parseRows(); return }
-    if (!file.name.toLowerCase().endsWith('.csv')) throw new Error('仅支持 JSON 或 UTF-8 CSV 文件。')
+    if (!file.name.toLowerCase().endsWith('.csv')) throw new Error('仅支持 XLSX、JSON 或 UTF-8 CSV 文件。')
     const lines: string[][] = []; let field = ''; let record: string[] = []; let quoted = false
     for (let i = 0; i < content.length; i++) {
       const c = content[i]
@@ -85,7 +106,9 @@ async function run() {
   <section class="workflow-test-panel">
     <h3>工作流测试数据</h3>
     <p class="muted">发布前校验当前草稿与测试数据；发布后选定版本，通过正常审批及权限检查运行真实任务。测试任务可能操作业务系统，请使用测试环境与测试账号。</p>
-    <label>导入 JSON 数组或 UTF-8 CSV（首行为参数名）<input type="file" accept=".json,.csv,application/json,text/csv" @change="importFile" /></label>
+    <label>导入 Excel、JSON 数组或 UTF-8 CSV（首行为参数名）<input type="file" accept=".xlsx,.json,.csv" @change="importFile" /></label>
+    <div class="actions"><button class="action-btn" type="button" @click="fillDefaults">填入流程默认数据</button><button v-if="isModelDownload" class="action-btn" type="button" @click="downloadTemplate">下载模型 Excel 模板</button></div>
+    <p v-if="isModelDownload" class="muted">每行下载一个精确指定的 GGUF 文件。默认文件约 16 GB；模型保存在执行节点，任务详情可下载清单、完整日志及视频。</p>
     <label>测试数据（JSON 数组）<textarea v-model="rows" rows="7" spellcheck="false" placeholder='[{"personId":"TEST001"}]' /></label>
     <label>实际执行版本<select v-model.number="version"><option :value="null">选择已发布版本</option><option v-for="item in publishedVersions" :key="item" :value="item">v{{ item }}</option></select></label>
     <div class="actions"><button type="button" class="action-btn" :disabled="busy" @click="validate">校验草稿数据</button><button type="button" class="action-btn primary" :disabled="busy || !publishedVersions.length" @click="run">创建并运行测试任务</button></div>

@@ -10,12 +10,18 @@ using AgentRPA.Infrastructure.Captcha;
 var builder = Host.CreateApplicationBuilder(args);
 var serverUrl = builder.Configuration["NodeAgent:ServerUrl"] ?? "https://localhost:5001";
 builder.Services.Configure<NodeAgentOptions>(builder.Configuration.GetSection("NodeAgent"));
+var modelDownloadOptions = builder.Configuration.GetSection("NodeAgent:ModelDownloads").Get<ModelDownloadOptions>() ?? new();
+builder.Services.AddSingleton(modelDownloadOptions);
+builder.Services.AddHttpClient("AgentRPA.ModelDownload", client => client.Timeout = Timeout.InfiniteTimeSpan);
+builder.Services.AddSingleton(provider => new ModelFileDownloader(provider.GetRequiredService<IHttpClientFactory>().CreateClient("AgentRPA.ModelDownload"), modelDownloadOptions));
+builder.Services.AddSingleton<ModelDownloadStep>();
 var siteConfigs = builder.Configuration.GetSection("NodeAgent:SiteAdapters").Get<List<ConfiguredSiteAdapterOptions>>() ?? [];
 var siteAdapters = siteConfigs.Select(x => new ConfiguredWorkflowSiteAdapter(x)).ToArray();
 if (siteAdapters.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count() != siteAdapters.Length)
     throw new InvalidOperationException("节点站点 Adapter 编码不能重复。");
 builder.Services.PostConfigure<NodeAgentOptions>(options =>
 {
+    if (!options.Capabilities.Any(x => x.Code == "ModelDownload:ModelScope")) options.Capabilities.Add(new NodeCapabilityDto("ModelDownload:ModelScope"));
     foreach (var adapter in siteAdapters)
         if (!options.Capabilities.Any(x => string.Equals(x.Code, "Adapter:" + adapter.Code, StringComparison.OrdinalIgnoreCase)))
             options.Capabilities.Add(new NodeCapabilityDto("Adapter:" + adapter.Code));

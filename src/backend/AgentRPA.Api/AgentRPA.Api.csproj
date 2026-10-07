@@ -16,4 +16,8 @@
     <ProjectReference Include="..\AgentRPA.Application\AgentRPA.Application.csproj" />
     <ProjectReference Include="..\AgentRPA.Infrastructure\AgentRPA.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../../docs/examples/modelscope-gguf-download.json" LogicalName="ModelDownload.Workflow.json" />
+    <EmbeddedResource Include="../../../docs/examples/model-download-template.xlsx" LogicalName="ModelDownload.Template.xlsx" />
+  </ItemGroup>
 </Project>

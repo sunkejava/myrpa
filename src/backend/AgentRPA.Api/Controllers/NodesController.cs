@@ -21,7 +21,7 @@ public sealed class NodesController(
     IArtifactStorage artifactStorage) : ControllerBase
 {
     /// <summary>节点将执行产物上传到服务端存储；客户端不能指定服务器路径。</summary>
-    [HttpPost("{nodeId:guid}/executions/{executionId:guid}/artifacts"), RequestSizeLimit(52_428_800)]
+    [HttpPost("{nodeId:guid}/executions/{executionId:guid}/artifacts"), RequestSizeLimit(536_870_912)]
     public async Task<IActionResult> UploadArtifact(Guid nodeId, Guid executionId,
         [FromQuery] Guid workerSlotId, [FromQuery] string artifactType, [FromQuery] string fileName,
         [FromQuery] string sha256, CancellationToken cancellationToken)
@@ -31,10 +31,10 @@ public sealed class NodesController(
             (x.Status == NodeStatus.Online || x.Status == NodeStatus.Draining), cancellationToken)) return StatusCode(403);
         var execution = await db.Executions.SingleOrDefaultAsync(x => x.Id == executionId && x.NodeId == nodeId && x.WorkerSlotId == workerSlotId, cancellationToken);
         if (execution is null || execution.Status is AgentRPA.Domain.Tasks.ExecutionStatus.Succeeded or AgentRPA.Domain.Tasks.ExecutionStatus.Failed or AgentRPA.Domain.Tasks.ExecutionStatus.Cancelled) return NotFound();
-        if (artifactType is not ("Screenshot" or "Download" or "Upload") || string.IsNullOrWhiteSpace(fileName) ||
+        if (artifactType is not ("Screenshot" or "Download" or "Upload" or "Video" or "ExecutionLog" or "DownloadManifest" or "Captcha" or "QrLogin") || string.IsNullOrWhiteSpace(fileName) ||
             fileName.Length > 260 || Path.GetFileName(fileName) != fileName ||
             sha256.Length != 64 || !sha256.All(Uri.IsHexDigit) ||
-            Request.ContentLength is null or < 0 or > 50L * 1024 * 1024)
+            Request.ContentLength is null or < 0 || Request.ContentLength > (artifactType == "Video" ? 512L : 50L) * 1024 * 1024)
             return BadRequest(new { message = "产物元数据或文件大小无效。" });
         var storageKey = $"executions/{executionId:N}/{Guid.NewGuid():N}";
         try

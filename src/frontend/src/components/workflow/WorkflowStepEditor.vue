@@ -9,6 +9,8 @@ const configText = ref('{}')
 const error = ref('')
 const fields: Record<string, { key: string; label: string; hint: string; numeric?: boolean }[]> = {
   Navigate: [{ key: 'url', label: '页面地址', hint: '{{systemBaseUrl}}' }],
+  Press: [{ key: 'selector', label: '键盘操作目标', hint: '#sb_form_q' }, { key: 'key', label: '按键', hint: 'Enter' }],
+  ModelDownload: ['modelQuery', 'repository', 'fileName', 'revision', 'downloadTimeoutSeconds'].map(key => ({ key, label: ({ modelQuery: '站内搜索词', repository: '模型仓库 owner/name', fileName: 'GGUF 文件路径', revision: '仓库版本', downloadTimeoutSeconds: '下载超时秒数' } as Record<string, string>)[key], hint: '{{' + key + '}}' })),
   Click: [{ key: 'selector', label: '点击目标', hint: '[data-testid=submit]' }],
   Input: [{ key: 'selector', label: '输入框', hint: '[data-testid=person-id]' }, { key: 'value', label: '填入内容', hint: '{{personId}}' }],
   Select: [{ key: 'selector', label: '下拉框', hint: 'select[name=period]' }, { key: 'value', label: '选项值', hint: '2026-09' }],

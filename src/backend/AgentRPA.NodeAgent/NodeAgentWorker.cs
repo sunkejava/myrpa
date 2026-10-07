@@ -100,6 +100,8 @@ public sealed class NodeAgentWorker(
                     await connection.InvokeAsync("Connect", new NodeAgentConnectRequest(registration.NodeId, config.AgentKey, config.AgentVersion), stoppingToken);
                     var metrics = ReadProcessMetrics();
                     await connection.InvokeAsync<NodeHeartbeatAck>("Heartbeat", new NodeHeartbeatRequest(registration.NodeId, config.AgentVersion, "Online", metrics.CpuPercent, metrics.MemoryMiB, Math.Max(0, config.WorkerSlots.Count - executions.Count), DateTimeOffset.UtcNow), stoppingToken);
+                    foreach (var executionId in executions.Keys)
+                        await connection.InvokeAsync("RenewExecution", executionId, stoppingToken);
                 }
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }
@@ -128,8 +130,11 @@ public sealed class NodeAgentWorker(
             {
                 if (e.OutputKey is not null && e.OutputValue is not null) extracted[e.OutputKey] = e.OutputValue;
                 if (e.Artifact is not null)
-                    await UploadArtifactAsync(command, e.Artifact, linked.Token);
-                await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, linked.Token, e.StepType,
+                {
+                    using var evidenceTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                    await UploadArtifactAsync(command, e.Artifact, evidenceTimeout.Token);
+                }
+                await ReportAsync(connection, command, e.Status, e.StepId, e.ProgressPercent, e.Message, e.Artifact is null ? linked.Token : CancellationToken.None, e.StepType,
                     e.Status == "Succeeded" ? JsonSerializer.Serialize(extracted) : null, e.InterventionType, e.InterventionTitle);
                 if (string.Equals(e.Status, "WaitingForHuman", StringComparison.OrdinalIgnoreCase))
                 {
@@ -160,7 +165,7 @@ public sealed class NodeAgentWorker(
 
     private async Task UploadArtifactAsync(ExecutionCommand command, WorkflowRuntimeArtifact artifact, CancellationToken cancellationToken)
     {
-        if (artifact.Size > 50L * 1024 * 1024) throw new InvalidOperationException("产物超过 50 MiB 上传限制。");
+        if (artifact.Size > (artifact.ArtifactType == "Video" ? 512L : 50L) * 1024 * 1024) throw new InvalidOperationException("产物超过上传限制；本地证据仍保留。");
         var client = httpClientFactory.CreateClient("AgentRPA.Server");
         var url = $"api/nodes/{command.NodeId}/executions/{command.ExecutionId}/artifacts?workerSlotId={command.WorkerSlotId}&artifactType={Uri.EscapeDataString(artifact.ArtifactType)}&fileName={Uri.EscapeDataString(artifact.FileName)}&sha256={artifact.Hash}";
         await using var file = File.OpenRead(artifact.StorageKey);

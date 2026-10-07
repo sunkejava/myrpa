@@ -1,0 +1,91 @@
+{
+  "recordVideo": true,
+  "riskLevel": "Low",
+  "requiresApproval": false,
+  "executionRequirement": {
+    "requiredCapabilities": [
+      "Browser:Edge",
+      "ModelDownload:ModelScope"
+    ]
+  },
+  "parameters": {
+    "siteQuery": {
+      "type": "string",
+      "required": true,
+      "default": "modelspace ModelScope 魔搭",
+      "maxLength": 500
+    },
+    "modelQuery": {
+      "type": "string",
+      "required": true,
+      "default": "qwen3.8 27B",
+      "maxLength": 500
+    },
+    "repository": {
+      "type": "string",
+      "required": true,
+      "default": "unsloth/Qwen3.8-27B-GGUF",
+      "maxLength": 500
+    },
+    "fileName": {
+      "type": "string",
+      "required": true,
+      "default": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+      "maxLength": 500
+    },
+    "revision": {
+      "type": "string",
+      "required": true,
+      "default": "master",
+      "maxLength": 500
+    },
+    "downloadTimeoutSeconds": {
+      "type": "string",
+      "required": true,
+      "default": "21600",
+      "maxLength": 500
+    }
+  },
+  "steps": [
+    {
+      "id": "bing",
+      "type": "Navigate",
+      "config": {
+        "url": "https://www.bing.com/"
+      }
+    },
+    {
+      "id": "site-search",
+      "type": "Input",
+      "config": {
+        "selector": "#sb_form_q",
+        "value": "{{siteQuery}}"
+      }
+    },
+    {
+      "id": "search-submit",
+      "type": "Press",
+      "config": {
+        "selector": "#sb_form_q",
+        "key": "Enter"
+      }
+    },
+    {
+      "id": "model-download",
+      "type": "ModelDownload",
+      "requiredAction": "Download",
+      "timeoutMs": 120000,
+      "config": {
+        "modelQuery": "{{modelQuery}}",
+        "repository": "{{repository}}",
+        "fileName": "{{fileName}}",
+        "revision": "{{revision}}",
+        "downloadTimeoutSeconds": "{{downloadTimeoutSeconds}}"
+      }
+    },
+    {
+      "id": "end",
+      "type": "End"
+    }
+  ]
+}

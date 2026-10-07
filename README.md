@@ -1,5 +1,7 @@
 # AgentRPA
 
+模型搜索下载自动化：参见 [Bing → ModelScope → GGUF 批量下载、Excel 导入与日志视频说明](docs/model-download-automation.md)。
+
 > 面向政务、社保及企业业务系统的智能 Agent RPA 平台。自然语言负责理解业务，权限负责边界，Workflow 保证确定性，Scheduler 负责资源选择，NodeAgent 负责实际执行。
 
 ## 架构
