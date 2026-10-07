@@ -14,20 +14,26 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
   const sha256 = createHash('sha256').update(model).digest('hex')
   const repository = 'unsloth/Qwen3.8-27B-GGUF'
   const filename = 'Qwen3.8-27B-UD-Q4_K_M.gguf'
+  const secondModel = { repository: 'fixture/Second-7B-GGUF', filename: 'second-model.gguf', query: 'fixture second model', content: Buffer.from('GGUF-second-browser-model-fixture') }
+  const catalogModels = [{ repository, filename, query: 'qwen3.8 27B', content: model }, secondModel]
   let transfers = 0
   const visited: string[] = []
   const server = createServer((req, res) => {
     const url = new URL(req.url!, 'http://localhost'); visited.push(url.pathname)
+    const target = catalogModels.find(x => url.pathname.includes(`/models/${x.repository}`))
     if (url.pathname.endsWith('/repo/files')) {
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ Data: { Files: [{ Path: filename, Type: 'file', Size: model.length, Sha256: sha256 }] } })); return
+      res.end(JSON.stringify({ Data: { Files: target ? [{ Path: target.filename, Type: 'file', Size: target.content.length, Sha256: createHash('sha256').update(target.content).digest('hex') }] : [] } })); return
     }
-    if (url.pathname.endsWith('/repo')) { transfers++; res.setHeader('Content-Length', model.length); res.end(model); return }
+    if (url.pathname.endsWith('/repo') && target) { transfers++; res.setHeader('Content-Length', target.content.length); res.end(target.content); return }
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     if (url.pathname === '/bing') res.end('<form action="/bing-search"><input id="sb_form_q" name="q"></form>')
     else if (url.pathname === '/bing-search') res.end('<ol id="b_results"><li class="b_algo"><h2><a href="/">魔搭 ModelScope</a></h2></li></ol>')
-    else if (url.pathname === '/models') res.end(`<form><input name="name" placeholder="输入关键词 搜索您想要的模型"></form>${url.searchParams.has('name') ? `<a href="/models/${repository}">Qwen 模型卡片</a>` : ''}`)
-    else if (url.pathname === `/models/${repository}`) res.end(`<button role="tab" onclick="document.getElementById('files').hidden=false">模型文件</button><div id="files" hidden><a href="/models/${repository}/file/view/master/${filename}">${filename} GGUF</a><a href="#">missing.gguf GGUF</a></div>`)
+    else if (url.pathname === '/models') {
+      const match = catalogModels.find(x => x.query === url.searchParams.get('name'))
+      res.end(`<form><input name="name" placeholder="输入关键词 搜索您想要的模型"></form>${match ? `<a href="/models/${match.repository}">模型卡片</a>` : ''}`)
+    }
+    else if (target && url.pathname === `/models/${target.repository}`) res.end(`<button role="tab" onclick="document.getElementById('files').hidden=false">模型文件</button><div id="files" hidden><a href="/models/${target.repository}/file/view/master/${target.filename}">${target.filename} GGUF</a><a href="#">missing.gguf GGUF</a></div>`)
     else res.end('<h1>ModelScope fixture</h1>')
   })
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
@@ -78,9 +84,11 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
       await expect.poll(async () => { detail = await (await request.get(`${api}/api/tasks/${task.id}`, { headers })).json(); return detail.status }, { timeout: 85000, message: `NodeAgent: ${output}` }).toBe(status)
       return { task: { ...task, name }, detail }
     }
-    const successful = await run([rows[0], rows[0]], 'Succeeded')
-    expect(transfers).toBe(1) // 第二行命中校验后的本地文件，仍走完整浏览器搜索链路。
+    const secondRow = { ...rows[0], modelQuery: secondModel.query, repository: secondModel.repository, fileName: secondModel.filename }
+    const successful = await run([rows[0], secondRow, rows[0]], 'Succeeded')
+    expect(transfers).toBe(2) // 两个不同模型分别下载；第三行复用已校验文件。
     expect(readFileSync(resolve(root, repository, 'master', filename))).toEqual(model)
+    expect(readFileSync(resolve(root, secondModel.repository, 'master', secondModel.filename))).toEqual(secondModel.content)
     expect(visited).toEqual(expect.arrayContaining(['/bing', '/bing-search', '/models', `/models/${repository}`]))
     const firstExecution = successful.detail.items[0].executions[0].id as string
     const evidence = async (executionId: string, expectedStatus: string) => {
@@ -97,6 +105,7 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
       return artifacts
     }
     const artifacts = await evidence(firstExecution, 'Succeeded')
+    for (const item of successful.detail.items.slice(1)) await evidence(item.executions[0].id, 'Succeeded')
     const manifest = artifacts.find(x => x.artifactType === 'DownloadManifest')!
     expect(manifest).toBeDefined()
     const receipt = await (await request.get(`${api}/api/executions/${firstExecution}/artifacts/${manifest.id}/content`, { headers })).json()

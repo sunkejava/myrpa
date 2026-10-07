@@ -87,7 +87,7 @@ dotnet run --project src/backend/AgentRPA.NodeAgent -c Release --no-build
 
 ## 自动化回归
 
-单元测试 `ModelFileDownloaderTests` 验证内容校验、断点续传、忽略 Range 的重启、版本变化、损坏数据、文件缺失、大小限制及路径安全。端到端测试 `model-download.spec.ts` 启动真实 .NET NodeAgent、真实浏览器和本机 Bing/魔搭契约测试站点：从仓库提供的 XLSX 模板导入、发布版本、批量执行两行、下载权重、复用、读取成功/失败录像与日志，最后在前端解码 WebM。
+单元测试 `ModelFileDownloaderTests` 验证内容校验、断点续传、忽略 Range 的重启、版本变化、损坏数据、文件缺失、大小限制及路径安全。端到端测试 `model-download.spec.ts` 启动真实 .NET NodeAgent、真实浏览器和本机 Bing/魔搭契约测试站点：从仓库提供的 XLSX 模板导入、发布版本、批量执行两个不同模型与一条重复数据、下载权重、复用、读取各行成功/失败录像与日志，最后在前端导入 Excel、校验并解码 WebM。
 
 ```powershell
 dotnet test tests/AgentRPA.Tests -c Release --filter FullyQualifiedName~ModelFileDownloaderTests
