@@ -31,3 +31,5 @@ jobs:
         run: dotnet restore tests/AgentRPA.Tests/AgentRPA.Tests.csproj
       - name: Test
         run: dotnet test tests/AgentRPA.Tests/AgentRPA.Tests.csproj --configuration Release --no-restore --logger "trx;LogFileName=test-results.trx"
+      - name: Model download focused regressions
+        run: dotnet test tests/AgentRPA.Tests/AgentRPA.Tests.csproj --configuration Release --no-build --filter FullyQualifiedName~ModelFileDownloaderTests

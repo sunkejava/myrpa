@@ -50,8 +50,8 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
     expect(seeded).toBeDefined()
     const unique = `ModelFixture:${randomUUID()}`
     const definition = JSON.parse(readFileSync(resolve(process.cwd(), '../../docs/examples/modelscope-gguf-download.json'), 'utf8'))
+    expect(definition).toEqual(JSON.parse(readFileSync(resolve(process.cwd(), 'src/data/workflow-templates/modelscope-gguf-download.json'), 'utf8')))
     definition.steps[0].config.url = catalog + '/bing'; definition.executionRequirement.requiredCapabilities.push(unique)
-    expect(definition).toEqual({ ...JSON.parse(readFileSync(resolve(process.cwd(), 'src/data/workflow-templates/modelscope-gguf-download.json'), 'utf8')), steps: definition.steps, executionRequirement: definition.executionRequirement })
     const workflow = await post('workflows', { businessFunctionId: seeded.businessFunctionId, name: `模型下载验收-${unique}` })
     const version = await post(`workflows/${workflow.id}/versions`, { definitionJson: JSON.stringify(definition) })
     await post(`workflows/${workflow.id}/versions/${version.version}/publish`, {})
@@ -108,6 +108,12 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
     // 在真实前端页面校验 Excel 导入预览和视频解码，而不只检查 API 的文件存在。
     await page.goto('/')
     await page.getByLabel('用户名').fill('admin'); await page.getByLabel('密码').fill('BrowserTestPassword123!'); await page.getByRole('button', { name: '登录', exact: true }).click()
+    await page.getByRole('button', { name: 'Workflow 管理', exact: true }).click()
+    await page.getByLabel('已有 Workflow', { exact: true }).selectOption(workflow.id)
+    await page.locator('.workflow-test-panel input[type=file]').setInputFiles({ name: 'models.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: await workbook.body() })
+    await expect(page.locator('.workflow-test-panel textarea')).toHaveValue(JSON.stringify(rows, null, 2))
+    await page.getByRole('button', { name: '校验草稿数据', exact: true }).click()
+    await expect(page.locator('.test-report')).toContainText('静态校验通过')
     await page.getByRole('button', { name: '任务中心', exact: true }).click()
     const taskRow = page.locator('tr').filter({ hasText: successful.task.name })
     await taskRow.getByRole('button', { name: '查看详情', exact: true }).click()

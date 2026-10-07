@@ -88,6 +88,8 @@ public sealed class WorkflowDefinitionValidator(WorkflowParameterSchemaValidator
                 errors.Add($"{location} 的 Press 需要 selector 和受支持的 key。");
             if (stepType == WorkflowStepType.ModelDownload)
             {
+                if (!step.TryGetProperty("requiredAction", out var downloadAction) || downloadAction.ValueKind != JsonValueKind.String || downloadAction.GetString() != "Download")
+                    errors.Add($"{location} 的 ModelDownload 必须声明 requiredAction: Download。");
                 foreach (var field in new[] { "modelQuery", "repository", "fileName", "revision", "downloadTimeoutSeconds" })
                     if (!HasString(config, field)) errors.Add($"{location} 的 ModelDownload 缺少 config.{field}。");
                 if (!requiredCapabilities.Contains("ModelDownload:ModelScope"))

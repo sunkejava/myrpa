@@ -24,12 +24,41 @@ public sealed class ModelDownloadStep(ModelFileDownloader downloader, ModelDownl
         ModelFileDownloader.ValidateIdentity(repository, revision, filename);
         var catalog = new Uri(options.CatalogBaseUrl.TrimEnd('/') + "/");
         await progress("在 Bing 搜索结果中定位 ModelScope 网站。");
-        var result = page.Locator("#b_results .b_algo h2 a").Filter(new LocatorFilterOptions { HasTextRegex = new Regex("ModelScope|魔搭|modelspace", RegexOptions.IgnoreCase) }).First;
-        await result.WaitForAsync();
-        var href = await result.GetAttributeAsync("href") ?? throw new InvalidOperationException("搜索结果没有站点链接。");
+        bool IsCatalog(Uri uri) => uri.Port == catalog.Port && uri.Scheme == catalog.Scheme &&
+            (uri.Host == catalog.Host || catalog.Host == "modelscope.cn" && uri.Host == "www.modelscope.cn");
+        var results = page.Locator("#b_results .b_algo h2 a").Filter(new LocatorFilterOptions { HasTextRegex = new Regex("ModelScope|魔搭|modelspace", RegexOptions.IgnoreCase) });
+        await results.First.WaitForAsync();
+        string? href = null;
+        foreach (var candidate in (await results.AllAsync()).Take(20))
+        {
+            var link = await candidate.GetAttributeAsync("href");
+            if (link is null) continue;
+            var destination = new Uri(new Uri(page.Url), link);
+            // Bing ck/a 链接在 u 参数中公开编码实际目标；只接受配置站点，避免误入同名结果。
+            if (destination.Host.EndsWith(".bing.com", StringComparison.Ordinal) && destination.AbsolutePath == "/ck/a")
+            {
+                var encoded = destination.Query.TrimStart('?').Split('&').FirstOrDefault(x => x.StartsWith("u=", StringComparison.Ordinal));
+                if (encoded is not null)
+                {
+                    var value = Uri.UnescapeDataString(encoded[2..]);
+                    if (value.StartsWith("a1", StringComparison.Ordinal))
+                        try
+                        {
+                            var base64 = value[2..].Replace('-', '+').Replace('_', '/');
+                            base64 = base64.PadRight((base64.Length + 3) / 4 * 4, '=');
+                            var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+                            if (Uri.TryCreate(decoded, UriKind.Absolute, out var target)) destination = target;
+                        }
+                        catch (FormatException) { }
+                }
+            }
+            if (IsCatalog(destination)) { href = link; break; }
+        }
+        if (href is null) throw new InvalidOperationException("Bing 搜索结果未包含已配置的 ModelScope 官方站点。");
         // 使用搜索结果的真实链接；同页进入，避免弹出页面使后续步骤操作旧标签。
         await page.GotoAsync(new Uri(new Uri(page.Url), href).AbsoluteUri);
-        if (new Uri(page.Url).Host != catalog.Host || new Uri(page.Url).Port != catalog.Port)
+        await page.WaitForURLAsync(url => Uri.TryCreate(url, UriKind.Absolute, out var destination) && IsCatalog(destination));
+        if (!IsCatalog(new Uri(page.Url)))
             throw new InvalidOperationException("Bing 搜索结果未进入已配置的 ModelScope 域名，停止下载。");
         ct.ThrowIfCancellationRequested();
         await progress("已进入 ModelScope，开始站内搜索：" + query);
