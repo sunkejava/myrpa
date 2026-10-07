@@ -21,6 +21,8 @@ if (siteAdapters.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase).
     throw new InvalidOperationException("节点站点 Adapter 编码不能重复。");
 builder.Services.PostConfigure<NodeAgentOptions>(options =>
 {
+    if (options.Capabilities.Count == 0) options.Capabilities.AddRange([new("DesktopUI"), new("Browser:Edge"), new("Adapter:qd-social-security")]);
+    if (options.WorkerSlots.Count == 0) options.WorkerSlots.Add("worker-01");
     if (!options.Capabilities.Any(x => x.Code == "ModelDownload:ModelScope")) options.Capabilities.Add(new NodeCapabilityDto("ModelDownload:ModelScope"));
     foreach (var adapter in siteAdapters)
         if (!options.Capabilities.Any(x => string.Equals(x.Code, "Adapter:" + adapter.Code, StringComparison.OrdinalIgnoreCase)))

@@ -22,8 +22,9 @@ public sealed class NodeAgentOptions
     public string AgentVersion { get; set; } = "0.1.0";
     public string? NetworkZone { get; set; }
     public Guid? NodePoolId { get; set; }
-    public List<NodeCapabilityDto> Capabilities { get; set; } = [new("DesktopUI"), new("Browser:Edge"), new("Adapter:qd-social-security")];
-    public List<string> WorkerSlots { get; set; } = ["worker-01"];
+    // ConfigurationBinder 向现有 List 追加；保持空集合，避免显式配置仍继承隐含能力或槽位。
+    public List<NodeCapabilityDto> Capabilities { get; set; } = [];
+    public List<string> WorkerSlots { get; set; } = [];
 }
 
 /// <summary>NodeAgent：注册、实时心跳、命令接收及本地 Workflow 执行。</summary>

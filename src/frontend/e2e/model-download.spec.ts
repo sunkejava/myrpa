@@ -68,7 +68,7 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
     const registration = await request.post(`${api}/api/nodes/register`, { headers: { 'X-Node-Registration-Key': registrationKey }, data: { agentKey, name: '模型下载测试节点', nodeKind: 'Physical', osPlatform: 'Linux', architecture: 'X64', agentVersion: '0.1.0', networkZone: 'default', capabilities: [{ code: 'Browser:Edge' }, { code: 'ModelDownload:ModelScope' }, { code: unique }], workerSlots: ['worker-01'] } })
     expect(registration.ok()).toBeTruthy(); const node = await registration.json()
     await post(`nodes/${node.nodeId}/approve`, {})
-    child = spawn('dotnet', [resolve(process.cwd(), '../backend/AgentRPA.NodeAgent/bin/Release/net10.0/AgentRPA.NodeAgent.dll')], { env: { ...process.env, NodeAgent__ServerUrl: api, NodeAgent__AgentKey: agentKey, NodeAgent__RegistrationKey: registrationKey, NodeAgent__Name: '模型下载测试节点', NodeAgent__OsPlatform: 'Linux', NodeAgent__Capabilities__0__Code: 'Browser:Edge', NodeAgent__Capabilities__1__Code: unique, NodeAgent__ModelDownloads__CatalogBaseUrl: catalog, NodeAgent__ModelDownloads__DownloadRoot: root } })
+    child = spawn('dotnet', [resolve(process.cwd(), '../backend/AgentRPA.NodeAgent/bin/Release/net10.0/AgentRPA.NodeAgent.dll')], { env: { ...process.env, NodeAgent__ServerUrl: api, NodeAgent__AgentKey: agentKey, NodeAgent__RegistrationKey: registrationKey, NodeAgent__Name: '模型下载测试节点', NodeAgent__OsPlatform: 'Linux', NodeAgent__Capabilities__0__Code: 'Browser:Edge', NodeAgent__Capabilities__1__Code: unique, NodeAgent__Capabilities__2__Code: 'ModelDownload:ModelScope', NodeAgent__ModelDownloads__CatalogBaseUrl: catalog, NodeAgent__ModelDownloads__DownloadRoot: root } })
     child.stdout?.on('data', x => { output += x.toString() }); child.stderr?.on('data', x => { output += x.toString() })
     const run = async (items: Record<string, string>[], status: string) => {
       const name = `GGUF-${randomUUID()}`
@@ -110,7 +110,7 @@ test('Excel 模型批量下载经过浏览器搜索并保留成功和失败的�
     await page.goto('/')
     await page.getByLabel('用户名').fill('admin'); await page.getByLabel('密码').fill('BrowserTestPassword123!'); await page.getByRole('button', { name: '登录', exact: true }).click()
     await page.getByRole('button', { name: 'Workflow 管理', exact: true }).click()
-    await page.getByLabel('已有 Workflow', { exact: true }).selectOption(workflow.id)
+    await page.getByLabel('已有 Workflow').selectOption(workflow.id)
     await page.locator('.workflow-test-panel input[type=file]').setInputFiles({ name: 'models.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: await workbook.body() })
     await expect(page.locator('.workflow-test-panel textarea')).toHaveValue(JSON.stringify(rows, null, 2))
     await page.getByRole('button', { name: '校验草稿数据', exact: true }).click()
