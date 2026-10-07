@@ -100,7 +100,8 @@ test('审批后的增减员任务由真实 NodeAgent 连续执行并记录提交
   const dll = resolve(process.cwd(), '../backend/AgentRPA.NodeAgent/bin/Release/net10.0/AgentRPA.NodeAgent.dll')
   const child = spawn('dotnet', [dll], { env: { ...process.env, NodeAgent__ServerUrl: api,
     NodeAgent__RegistrationKey: registrationKey, NodeAgent__AgentKey: agentKey, NodeAgent__Name: 'Browser E2E Node',
-    NodeAgent__OsPlatform: 'Linux', NodeAgent__Capabilities__0__Code: 'Browser:Edge' } })
+    NodeAgent__OsPlatform: 'Linux', NodeAgent__Capabilities__0__Code: 'Browser:Edge',
+    NodeAgent__Capabilities__1__Code: 'Adapter:qd-social-security' } })
   let output = ''
   child.stdout.on('data', data => { output += data.toString() })
   child.stderr.on('data', data => { output += data.toString() })
